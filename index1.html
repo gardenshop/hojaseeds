@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="facebook-domain-verification" content="txa0qg8kzun15375rqwq84x2zwe0xe" />
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoja Seeds Order</title>
+
+<!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s){
+ if(f.fbq)return;
+ n=f.fbq=function(){
+   n.callMethod?
+   n.callMethod.apply(n,arguments):n.queue.push(arguments)
+ };
+ if(!f._fbq)f._fbq=n;
+ n.push=n;
+ n.loaded=!0;
+ n.version='2.0';
+ n.queue=[];
+ t=b.createElement(e);
+ t.async=!0;
+ t.src=v;
+ s=b.getElementsByTagName(e)[0];
+ s.parentNode.insertBefore(t,s);
+}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');
+
+fbq('init','1467679375059082');
+fbq('track','PageView');
+</script>
+
+<!-- End Meta Pixel Code -->
+
+<!-- CryptoJS (for hashing) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+<!-- Google Analytics (GA4) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-LRMW9NMGW5"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-LRMW9NMGW5');
+</script>
+<!-- End Google Analytics -->
+
+<style>
+body{margin:0;font-family:Arial;background:#f4f6f8}
+.brand-header{text-align:center;padding:18px}
+.brand-header h1{margin:0;font-size:32px;color:#1b7a4b}
+.brand-header p{margin:5px 0 0;color:#555}
+.container{max-width:1100px;margin:auto;padding:15px}
+.card{
+  background:#fff;
+  border-radius:12px;
+  padding:15px;
+  box-shadow:0 6px 18px rgba(0,0,0,.08)
+}
+
+/* ===== CONSISTENT WIDTH FOR SELECTION STEPS (S1, S2, S3) ===== */
+
+#s1,
+#s2,
+#s3{
+  max-width:720px;
+  margin-left:auto;
+  margin-right:auto;
+}
+
+.box{
+  flex:0 0 auto;
+  min-width:0;
+  width:100%;
+  height:auto;
+  border:2px solid #ddd;
+  border-radius:10px;
+  padding:10px 12px;
+  cursor:pointer;
+  box-sizing:border-box;
+}
+
+.box.active{border-color:#1b7a4b;background:#ecf8f2}
+.step{display:none}
+.step.active{display:block}
+input, select, textarea{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  border-radius:6px;
+  border:1px solid #ccc;
+  box-sizing: border-box;
+}
+.btn{padding:14px;width:100%;background:#1b7a4b;color:#fff;border:0;border-radius:8px}
+.btn.secondary{background:#888;margin-top:8px}
+.center{text-align:center}
+@media(max-width:900px){
+  .flex{
+    flex-direction:column;
+    align-items:stretch;
+  }
+}
+
+@media(max-width:768px){
+  .card{
+    max-width:100%;
+    margin:0;
+  }
+
+  .confirm-box{
+    padding:14px;
+  }
+}
+/* Address & Confirm polish */
+.confirm-box{
+  background:#f9fbfa;
+  border:1px solid #e2e8e4;
+  border-radius:10px;
+  padding:18px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+
+.confirm-note{
+  font-size:13px;
+  color:#444;
+  background:#eef7f2;
+  border-left:4px solid #1b7a4b;
+  padding:8px 10px;
+  margin-bottom:10px;
+}
+
+.field-label{
+  font-size:13px;
+  color:#333;
+  margin-top:6px;
+}
+
+.secure-text{
+  font-size:12px;
+  color:#666;
+  margin-top:10px;
+  text-align:center;
+}
+/* ===== PROFESSIONAL FORM POLISH ===== */
+
+.confirm-box{
+  max-width: 720px;
+  margin: auto;
+}
+
+.field-label{
+  font-weight: 600;
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+
+input, textarea, select{
+  font-size: 15px;
+  line-height: 1.4;
+  background: #ffffff;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+input:focus, textarea:focus, select:focus{
+  outline: none;
+  border-color: #1b7a4b;
+  box-shadow: 0 0 0 2px rgba(27,122,75,.15);
+}
+
+textarea{
+  min-height: 90px;
+  resize: vertical;
+}
+
+.confirm-note{
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.secure-text{
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+#confirmBtn{
+  margin-top: 18px;
+  font-size: 16px;
+}
+
+#backBtn{
+  max-width: 720px;
+  margin: 12px auto 0;
+  display: block;
+}
+
+/* ===== MOBILE OPTIMIZATION ===== */
+@media (max-width: 600px){
+  .confirm-box{
+    padding: 12px;
+  }
+
+  h2{
+    font-size: 20px;
+  }
+
+  input, textarea, select{
+    font-size: 16px;
+  }
+
+  #confirmBtn{
+    padding: 16px;
+  }
+}
+/* ===== INFO TABS SMALL & RESPONSIVE ===== */
+.info-tabs{
+  display:flex;
+  gap:8px;
+  margin:10px 0 15px;
+  flex-wrap:wrap;
+}
+
+.info-tabs button{
+  padding:8px 12px;
+  font-size:13px;
+  background:#e5e7eb;
+  color:#333;
+  border:1px solid #ccc;
+  border-radius:6px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.info-tabs button:hover{
+  background:#1b7a4b;
+  color:#fff;
+  border-color:#1b7a4b;
+}
+
+/* Mobile adjustment */
+@media (max-width:600px){
+  .info-tabs{
+    justify-content:space-between;
+  }
+  .info-tabs button{
+    flex:1;
+    text-align:center;
+    font-size:12px;
+    padding:7px 6px;
+  }
+}
+
+/* ===== INFO POPUP CLOSE BUTTON ===== */
+.info-close-btn{
+  margin-top:20px;
+  padding:10px 18px;
+  background:#1b7a4b;
+  color:#fff;
+  border:none;
+  border-radius:6px;
+  font-size:14px;
+  cursor:pointer;
+}
+
+.info-close-btn:hover{
+  background:#145c39;
+}
+
+/* ===== PROFESSIONAL ORDER SUMMARY ===== */
+.summary{
+  position: sticky;
+  top: 15px;
+  background: #ffffff;
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.08);
+  border: 1px solid #e5e7eb;
+}
+
+.summary h3{
+  margin: 0 0 10px 0;
+  font-size: 20px;
+  color: #1b7a4b;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.summary small{
+  color: #666;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.summary-item{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.summary-item span:first-child{
+  color: #555;
+}
+
+.summary-item span:last-child{
+  font-weight: 600;
+  color: #111;
+  text-align: right;
+}
+
+.summary-total{
+  border-top: 1px dashed #ccc;
+  margin-top: 12px;
+  padding-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1b7a4b;
+}
+
+/* Mobile behavior */
+@media (max-width: 900px){
+  .summary{
+    position: static;
+    margin-top: 20px;
+  }
+}
+
+/* ===== TOP TRUST & WHATSAPP BAR ===== */
+
+.top-badges{
+  display:flex;
+  justify-content:center;
+  gap:15px;
+  flex-wrap:wrap;
+  margin-top:10px;
+  font-size:14px;
+  color:#1b7a4b;
+  font-weight:600;
+}
+
+.top-whatsapp{
+  margin-top:12px;
+}
+
+.top-whatsapp a{
+  display:inline-block;
+  padding:10px 18px;
+  background:#25D366;
+  color:#fff;
+  border-radius:8px;
+  text-decoration:none;
+  font-size:15px;
+  font-weight:600;
+}
+
+.top-whatsapp a:hover{
+  background:#1da851;
+}
+
+/* Mobile friendly */
+@media(max-width:600px){
+  .top-badges{
+    font-size:13px;
+    gap:10px;
+  }
+  .top-whatsapp a{
+    font-size:14px;
+    padding:9px 16px;
+  }
+}
+/* ===== COLORFUL PRODUCT / FERTILIZER / DELIVERY BOXES ===== */
+
+.box{
+  position: relative;
+  background: #ffffff;
+  transition: all .25s ease;
+  padding:10px 12px;
+}
+
+/* Hover effect */
+.box:hover{
+  transform: translateY(-4px);
+  box-shadow: 0 10px 22px rgba(0,0,0,.12);
+}
+
+/* Active selection */
+.box.active{
+  border-color:#16a34a;
+  background: linear-gradient(135deg,#ecfdf5,#f0fdf4);
+}
+
+.badge-sale,
+.badge-best,
+.badge-hot{
+  position:absolute;
+  top:8px;
+  left:8px;
+  background:#dc2626;
+  color:#fff;
+  font-size:11px;
+  padding:4px 8px;
+  border-radius:14px;
+  font-weight:700;
+  max-width:90%;
+  white-space:nowrap;
+  line-height:1;
+  z-index:2;
+}
+
+/* Price style */
+.box{
+  font-size:clamp(14px,3.5vw,15px);
+  line-height:1.35;
+}
+
+.box b{
+  display:block;
+  margin-top:4px;
+  font-size:clamp(15px,4vw,16px);
+  font-weight:700;
+  color:#14532d;
+}
+
+/* KEEP SELECTED OPTION WHEN USER GOES BACK */
+.box.active{
+  border-color:#1b7a4b !important;
+  background:#ecfdf5 !important;
+  box-shadow:0 8px 20px rgba(0,0,0,.12);
+}
+
+/* MOBILE FRIENDLY GRID */
+@media(max-width:600px){
+  .flex{
+    gap:8px;
+  }
+  .box{
+    width:100%;
+    min-width:0;
+    height:auto;
+    padding:8px 10px;
+  }
+}
+
+
+/* ===== PREMIUM ADDRESS & CONFIRM PAGE ===== */
+
+#confirmBox{
+  background:#ffffff;
+  border-radius:16px;
+  padding:22px;
+  box-shadow:0 12px 28px rgba(0,0,0,.12);
+  border:1px solid #e5e7eb;
+}
+
+/* Section heading */
+#s4 h2{
+  font-size:22px;
+  font-weight:700;
+  color:#14532d;
+}
+
+/* Input group spacing */
+#confirmBox .field-label{
+  font-size:14px;
+  font-weight:600;
+  color:#374151;
+  margin-top:16px;
+  margin-bottom:6px;
+}
+
+/* Inputs premium */
+#confirmBox input,
+#confirmBox textarea,
+#confirmBox select{
+  padding:14px;
+  font-size:15px;
+  border-radius:10px;
+  border:1px solid #d1d5db;
+  background:#f9fafb;
+}
+
+/* FIX PLACEHOLDER VISIBILITY */
+#confirmBox input::placeholder,
+#confirmBox textarea::placeholder{
+  color:#6b7280;
+  opacity:1;
+}
+
+/* Focus effect */
+#confirmBox input:focus,
+#confirmBox textarea:focus,
+#confirmBox select:focus{
+  background:#ffffff;
+  border-color:#16a34a;
+  box-shadow:0 0 0 3px rgba(22,163,74,.15);
+}
+
+/* Confirm button premium */
+#confirmBtn{
+  margin-top:22px;
+  padding:16px;
+  font-size:17px;
+  font-weight:700;
+  border-radius:12px;
+}
+
+/* Back button alignment */
+#backBtn{
+  margin-top:14px;
+  max-width:720px;
+}
+
+/* Secure note highlight */
+#confirmBox .secure-text{
+  background:#ecfdf5;
+  padding:12px;
+  border-radius:10px;
+  border:1px dashed #16a34a;
+  margin-top:18px;
+}
+
+/* Mobile optimization */
+@media(max-width:600px){
+  #confirmBox{
+    padding:16px;
+  }
+
+  #s4 h2{
+    font-size:20px;
+  }
+
+  #confirmBtn{
+    font-size:16px;
+    padding:15px;
+  }
+}
+.badge-left{
+  left:8px;
+  right:auto;
+}
+#s3 .badge-sale,
+#s3 .badge-hot,
+#s3 .badge-best{
+  left:auto;
+  right:10px;
+}
+
+.prod-title{
+  font-size:clamp(14px,4vw,15px);
+  font-weight:700;
+  color:#1f2937;
+  line-height:1.3;
+  margin:0;
+  padding-top:18px;
+}
+
+</style>
+</head>
+<body>
+
+<iframe name="hiddenFrame" style="display:none"></iframe>
+
+<form id="sheetForm"
+ action="https://script.google.com/macros/s/AKfycbyE-fVAgUEsrNpMvuvkpnVPzUjoLOwUe7lfVn-07EkfGNPEvWQaRJtuPStAI_KyIbpgVQ/exec"
+ method="POST" target="hiddenFrame" style="display:none">
+
+<input type="hidden" name="orderId" id="sf_orderId">
+<input type="hidden" name="name" id="sf_name">
+<input type="hidden" name="mobile" id="sf_mobile">
+<input type="hidden" name="city" id="sf_city">
+<input type="hidden" name="address" id="sf_address">
+<input type="hidden" name="province" id="sf_province">
+<input type="hidden" name="product" id="sf_product">
+<input type="hidden" name="fertilizer" id="sf_fertilizer">
+<input type="hidden" name="delivery" id="sf_delivery">
+<input type="hidden" name="total" id="sf_total">
+<input type="hidden" name="risk" id="sf_risk">
+<input type="hidden" name="address_status" id="sf_address_status">
+
+</form>
+
+<div class="brand-header" id="brandHeader">
+  <h1><b>Hoja Seeds</b></h1>
+  <p><b>Order Form For Flower & Vegetable Seeds.</b></p>
+
+  <!-- TRUST BADGES -->
+  <div class="top-badges">
+    <span>🚚 Fast Delivery</span>
+    <span>🌱 High Germination</span>
+    <span>👥 10,000+ Customers Trust</span>
+  </div>
+
+  <!-- WHATSAPP CONTACT -->
+  <div class="top-whatsapp" id="topWhatsappBar">
+    <a
+  href="https://wa.me/923124093162?text=*Hello%20Hoja%20Seeds*%0A%0AI%20need%20assistance%20regarding%20order%20or%20products.%0A%0A🔗%20Website:%20https://hojaseeds.pk/%0A%0A📌%20Please%20save%20this%20link%20on%20your%20mobile%20for%20future%20orders,%20tracking%20and%20offers."
+  target="_blank"
+>
+  📲 Contact on WhatsApp
+</a>
+
+  </div>
+</div>
+
+<div class="container flex" id="main">
+<div class="card" style="flex:2;max-width:760px;margin:auto">
+
+<div class="step active" id="s1">
+  <h2 style="text-align:right; direction:rtl;">
+    پیکٹ کی تعداد اور قیمت کنفرم کریں۔
+  </h2>
+<!-- INFO TABS -->
+<!-- INFO TABS (COMPACT) -->
+<div class="info-tabs">
+  <button type="button" onclick="openInfo('vegInfo')"><b>Vegetables List</b></button>
+  <button type="button" onclick="openInfo('flowerInfo')"><b>Flowers List</b></button>
+  <button type="button" onclick="openInfo('fertilizerInfo')"><b>Fertilizer Guide</b></button>
+</div>
+<div class="flex" style="direction:rtl; text-align:right">
+<div class="box" onclick="selectProduct(this,'15 Vegetable Seeds Packs',750)">
+  <span class="badge-sale badge-left">HOT SALE</span>
+  <div class="prod-title">15 پیکٹ سبزیوں کے بیج</div>
+  <b>Rs 750</b>
+</div>
+
+<div class="box" onclick="selectProduct(this,'15 Flower Seeds Packs',750)">
+  <span class="badge-sale badge-left">POPULAR</span>
+  <div class="prod-title">15 پیکٹ پھولوں کے بیج</div>
+  <b>Rs 750</b>
+</div>
+
+<div class="box" onclick="selectProduct(this,'30 Mixed Seeds Packs',1500)">
+  <span class="badge-sale badge-left">BEST VALUE</span>
+  <div class="prod-title">
+30 پیکٹ : 15 پیکٹ سبزیوں، 15 پیکٹ فلاور کے بیج
+</div>
+  <b>Rs 1500</b>
+</div>
+
+<div class="box" style="opacity:.6" onclick="openInfo('comingSoonInfo')">
+<div class="prod-title">اپنی مرضی کے بیج منتخب کریں۔</div>
+  <b>جلد آرہا ہے</b>
+</div>
+
+<!-- INFO POPUP -->
+<div id="infoPopup" style="
+display:none;
+position:fixed;
+top:0;left:0;
+width:100%;height:100%;
+background:rgba(0,0,0,.6);
+z-index:9999;
+align-items:center;
+justify-content:center;
+overflow:hidden;
+">
+
+  <div style="
+  background:#fff;
+  max-width:520px;
+  width:90%;
+  max-height:80vh;
+  padding:20px;
+  border-radius:12px;
+  position:relative;
+  overflow-y:auto;
+">
+
+
+    <button onclick="closeInfo()" style="
+    position:absolute;
+    top:10px;
+    right:10px;
+    background:none;
+    border:none;
+    font-size:22px;
+    cursor:pointer;
+    ">
+      ×
+    </button>
+
+    <div id="infoContent"></div>
+
+<div style="text-align:center">
+  <button class="info-close-btn" onclick="closeInfo()">
+    Close
+  </button>
+</div>
+
+  </div>
+</div>
+
+</div>
+</div>
+
+<div class="step" id="s2">
+<h2 style="text-align:right;direction:rtl">
+مائیکرونیوٹرنٹس کھاد 
+</h2>
+
+<div class="flex">
+<div class="box" style="text-align:right;direction:rtl"
+     onclick="selectFertilizer(this,'No Fertilizer',0)">
+  No Fertilizer
+</div>
+
+<div class="box" style="text-align:right;direction:rtl"
+     onclick="selectFertilizer(this,'Fertilizer 25g',250)">
+  <span class="badge-hot">RECOMMENDED</span>
+  <div class="prod-title">
+1 پیکٹ مائیکرو نیوٹرنٹس کھاد 25 گرام
+</div>
+  <b>Rs 250</b>
+</div>
+
+<div class="box" style="text-align:right;direction:rtl"
+     onclick="selectFertilizer(this,'Fertilizer 50g',500)">
+  <span class="badge-sale">BUDGETED</span>
+  <div class="prod-title">
+1 پیکٹ مائیکرو نیوٹرنٹس کھاد 50 گرام
+</div>
+  <b>Rs 500</b>
+</div>
+
+<div class="box" style="text-align:right;direction:rtl"
+     onclick="selectFertilizer(this,'Fertilizer 100g',1000)">
+  <span class="badge-best">BEST SAVING</span>
+  <div class="prod-title">
+1 پیکٹ مائیکرو نیوٹرنٹس کھاد 100 گرام
+</div>
+  <b>Rs 1000</b>
+</div>
+</div>
+
+<button type="button" class="btn secondary" onclick="go(1)">Back</button>
+</div>
+
+
+<div class="step" id="s3">
+  <h2 style="text-align:right; direction:rtl; margin-bottom:15px;">
+    ڈلیوری اور رقم ادائیگی کا طریقہ کنفرم کریں۔
+  </h2>
+<div class="flex">
+<div class="box" onclick="selectDelivery(this,'Cash on Delivery',100)">
+  <span class="badge-sale">LOW FEE</span>
+  <div class="prod-title">Cash on Delivery</div>
+<b>Rs 100</b>
+</div>
+
+<div class="box" onclick="selectDelivery(this,'Advance Payment (Free Delivery)',0)">
+  <span class="badge-best">JAZZ-EPaisa-BANK</span>
+  <div class="prod-title">Advance Payment</div>
+  <b>Free Delivery</b>
+</div>
+</div>
+
+<button type="button" class="btn secondary" onclick="go(2)">Back</button>
+</div>
+<div class="step" id="s4summary">
+  <h2 style="text-align:center;margin-bottom:15px">
+    Review Your Order
+  </h2>
+
+  <div class="confirm-box">
+
+    <div id="summaryConfirm"></div>
+
+    <button
+      type="button"
+      class="btn"
+      onclick="proceedToAddress()">
+      Secure Checkout
+    </button>
+
+    <button
+      type="button"
+      class="btn secondary"
+      onclick="go(3)">
+      Edit Order
+    </button>
+
+  </div>
+</div>
+
+<div class="step" id="s4">
+  <h2 style="text-align:right; direction:rtl; margin-bottom:15px;">
+    مکمل پتہ فراہم کریں اور آرڈر کنفرم کریں
+  </h2>
+
+<div class="confirm-box" id="confirmBox" style="margin-top:10px">
+
+<div class="confirm-note" style="text-align:right; direction:rtl;">
+براہِ کرم مکمل اور درست پتہ لکھیں تاکہ آرڈر جلد آپ تک پہنچ سکے۔
+</div>
+
+<!-- FULL NAME -->
+<div class="field-label" style="text-align:left;">
+Full Name
+</div>
+<input
+  id="name"
+  maxlength="40"
+  dir="auto"
+  style="text-align:start;"
+  placeholder="گاوں میں ڈلیوری کے لیے ولدیت بھی لکھیں">
+
+<!-- MOBILE NUMBER (ALWAYS LEFT) -->
+<div class="field-label" style="text-align:left;">
+Mobile Number
+</div>
+<input
+  id="mobile"
+  inputmode="numeric"
+  style="text-align:left; direction:ltr;"
+  placeholder="03XXXXXXXXX (جس نمبر پر واٹس ایپ ہو)">
+
+<!-- ADDRESS -->
+<div class="field-label" style="text-align:left;">
+Complete Delivery Address
+</div>
+<textarea
+  id="address"
+  dir="auto"
+  style="text-align:start;"
+  placeholder=""></textarea>
+
+<!-- CITY -->
+<div class="field-label" style="text-align:left;">
+Tehsil / District
+</div>
+<input
+  id="city"
+  maxlength="25"
+  dir="auto"
+  style="text-align:start;"
+  placeholder="تحصیل یا ضلع کا نام لکھیں">
+
+<div class="field-label">Select Province.</div>
+<select id="province">
+<option value="">Province</option>
+<option>Punjab</option>
+<option>Sindh</option>
+<option>KPK</option>
+<option>Balochistan</option>
+<option>AJK</option>
+<option>GB</option>
+</select>
+
+<div class="secure-text">
+<b>🔒 آپ کی معلومات محفوظ ہیں اور صرف آرڈر کی تکمیل کے لیے استعمال ہوں گی</b>
+</div>
+<div style="
+  margin-top:18px;
+  padding:14px;
+  border-radius:12px;
+  background:#f0fdf4;
+  border:1px solid #16a34a;
+  font-size:14px;
+  color:#14532d;
+  text-align:center;
+">
+  ✔ Please review your details carefully before confirming your order
+</div>
+<button type="button" class="btn" id="confirmBtn" onclick="submitOrder()">Confirm Order</button>
+<div id="waitBox" style="display:none;margin-top:15px;padding:15px;border:1px solid #1b7a4b;border-radius:8px;background:#ecf8f2;text-align:center">
+  <b>Your details are being forwarded to WhatsApp.</b><br>
+  Please wait… WhatsApp will open in <b><span id="count">4</span></b> seconds.
+</div>
+</div>
+  
+<button type="button" class="btn secondary" id="backBtn" onclick="go(3)">Back</button>
+
+</div>
+</div>
+
+
+<div class="summary" id="summaryBox" style="flex:1">
+<h3><b>Order Details</b></h3>
+<p style="font-size:13px;color:#555;margin-top:-8px">
+<b>Please review your order before confirmation</b>
+</p>
+<div id="sum">Select product</div>
+</div>
+
+</div>
+<!-- ORDER LOCK PAGE -->
+    <div style="margin-top:20px">
+  </div>
+</div>
+<!-- ORDER ALREADY IN PROCESS PAGE -->
+<div class="container" id="orderLockPage" style="display:none">
+  <div class="card center">
+
+    <h1 style="color:#b45309;margin-bottom:10px">
+      Order Already in Process
+    </h1>
+
+    <p style="font-size:16px">
+      <b>Your order has already been received.</b>
+    </p>
+
+    <p style="margin-top:10px">
+  Estimated delivery:
+  <b id="lockDeliveryEstimate">Calculating delivery date…</b>
+</p>
+
+    <p style="color:#555;margin-top:10px">
+      Please wait until your first order is delivered
+      before placing a new order.
+    </p>
+<div style="margin-top:20px">
+  <a id="lockWaBtn"
+   onclick="openLockWhatsapp(); return false;"
+   style="display:inline-block;
+          padding:14px 22px;
+          background:#25D366;
+          color:#fff;
+          border-radius:10px;
+          text-decoration:none;
+          font-weight:600;
+          cursor:pointer;">
+  📲 View Order Details on WhatsApp
+</a>
+</div>
+
+</div>
+</div>
+
+<!-- THANK YOU PAGE -->
+<div class="container" id="thankPage" style="display:none">
+  <div class="card center">
+
+    <div id="thankYouBox" style="display:block">
+  <h1 style="color:#1b7a4b;margin-bottom:10px">
+    Thank You for Your Order
+  </h1>
+</div>
+
+    <p style="font-size:16px">
+      <b>Your order has been received successfully.</b>
+    </p>
+
+    <p>Our team is preparing your order for dispatch.</p>
+
+    <p>
+  Estimated delivery:
+  <b id="deliveryEstimate">Calculating delivery date…</b>
+</p>
+
+    <p style="color:#555">
+      You will receive confirmation and order details via WhatsApp.
+    </p>
+
+    <div style="margin-top:20px">
+      <a id="waBtn" target="_blank" rel="noopener"
+   onclick="gtag('event','whatsapp_manual_click',{source:'thank_you_page'})"
+         href="#"
+         style="display:inline-block;padding:14px 22px;
+                background:#25D366;color:#fff;
+                border-radius:10px;
+                text-decoration:none">
+        <span style="display:inline-flex;align-items:center;gap:10px">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+    <path d="M8 5v14l11-7z"></path>
+  </svg>
+  <span><b>Send Order Details on Whatsapp</b></span>
+</span>
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* SILENT CITY DETECTION */
+fetch("https://ipapi.co/json/")
+  .then(res => res.json())
+  .then(data => {
+    detectedCity = (data.city || "").toLowerCase().trim();
+    detectedCountry = (data.country_name || "").toLowerCase().trim();
+    cityDetectedReady = true;
+  })
+  .catch(() => {
+    detectedCity = "";
+    detectedCountry = "";
+    cityDetectedReady = false;
+  });
+
+let order={
+ productText:"Not selected",
+ productPrice:0,
+ productValue:"",
+ fertilizerText:"Not selected",
+ fertilizerPrice:0,
+ fertilizerValue:"",
+ deliveryText:"Not selected",
+ deliveryPrice:0,
+ deliveryValue:"",
+ id:""
+};
+
+/* ✅ ORDER LIMIT: 15 DAYS */
+const ORDER_LIMIT_DAYS = 15;
+
+if (!window.__ORDER_LOCKED__) {
+  updateSummary();
+}
+
+
+let currentStep = 1;
+let allowExit = false;
+
+function go(n){
+
+ if (window.__ORDER_LOCKED__) return;
+
+ currentStep = n;
+ allowExit = false;
+
+ history.pushState({step:n}, "", location.href);
+
+ document.querySelectorAll(".step").forEach(function(s){
+   s.classList.remove("active");
+ });
+
+ if(n === '4summary'){
+   document.getElementById("s4summary").classList.add("active");
+   document.getElementById("summaryConfirm").innerHTML =
+     document.getElementById("sum").innerHTML;
+   hideTopWhatsapp();
+   return;
+ }
+
+ var stepDiv = document.getElementById("s" + n);
+ if(stepDiv){
+   stepDiv.classList.add("active");
+ }
+
+ // restore selections
+ if(n === 1 && order.productValue){
+   document.querySelectorAll('#s1 .box').forEach(function(b){
+     if(b.innerText.includes(order.productValue)){
+       b.classList.add('active');
+     }
+   });
+ }
+
+ if(n === 2 && order.fertilizerValue){
+   document.querySelectorAll('#s2 .box').forEach(function(b){
+     if(b.innerText.includes(order.fertilizerValue)){
+       b.classList.add('active');
+     }
+   });
+ }
+
+ if(n === 3 && order.deliveryValue){
+   document.querySelectorAll('#s3 .box').forEach(function(b){
+     if(b.innerText.includes(order.deliveryValue)){
+       b.classList.add('active');
+     }
+   });
+ }
+
+ if(n <= 3){
+   showTopWhatsapp();
+ } else {
+   hideTopWhatsapp();
+ }
+}
+
+function showStep(n){
+
+  document.querySelectorAll(".step").forEach(function(s){
+    s.classList.remove("active");
+  });
+
+  var stepDiv = document.getElementById("s" + n);
+  if(stepDiv){
+    stepDiv.classList.add("active");
+  }
+
+if(n === 4){
+  gtag('event','address_view',{
+    value: order.productPrice + order.fertilizerPrice + order.deliveryPrice,
+    currency: 'PKR'
+  });
+}
+
+  if(n <= 3){
+    showTopWhatsapp();
+  } else {
+    hideTopWhatsapp();
+  }
+}
+
+function activate(el){
+  var parent = el.parentElement;
+  parent.querySelectorAll('.box').forEach(function(b){
+    b.classList.remove('active');
+  });
+  el.classList.add('active');
+}
+
+function selectProduct(el,t,p){
+ order.productText = t + " – Rs " + p;
+ order.productPrice = p;
+ order.productValue = t;
+
+if(window.fbq){
+  fbq('track','AddToCart',{
+    content_name: t,
+    value: p,
+    currency: 'PKR'
+  });
+}
+
+gtag('event','add_to_cart',{
+  currency:'PKR',
+  value:p,
+  items:[{
+    item_id:t,
+    item_name:t,
+    price:p,
+    quantity:1
+  }]
+});
+
+ updateSummary();
+ activate(el);
+ go(2);
+}
+
+function selectFertilizer(el,t,p){
+ order.fertilizerText = t + " – Rs " + p;
+ order.fertilizerPrice = p;
+ order.fertilizerValue = t;
+
+gtag('event','addon_select',{
+  addon_name: t,
+  value: p,
+  currency: 'PKR'
+});
+
+ updateSummary();
+ activate(el);
+ go(3);
+}
+
+function selectDelivery(el,t,p){
+ order.deliveryText = t + (p ? " – Rs " + p : "");
+ order.deliveryPrice = p;
+ order.deliveryValue = t;
+
+gtag('event','delivery_select',{
+  delivery_type: t,
+  value: p,
+  currency: 'PKR'
+});
+
+ updateSummary();
+ activate(el);
+ go('4summary');
+}
+
+function updateSummary(){
+  let total = order.productPrice + order.fertilizerPrice + order.deliveryPrice;
+
+  document.getElementById("sum").innerHTML = `
+    <div class="summary-item">
+      <span>Product</span>
+      <span>${order.productText}</span>
+    </div>
+
+    <div class="summary-item">
+      <span>Fertilizer</span>
+      <span>${order.fertilizerText}</span>
+    </div>
+
+    <div class="summary-item">
+      <span>Delivery</span>
+      <span>${order.deliveryText}</span>
+    </div>
+
+    <div class="summary-total">
+      <span>Total</span>
+      <span>Rs ${total}</span>
+    </div>
+  `;
+}
+
+function proceedToAddress(){
+
+  // Meta – InitiateCheckout (fire once only)
+  if(window.fbq && !window._checkoutFired){
+    window._checkoutFired = true;
+
+    const checkoutEventId = "CHECKOUT_" + Date.now();
+
+    fbq('track','InitiateCheckout',{
+      value: order.productPrice + order.fertilizerPrice + order.deliveryPrice,
+      currency: 'PKR'
+    },{
+      eventID: checkoutEventId
+    });
+  }
+
+// GA4 – Begin checkout
+gtag('event','begin_checkout',{
+  value: order.productPrice + order.fertilizerPrice + order.deliveryPrice,
+  currency: 'PKR'
+});
+
+  // move to address step
+  go(4);
+}
+
+
+let riskScore = 0;
+
+function hashValue(v){
+  return CryptoJS.SHA256(v.trim().toLowerCase()).toString();
+}
+
+
+function submitOrder(){
+const metaEventId = "ORD_" + Date.now();
+
+if (window.__ORDER_LOCKED__) return;
+
+gtag('event','lead_submit',{
+  value: order.productPrice + order.fertilizerPrice + order.deliveryPrice,
+  currency: 'PKR'
+});
+
+if (localStorage.getItem("last_order_time")) {
+  alert("Your order is already in process. Please wait 15 days before ordering again.");
+  return;
+}
+
+ let name=document.getElementById('name').value.trim();
+if (name.length < 5) {
+  alert("اپنا مکمل نام لکھیں");
+  return;
+}
+
+if (name.length > 40) {
+  alert("صرف ادھر نام لکھیں");
+  return;
+}
+ let mobile=document.getElementById('mobile').value.trim();
+ let address=document.getElementById('address').value.trim();
+ let city=document.getElementById('city').value.trim();
+if (city.length < 5) {
+  gtag('event','form_error',{error_type:'city_too_short'});
+  alert("شہر کا مکمل نام لکھیں");
+  return;
+}
+
+if (city.length > 25) {
+  alert("صرف شہر کا نام لکھیں");
+  return;
+}
+
+ let province=document.getElementById('province').value;
+
+/* SILENT CITY MATCH CHECK */
+let cityMismatch = false;
+
+if(cityDetectedReady && detectedCity && city){
+  let userCity = city.toLowerCase().trim();
+
+  if(
+    detectedCity !== userCity &&
+    !detectedCity.includes(userCity) &&
+    !userCity.includes(detectedCity)
+  ){
+    cityMismatch = true;
+    riskScore += 20;
+  }
+}
+
+ /* ✅ SAVE ADDRESS LOCALLY (ADMIN SAFETY) */
+ localStorage.setItem("last_order_city", city);
+localStorage.setItem("last_order_province", province);
+
+ if(!name||!mobile||!address||!city||!province){
+  gtag('event','form_error',{error_type:'missing_fields'});
+  alert("Complete all fields");
+  return;
+}
+if(window.fbq){
+  fbq('track','Lead',{
+    ph: hashValue(mobile),
+    fn: hashValue(name.split(" ")[0]),
+    ln: hashValue(name.split(" ").slice(1).join(" ") || name),
+    ct: hashValue(city),
+    country: hashValue('pk')
+  },{
+    eventID: metaEventId
+  });
+}
+
+
+ if(!/^03\d{9}$/.test(mobile)){
+  gtag('event','form_error',{error_type:'invalid_mobile'});
+  alert("Invalid mobile");
+  return;
+}
+
+
+if(address.length < 5){
+  gtag('event','form_error',{error_type:'address_too_short'});
+  alert("Please enter delivery address. Our team will confirm details on WhatsApp.");
+  return;
+}
+
+/* ✅ SAVE ORDER TIME */
+localStorage.setItem("last_order_time", Date.now());
+
+ order.id="ORD"+Date.now();
+ localStorage.setItem("last_order_id", order.id);
+ let total=order.productPrice+order.fertilizerPrice+order.deliveryPrice;
+
+gtag('event','purchase',{
+  transaction_id: order.id,
+  value: total,
+  currency: 'PKR',
+  items: [{
+    item_id: order.id,
+    item_name: order.productText,
+    price: total,
+    quantity: 1
+  }]
+});
+
+if(window.fbq){
+  fbq('track','Purchase',{
+  value: total,
+  currency: 'PKR',
+  content_name: order.productText,
+  content_type: 'product'
+}, {
+  eventID: metaEventId
+});
+
+}
+
+
+// give GA time to send event
+setTimeout(function(){
+  // continue normal flow
+}, 400);
+
+
+ let paymentBlock = "";
+
+ if(order.deliveryPrice === 0){
+  paymentBlock =
+  "━━━━━━━━━━━━━━\n"+
+  "*ADVANCE PAYMENT*\n"+
+  "━━━━━━━━━━━━━━\n"+
+  "Easypaisa Account: *0335 4299783*\n"+
+  "Please send payment and share *TID Number*\n*Special Note...*\n*Other wise order will be dispatch on COD*\n\n";
+
+}
+
+document.getElementById("sf_orderId").value = order.id;
+document.getElementById("sf_name").value = name;
+document.getElementById("sf_mobile").value = mobile;
+document.getElementById("sf_city").value = city;
+document.getElementById("sf_address").value = address;
+
+document.getElementById("sf_address_status").value =
+  address.length < 15 ? "INCOMPLETE" : "OK";
+document.getElementById("sf_province").value = province;
+document.getElementById("sf_product").value = order.productText;
+document.getElementById("sf_fertilizer").value = order.fertilizerText;
+document.getElementById("sf_delivery").value = order.deliveryText;
+document.getElementById("sf_total").value = total;
+document.getElementById("sf_risk").value = cityMismatch ? "CITY MISMATCH" : "OK";
+
+updateSummary();
+showThankYouOnly();
+document.getElementById("deliveryEstimate").innerText =
+  calculateDeliveryEstimate(province);
+
+window.scrollTo(0, 0);
+
+/* SUBMIT AFTER GA PURCHASE EVENT */
+setTimeout(function(){
+  document.getElementById("sheetForm").submit();
+}, 600);
+
+/* ✅ FORCE ADDRESS VALUE */
+document.getElementById("sf_address").value = address;
+
+/* ✅ SAVE ORDER TIME */
+localStorage.setItem("last_order_time", Date.now());
+
+ let msg =
+ "*HOJA SEEDS*\n"+
+ "_Flower & Vegetable Seeds_\n\n"+
+
+ "━━━━━━━━━━━━━━\n"+
+ "*ORDER DETAILS*\n"+
+ "━━━━━━━━━━━━━━\n\n"+
+ "*Order ID:* "+order.id+"\n"+
+ "*Product:* "+order.productText+"\n"+
+ "*Fertilizer:* "+order.fertilizerText+"\n"+
+ "*Delivery:* "+order.deliveryText+"\n\n"+
+
+ "━━━━━━━━━━━━━━\n"+
+ "*TOTAL AMOUNT*\n"+
+ "━━━━━━━━━━━━━━\n"+
+ "Rs "+total+"\n\n"+
+ paymentBlock +
+
+ "━━━━━━━━━━━━━━\n"+
+ "*CUSTOMER DETAILS*\n"+
+ "━━━━━━━━━━━━━━\n"+
+ name + "\n" +
+ mobile + "\n" +
+ address + "\n" +
+ city + ", " + province + "\n\n"+
+
+"*CONFIRM ORDER – "+order.id+"*\n\n"+
+"🔗 View Order Status & Updates:\n"+
+"https://www.hojaseeds.pk/\n\n"+
+"*Please keep this link saved for order tracking and future offers.*\n\n"+
+"*آرڈر تفصیل اور کنفرمیشن کے لیے سینڈ کا بٹن دبائیں*";
+
+
+document.getElementById("waBtn").href =
+  "https://wa.me/923124093162?text=" + encodeURIComponent(msg);
+
+document.getElementById("waitBox").style.display = "block";
+
+var sec = 4;
+document.getElementById("count").innerText = sec;
+
+var cd = setInterval(function(){
+  sec--;
+  document.getElementById("count").innerText = sec;
+
+  if(sec <= 0){
+  clearInterval(cd);
+
+  // delay whatsapp to protect GA4
+  setTimeout(function(){
+    window.open(
+      "https://wa.me/923124093162?text=" +
+      encodeURIComponent(msg),
+      "_blank"
+    );
+  }, 300);
+}
+
+}, 1000);
+
+return false;
+}
+
+function addWorkingDays(startDate, days) {
+  let date = new Date(startDate);
+  let added = 0;
+
+  while (added < days) {
+    date.setDate(date.getDate() + 1);
+    if (date.getDay() !== 0) { // skip Sunday
+      added++;
+    }
+  }
+  return date;
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function calculateDeliveryEstimate(province) {
+  let minDays = 3;
+  let maxDays = 5;
+
+  province = province.toLowerCase();
+
+  if (province === "punjab") {
+    minDays = 3; maxDays = 5;
+  } else if (province === "sindh" || province === "kpk") {
+    minDays = 4; maxDays = 5;
+  } else {
+    minDays = 5; maxDays = 7;
+  }
+
+  let today = new Date();
+  let minDate = addWorkingDays(today, minDays);
+  let maxDate = addWorkingDays(today, maxDays);
+
+  return formatDate(minDate) + " to " + formatDate(maxDate);
+}
+</script>
+<script>
+const infoTexts = {
+
+  vegInfo: `
+  <h3 style="text-align:right;direction:rtl">
+    سبزیوں کے بیج شامل ہیں (15 پیکٹ)
+  </h3>
+
+  <p style="line-height:1.9;text-align:right;direction:rtl">
+    اس پیک میں موسمی اور اعلیٰ معیار کی سبزیوں کے بیج شامل ہیں جن میں
+    ٹماٹر (ہائبرڈ یا بیل والا)، شملہ مرچ (بیل والی)، مولی، بند گوبھی (سفید یا لال)،
+    سلاد، مولی (لال سرخ، گول سفید یا فرنچ لمبی لال)، شلجم (نیلا، سفید یا پیلا)،
+    چقندر، سلاد پتہ (سبز یا لال)، بینگن (گول کالا، لمبا کالا، لمبا پرپل یا سفید)،
+    گاجر، میتھی، پالک، دھنیہ، مٹر، پھول گوبھی، ساگ، شملہ مرچ،
+    سبز مرچ (قندری یا دیسی)، پیاز، چائنہ بند گوبھی، چائینیز گوبھی،
+    پاک چوئے اور سیلری بند گوبھی، چائینیز گوبھی، پاک چوئے، سیلری، پودینہ، روزمیری، پارسلے، سبز پیاز وغیرہ
+ شامل ہو سکتی ہیں۔
+  </p>
+
+  <p style="margin-top:10px;font-size:13px;color:#555;text-align:right;direction:rtl">
+    نوٹ: سبزیوں کا انتخاب دستیابی اور موسم کے مطابق مختلف ہو سکتا ہے۔
+  </p>
+  `,
+
+  flowerInfo: `
+  <h3 style="text-align:left">
+    Imported Flower Seeds (15 Packs)
+  </h3>
+
+  <p style="line-height:1.7;text-align:left">
+    The 15 packs included in your order are selected
+    <b>from the list below</b>, depending on availability and season
+  </p>
+
+  <p style="line-height:1.7;text-align:left">
+    Available varieties include
+  </p>
+
+  <p style="line-height:1.8;text-align:left;font-size:14px">
+    Morning Glory (10 Colors), Cypress Vine, Portulaca Grandiflora,
+    Delphinium, Celosia Yellow, Kochia Red, Bell Flower, Phlox,
+    Cone Flower, Black Heart Chrysanthemum, Nigella,
+    Lespedeza Bicolor, Sunflower, Strawberry Corn, Wild Pansy,
+    Zinnia, Hollyhock, Hibiscus, Sisal, White Hydrangea,
+    Jasmine Flower Rose, Cosmos, Impatiens, Heliotrope Chrysanthemum,
+    Gerbera, South African Marigold, Gaillardia, Garland Daisy,
+    Mimosa, Lupine, Coneflower Yellow, Columbine, Shallots,
+    Safflower Camellia, Peony, Red Magnolia, White Peony,
+    Red Thorn Rose, Paeonia Lactiflora, Jasmine, Golden Flower,
+    Forsythia, Lilac Tree, Flame Wood, Hollandaise, Gazania,
+    Jacaranda, Phlox, Vinca.
+  </p>
+
+  <p style="margin-top:10px;font-size:13px;color:#555;text-align:left">
+    Note: The final selection of 15 flower seed packs is made from the above list
+    and may vary based on availability.
+  </p>
+  `,
+
+fertilizerInfo: `
+  <h3 style="text-align:right;direction:rtl">کھاد کی رہنمائی</h3>
+
+  <p style="text-align:right;direction:rtl;line-height:1.9">
+    یہ کھاد سبزیوں اور پھولوں دونوں کے لیے موزوں ہے۔
+  </p>
+
+  <p style="margin-top:10px;line-height:1.9;text-align:right;direction:rtl">
+    مائیکرونیوٹرنٹس کھاد (1 گرام 5 لیٹر پانی میں مکس کر کے ہر 15 دن بعد سپرے کریں)
+  </p>  `,
+
+comingSoonInfo: `
+  <h3 style="text-align:left;">
+    Custom Seed Selection
+  </h3>
+
+  <p style="text-align:left; line-height:1.7;">
+    Custom seed selection is coming soon
+  </p>
+
+  <p style="text-align:left; line-height:1.7;">
+    Please choose from the available seed packs for now
+  </p>
+  `
+};
+
+function openInfo(key){
+  document.getElementById("infoContent").innerHTML = infoTexts[key];
+  document.getElementById("infoPopup").style.display = "flex";
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.overflow = "hidden";
+}
+
+function closeInfo(){
+  document.getElementById("infoPopup").style.display = "none";
+  document.documentElement.style.overflow = "";
+  document.body.style.overflow = "";
+}
+
+</script>
+<script>
+function showTopWhatsapp(){
+  var bar = document.getElementById("topWhatsappBar");
+  if(bar) bar.style.display = "block";
+}
+
+function hideTopWhatsapp(){
+  var bar = document.getElementById("topWhatsappBar");
+  if(bar) bar.style.display = "none";
+}
+</script>
+<script>
+/* FINAL PAGE VISIBILITY FIX – CORRECT */
+
+function showThankYouOnly(){
+  document.getElementById("main").style.display = "none";
+  document.getElementById("orderLockPage").style.display = "none";
+  document.getElementById("thankPage").style.display = "block";
+  hideTopWhatsapp();
+
+  gtag('event','thank_you_view');
+
+}
+
+
+function showOrderLockOnly(){
+  document.getElementById("main").style.display = "none";
+  document.getElementById("thankPage").style.display = "none";
+  document.getElementById("orderLockPage").style.display = "block";
+  hideTopWhatsapp();
+  gtag('event','order_lock_view');
+}
+</script>
+<script>
+function openLockWhatsapp(){
+
+  var lockedOrderId = localStorage.getItem("last_order_id");
+  var orderTime = new Date(
+    parseInt(localStorage.getItem("last_order_time"))
+  ).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+  var province =
+    localStorage.getItem("last_order_province") || "Punjab";
+
+  var deliveryEstimate =
+    calculateDeliveryEstimate(province);
+
+  var msg =
+    "*ORDER ALREADY IN PROCESS*\n\n" +
+    "Order ID: " + lockedOrderId + "\n" +
+    "Order Date: " + orderTime + "\n" +
+    "Estimated Delivery: " + deliveryEstimate + "\n\n" +
+    "Please check and update delivery status.";
+
+  
+window.open(
+  "https://wa.me/923124093162?text=" +
+  encodeURIComponent(msg),
+  "_blank"
+);
+
+}
+/* ANDROID BACK BUTTON FIX – FINAL */
+
+// create ONE fake history entry on load
+setTimeout(function(){
+  history.pushState({step:1}, "", location.href);
+}, 0);
+
+window.addEventListener("popstate", function () {
+
+  // 🔒 block back button completely if order is locked
+  if (window.__ORDER_LOCKED__) return;
+
+  if (currentStep > 1) {
+    currentStep--;
+    showStep(currentStep);
+    return;
+  }
+
+  if (!allowExit) {
+    allowExit = true;
+    alert("Click back again to exit Hoja Seeds website");
+    return;
+  }
+
+  // second back → browser exits naturally
+});
+/* 🔒 FINAL ORDER LOCK – EXECUTE AFTER PAGE LOAD */
+window.addEventListener("load", function () {
+
+  const lastOrderTime = localStorage.getItem("last_order_time");
+  if (!lastOrderTime) return;
+
+  const now = Date.now();
+  const diffDays =
+    (now - parseInt(lastOrderTime)) / (1000 * 60 * 60 * 24);
+
+  if (diffDays < ORDER_LIMIT_DAYS) {
+
+    document.getElementById("main").style.display = "none";
+    document.getElementById("thankPage").style.display = "none";
+
+    showOrderLockOnly();
+
+    // ✅ SET DELIVERY DATE FOR LOCK PAGE
+    const province =
+      localStorage.getItem("last_order_province") || "Punjab";
+
+    document.getElementById("lockDeliveryEstimate").innerText =
+      calculateDeliveryEstimate(province);
+
+    window.__ORDER_LOCKED__ = true;
+  }
+});
+
+</script>
+</body>
+</html>
+
