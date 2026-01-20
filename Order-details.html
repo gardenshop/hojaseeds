@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Details</title>
+  <style>
+    body{margin:0;font-family:Arial,sans-serif;background:transparent}
+    .summary{
+      background:#fff;
+      border-radius:14px;
+      padding:20px;
+      box-shadow:0 6px 20px rgba(0,0,0,.08)
+    }
+    h3{margin-top:0;color:#1a7f37}
+    .row{display:flex;justify-content:space-between;margin:8px 0}
+    .total{font-weight:bold;color:#1a7f37;margin-top:10px}
+  </style>
+</head>
+<body>
+
+<div class="summary">
+  <h3>Order Details</h3>
+  <div class="row"><span>Product</span><span id="p"></span></div>
+  <div class="row"><span>Fertilizer</span><span id="f"></span></div>
+  <div class="row"><span>Delivery</span><span id="d"></span></div>
+  <div class="row total"><span>Total</span><span id="t"></span></div>
+</div>
+
+<script>
+  document.getElementById("p").innerText = localStorage.getItem("last_order_product") || "";
+  document.getElementById("f").innerText = localStorage.getItem("last_order_fertilizer") || "";
+  document.getElementById("d").innerText = localStorage.getItem("last_order_delivery") || "";
+  document.getElementById("t").innerText = "Rs " + (localStorage.getItem("last_order_total") || "0");
+</script>
+
+</body>
+</html>

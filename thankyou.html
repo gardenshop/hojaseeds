@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Thank You – Hoja Seeds</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Meta Pixel -->
+  <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', 'YOUR_PIXEL_ID');
+    fbq('track', 'Purchase');
+  </script>
+
+  <!-- GA4 -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-XXXXXXX');
+  </script>
+
+  <style>
+    body{
+      font-family: Arial, sans-serif;
+      background:#f5f7fa;
+      margin:0;
+      padding:0;
+    }
+    .box{
+      max-width:520px;
+      margin:40px auto;
+      background:#fff;
+      padding:30px;
+      border-radius:14px;
+      text-align:center;
+      box-shadow:0 6px 24px rgba(0,0,0,0.08);
+    }
+    h1{color:#1a7f37;margin-bottom:10px}
+    p{color:#555;line-height:1.6}
+    .wa{
+      display:inline-block;
+      margin-top:20px;
+      background:#25D366;
+      color:#fff;
+      padding:14px 22px;
+      border-radius:10px;
+      text-decoration:none;
+      font-weight:600;
+    }
+    .note{margin-top:15px;font-size:13px;color:#777}
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h1>Thank You!</h1>
+  <p>Your order has been received successfully.</p>
+  <p>Our team will contact you shortly for confirmation.</p>
+
+  <a id="waBtn" class="wa" href="#">Send Order Details on WhatsApp</a>
+
+  <div class="note">Please keep your phone available.</div>
+</div>
+
+<script>
+(function(){
+  var product = localStorage.getItem("last_order_product") || "";
+  var fertilizer = localStorage.getItem("last_order_fertilizer") || "";
+  var delivery = localStorage.getItem("last_order_delivery") || "";
+  var total = localStorage.getItem("last_order_total") || "";
+
+  var msg =
+    "HOJA SEEDS – ORDER CONFIRMATION\n\n" +
+    product + "\n" +
+    fertilizer + "\n" +
+    delivery + "\n\n" +
+    "Total: Rs " + total + "\n\n" +
+    "Thank you for your order.";
+
+  document.getElementById("waBtn").href =
+    "https://wa.me/923124093162?text=" + encodeURIComponent(msg);
+})();
+</script>
+
+</body>
+</html>
