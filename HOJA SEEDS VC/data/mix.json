@@ -1,0 +1,12 @@
+{
+  "version": "mix_2026_01",
+  "title": "Mixed Seeds Preference List",
+  "items": [
+    { "id": "tomato", "label": "Tomato" },
+    { "id": "chilli", "label": "Chilli" },
+    { "id": "spinach", "label": "Spinach" },
+    { "id": "sunflower", "label": "Sunflower" },
+    { "id": "zinnia", "label": "Zinnia" },
+    { "id": "marigold", "label": "Marigold" }
+  ]
+}

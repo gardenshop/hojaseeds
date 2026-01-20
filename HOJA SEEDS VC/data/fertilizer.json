@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "id": "none",
+      "title": "No Micronutrients Fertilizer",
+      "price": 0
+    },
+    {
+      "id": "fertilizer_25",
+      "title": "Micronutrients Fertilizer 25g",
+      "price": 250
+    },
+    {
+      "id": "fertilizer_50",
+      "title": "Micronutrients Fertilizer 50g",
+      "price": 500
+    },
+    {
+      "id": "fertilizer_100",
+      "title": "Micronutrients Fertilizer 100g",
+      "price": 1000
+    }
+  ]
+}

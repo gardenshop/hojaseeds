@@ -1,0 +1,22 @@
+{
+  "categories": [
+    {
+  "pack_name": "15 Vegetable Seeds Packs",
+  "price": 750,
+  "seeds_file": "data/vegetables.json"
+}
+,
+    {
+  "pack_name": "15 Flower Seeds Packs",
+  "price": 750,
+  "seeds_file": "data/flowers.json"
+}
+,
+    {
+  "pack_name": "30 Mixed Seeds Packs",
+  "price": 1500,
+  "seeds_file": "data/mix.json"
+}
+
+  ]
+}
