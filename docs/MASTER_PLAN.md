@@ -170,6 +170,41 @@ without verifying target identity and explicit operator authorization.
   320×568/375×812/768×1024/1440×900 across Vegetables/Flowers/Mix/Fertilizer
   report `document.documentElement.scrollWidth <= innerWidth` with zero
   console errors.
+- Deploy-source contract (established 2026-08-16): Cloudflare Pages project
+  `hojaseeds` has no GitHub integration — a GitHub push alone never
+  redeploys production. Publishing requires an explicit `wrangler pages
+  deploy` of a clean static artifact (`index.html`, `admin.html`,
+  `robots.txt`, `sitemap.xml`, `css/`, `js/`, `assets/` only) against the
+  existing `hojaseeds` project with `--branch=main` and
+  `--commit-hash=<the pushed GitHub SHA>`, using the account verified by
+  `wrangler whoami` (`gisupp@gmail.com`, account `85f6a618…a474`). Custom
+  domains (`www.hojaseeds.pk`, `hojaseeds.pk`) serve the latest Production
+  deployment immediately with no separate promote/cache-purge step. Never
+  create a second Pages project and never touch DNS/domain/Apps
+  Script/Sheet as part of a deploy. Production-served `js/app.js`/
+  `css/styles.css` must be spot-checked against current source after every
+  deploy — a GitHub push and a live production deploy are not the same
+  event.
+- Production-verified 2026-08-16 (direct browser tests against
+  `www.hojaseeds.pk`, cleared `localStorage`): first-product selection
+  shows the sticky bar immediately with the correct subtotal, a second
+  product keeps both rows selected with a combined subtotal, quantity 2
+  shows the packet count and selected amount with no `Line total` text and
+  no desktop `Total` column anywhere in the DOM, state survives reload, and
+  the three-card gradient Explore More renders with a background on every
+  card. The 320–1440 × four-category overflow/console/network sweep passes
+  live in production, not just locally.
+- Payment/thank-you presentation contract (2026-08-16): the Payment page's
+  `Payment Method` and `Order Summary` are two visually separate cards in
+  one form; `Confirm & Place Order` lives only at the end of the Order
+  Summary card, never inside Payment Method. The Order Summary payable line
+  reads `Pay on delivery` for COD or `Advance payment amount` for Advance,
+  driven by `payableLabelText()`. The confirmation page's primary view is a
+  hero + a single-amount `payment-summary-card` (`Pay on delivery: Rs. X`
+  for COD, `Advance payment submitted: Rs. X` for Advance — advance is
+  described as "submitted", never "paid", since it is pending
+  verification); the itemized breakdown lives in a secondary collapsible
+  `<details>` card, not the main view.
 
 ## Launch Acceptance Gates
 

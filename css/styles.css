@@ -291,6 +291,28 @@ table.product-table{width:100%;border-collapse:collapse;}
 
 @media (min-width:860px){.checkout-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:22px;align-items:start;}}
 
+/* ══════════════ Confirmation (thank-you) page ══════════════ */
+.confirm-hero{text-align:center;padding:6px 4px 4px;}
+.confirm-icon{font-size:2.2rem;line-height:1;margin-bottom:8px;}
+.confirm-hero h2{margin:0 0 6px;}
+.confirm-hero .tagline{max-width:34ch;margin:0 auto;}
+
+.payment-summary-card{background:var(--kraft);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px;margin-top:16px;border:1px solid var(--kraft-dark);}
+.ps-row{display:flex;justify-content:space-between;font-size:.86rem;padding:6px 0;}
+.ps-amount{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px;background:var(--paper);border-radius:10px;padding:16px;margin:8px 0;}
+.ps-amount-label{font-size:.8rem;font-weight:600;color:#6b6152;}
+.ps-amount-value{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:1.6rem;color:var(--ink);}
+.ps-amount.cod .ps-amount-value{color:var(--marigold-dark);}
+.ps-amount.advance .ps-amount-value{color:var(--leaf-dark);}
+.payment-summary-card .advance-note{margin:8px 0 0;text-align:center;}
+
+.order-details-card{background:var(--kraft);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px;margin-top:12px;border:1px solid var(--kraft-dark);}
+.order-details-card summary{cursor:pointer;font-weight:700;font-size:.86rem;color:var(--leaf-dark);padding:4px 0;list-style:none;}
+.order-details-card summary::-webkit-details-marker{display:none;}
+.order-details-card summary::after{content:"▾";float:right;transition:transform .15s ease;}
+.order-details-card[open] summary::after{transform:rotate(180deg);}
+.order-details-card .summary-line:first-of-type{margin-top:8px;}
+
 /* ══════════════ Sticky bottom commerce bar ══════════════ */
 .sticky-bar{
   position:fixed;left:0;right:0;bottom:0;z-index:50;

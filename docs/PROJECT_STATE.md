@@ -228,3 +228,45 @@ replace it.*
   re-running this same matrix against the live `www.hojaseeds.pk` production
   origin, and the git commit/push/Cloudflare redeploy — pending explicit
   go-ahead before touching the shared `main` branch and production.
+- 2026-08-16 (deploy forensics): production still served the pre-`ef1a9b3`
+  UI after the push above. Root cause: Cloudflare Pages project `hojaseeds`
+  has **no GitHub integration** (`wrangler pages project list` shows Git
+  Provider `No`) — every prior release was a manual `wrangler pages deploy`
+  upload; pushing to `origin/main` alone never triggers a build. The last
+  deployment (`81461a06…`, commit label `07eec42`) was two commits behind
+  HEAD. Verified `wrangler whoami` resolves the approved `gisupp@gmail.com`
+  / account `85f6a618…a474`. Fixed by running `wrangler pages deploy` with a
+  clean artifact directory (`index.html`, `admin.html`, `robots.txt`,
+  `sitemap.xml`, `css/`, `js/`, `assets/` only — no `node_modules`/`.git`/
+  `docs`/`scripts`/secrets) against the existing `hojaseeds` project,
+  `--branch=main`, `--commit-hash=ef1a9b3…`. New deployment `2ee92aab`
+  promoted immediately to `www.hojaseeds.pk` (custom domains follow the
+  latest Production deployment; no separate promote/cache-purge step was
+  needed). Confirmed `www.hojaseeds.pk/js/app.js` and `/css/styles.css` now
+  contain the current source (`selected-summary`, `explore-card-name`, no
+  `Line total`, no `<th>Total</th>`). Re-ran the full acceptance matrix
+  directly against production (headless Chromium, cleared localStorage):
+  tests A–D, Explore More cards, and a 9-viewport (320–1440) × 4-route
+  overflow/console/network sweep all pass live. `npm test` still passes. No
+  DNS/domain/Apps Script/Sheet/other Pages project touched.
+- 2026-08-16: Payment/thank-you presentation refinement. Payment page now
+  splits into two clearly separate cards inside one `<form>` — `Payment
+  Method` (radio choice, delivery-fee text, free-delivery progress, advance
+  account details) and `Order Summary` (line items, items subtotal,
+  delivery, selected payment method, a payable-amount line labelled `Pay on
+  delivery` for COD / `Advance payment amount` for Advance) — with the
+  single `Confirm & Place Order` submit moved to the end of the Order
+  Summary card; desktop keeps the existing two-column `checkout-grid`,
+  mobile stacks Payment Method above Order Summary. Confirmation
+  (thank-you) page rebuilt around a compact hero (headline/customer/city),
+  a `payment-summary-card` with one prominent amount block (`Pay on
+  delivery: Rs. X` for COD, `Advance payment submitted: Rs. X` for Advance
+  — never "paid", since advance is pending verification), and the item
+  list/delivery-fee/payment-status/transaction-ref detail moved into a
+  native `<details>` "Order details" secondary card. No backend/order-total
+  logic, cart, sticky bar, or delivery-page navigation/upsell changed.
+  Verified locally: acceptance tests A–E (separated payment/summary blocks,
+  confirm-button position, COD/Advance payable labels, COD/Advance
+  thank-you amount blocks, back/continue-shopping data retention) all pass,
+  plus a 320–1440 × Payment/Cart/Delivery overflow sweep with zero console
+  errors and zero failed requests. `npm test` passes.

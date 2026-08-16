@@ -56,6 +56,12 @@ const Settings = {
   get() { return this._cache || { ...CONFIG.PRICING_RULES, ...this.overrides() }; }
 };
 
+// Payable-amount label: COD is money owed at the door; Advance is money the
+// customer is submitting now (pending verification) — never call it "paid".
+function payableLabelText(method) {
+  return method === "Cash on Delivery" ? "Pay on delivery" : "Advance payment amount";
+}
+
 // Delivery fee follows the commercial rules: Advance orders (including
 // every customized-collection order, which is always advance-only) get
 // free delivery at the threshold; COD is a flat normal-courier charge.
@@ -715,11 +721,12 @@ const Views = {
         ${journeyBarHTML(3)}
         ${flowStatusHTML(true, false)}
         <div class="step-nav-row"><button class="back-link" onclick="Router.go('delivery')">← Back to Delivery</button></div>
-        <div class="page-head"><h2>Payment</h2><p class="tagline">Choose how you'd like to pay</p></div>
-        ${restrictedNote}
-        <div class="checkout-grid">
-          <div class="form-card">
-            <form id="paymentForm" onsubmit="Views.submitOrder(event)">
+        <div class="page-head"><h2>Payment</h2><p class="tagline">Choose how you'd like to pay, then confirm below</p></div>
+        <form id="paymentForm" onsubmit="Views.submitOrder(event)">
+          <div class="checkout-grid">
+            <div class="form-card">
+              <h3>Payment Method</h3>
+              ${restrictedNote}
               <div class="pay-options">
                 ${codAllowed ? `
                 <label class="pay-option" id="payCOD">
@@ -751,22 +758,23 @@ const Views = {
                 <div class="field"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
                 <p class="advance-note">We'll confirm your payment and dispatch your order once received.</p>
               </div>
-
+            </div>
+            <div class="summary-card">
+              <h3>Order Summary</h3>
+              ${lines.map(l => `<div class="summary-line"><span>${l.p.name} × ${l.qty}</span><span class="mono">${CONFIG.CURRENCY} ${l.line}</span></div>`).join("")}
+              <div class="summary-line"><span>Items subtotal</span><span class="mono">${CONFIG.CURRENCY} ${subtotal}</span></div>
+              <div class="summary-line"><span>Delivery</span><span class="mono" id="summaryDeliveryFee">${CONFIG.CURRENCY} ${defaultFee}</span></div>
+              <div class="summary-line"><span>Payment method</span><span id="summaryPaymentMethod">${defaultMethod}</span></div>
+              <div class="summary-line total"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span id="summaryTotal">${CONFIG.CURRENCY} ${subtotal + defaultFee}</span></div>
               <button class="inline-submit" type="submit" id="submitBtn">Confirm & Place Order — ${CONFIG.CURRENCY} ${subtotal + defaultFee}</button>
               <div id="orderStatus"></div>
-            </form>
-            <div class="step-actions-secondary">
-              <button type="button" class="btn-text-secondary" onclick="Router.go('delivery')">← Back to Delivery</button>
-              <button type="button" class="btn-text-tertiary" onclick="Router.go(Router.lastCategory)">Continue Shopping</button>
             </div>
           </div>
-          <div class="summary-card">
-            <h3>Order summary</h3>
-            ${lines.map(l => `<div class="summary-line"><span>${l.p.name} × ${l.qty}</span><span class="mono">${CONFIG.CURRENCY} ${l.line}</span></div>`).join("")}
-            <div class="summary-line"><span>Delivery</span><span class="mono" id="summaryDeliveryFee">${CONFIG.CURRENCY} ${defaultFee}</span></div>
-            <div class="summary-line total"><span>Total</span><span id="summaryTotal">${CONFIG.CURRENCY} ${subtotal + defaultFee}</span></div>
+          <div class="step-actions-secondary">
+            <button type="button" class="btn-text-secondary" onclick="Router.go('delivery')">← Back to Delivery</button>
+            <button type="button" class="btn-text-tertiary" onclick="Router.go(Router.lastCategory)">Continue Shopping</button>
           </div>
-        </div>
+        </form>
       </section>`;
 
     if (codAllowed) document.getElementById("payCOD").classList.add("selected");
@@ -806,6 +814,8 @@ const Views = {
     const fee = computeDeliveryFee(method, subtotal, hasCustomized && !this._order.codAllowed);
     const total = subtotal + fee;
     document.getElementById("summaryDeliveryFee").textContent = `${CONFIG.CURRENCY} ${fee}`;
+    document.getElementById("summaryPaymentMethod").textContent = method;
+    document.getElementById("payableLabel").textContent = payableLabelText(method);
     document.getElementById("summaryTotal").textContent = `${CONFIG.CURRENCY} ${total}`;
     document.getElementById("submitBtn").textContent = `Confirm & Place Order — ${CONFIG.CURRENCY} ${total}`;
     document.getElementById("advanceDetails").style.display = method === "Advance Payment" ? "block" : "none";
@@ -923,23 +933,30 @@ const Views = {
       <section class="page narrow">
         ${journeyBarHTML(4)}
         ${flowStatusHTML(true, false)}
-        <div class="page-head">
-          <h2>Thanks, ${escapeHTML(customer.name)} — your order is in! 🌱</h2>
+        <div class="confirm-hero">
+          <div class="confirm-icon">🌱</div>
+          <h2>Thanks, ${escapeHTML(customer.name)} — your order is in!</h2>
           <p class="tagline">We'll call ${escapeHTML(customer.phone)} shortly to confirm delivery to ${escapeHTML(customer.city)}.</p>
         </div>
-        <div class="cart-summary-card">
-          <h3 style="margin-top:0">Order summary</h3>
-          <div class="summary-line"><span>Order ID</span><span class="mono">${escapeHTML(payload.orderId)}</span></div>
+        <div class="payment-summary-card">
+          <div class="ps-row"><span>Order ID</span><span class="mono">${escapeHTML(payload.orderId)}</span></div>
+          <div class="ps-amount ${isCOD ? "cod" : "advance"}">
+            <span class="ps-amount-label">${isCOD ? "Pay on delivery" : "Advance payment submitted"}</span>
+            <span class="ps-amount-value">${CONFIG.CURRENCY} ${payload.total}</span>
+          </div>
+          <div class="ps-row"><span>Payment method</span><span>${escapeHTML(payload.paymentMethod)}${payload.advanceMethod ? " — " + escapeHTML(payload.advanceMethod) : ""}</span></div>
+          <p class="advance-note">${isCOD
+            ? "Have this amount ready in cash when your order arrives."
+            : "Your payment is awaiting verification. We'll dispatch after it is verified."}</p>
+        </div>
+        <details class="order-details-card">
+          <summary>Order details</summary>
           <div class="summary-line"><span>Items</span><span style="text-align:right;max-width:60%">${escapeHTML(itemSummary)}</span></div>
-          <div class="summary-line"><span>Payment method</span><span>${escapeHTML(payload.paymentMethod)}${payload.advanceMethod ? " — " + escapeHTML(payload.advanceMethod) : ""}</span></div>
+          <div class="summary-line"><span>Items subtotal</span><span class="mono">${CONFIG.CURRENCY} ${payload.subtotal}</span></div>
+          <div class="summary-line"><span>Delivery fee</span><span class="mono">${CONFIG.CURRENCY} ${payload.deliveryFee}</span></div>
           <div class="summary-line"><span>Payment status</span><span>${escapeHTML(payload.paymentStatus)}</span></div>
           ${payload.transactionReference ? `<div class="summary-line"><span>Transaction ref</span><span class="mono">${escapeHTML(payload.transactionReference)}</span></div>` : ""}
-          <div class="summary-line"><span>Delivery fee</span><span class="mono">${CONFIG.CURRENCY} ${payload.deliveryFee}</span></div>
-          <div class="summary-line total"><span>${isCOD ? "Pay on delivery" : "Submitted total"}</span><span>${CONFIG.CURRENCY} ${payload.total}</span></div>
-        </div>
-        <p class="advance-note" style="margin-top:12px">${isCOD
-          ? "Have this amount ready in cash when your order arrives."
-          : "Your payment is awaiting verification. We'll dispatch after it is verified."}</p>
+        </details>
         <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:18px" onclick="Router.go('vegetables')">Continue shopping</button>
       </section>`;
     refreshStickyBar();
