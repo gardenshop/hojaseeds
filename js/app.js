@@ -67,6 +67,13 @@ function computeDeliveryFee(paymentMethod, subtotal, forceAdvance) {
   return r.COD_DELIVERY_FEE;
 }
 
+// Consistent "✓ In Cart · N packets · Rs. X selected" summary used on every
+// category row and nowhere else (no separate "Line total" wording).
+function selectedSummaryHTML(qty, amount) {
+  if (qty <= 0) return "";
+  return `<span class="in-cart-badge">✓ In Cart</span><span class="selected-detail">${qty} packet${qty === 1 ? "" : "s"} · ${CONFIG.CURRENCY} ${amount} selected</span>`;
+}
+
 // Small "★ Premium" / "100% Advance" markers next to a product's name.
 function productBadgeHTML(p) {
   if (p.type === "premium") return `<span class="badge badge-premium">★ Premium</span>`;
@@ -284,6 +291,22 @@ function journeyBarHTML(step) {
   }).join("")}</div>`;
 }
 
+// Delivery-page free-delivery conversion notice. Threshold/fee always read
+// live from Settings — never hardcoded — so a Super Admin change is
+// reflected immediately. Advance-only; never implies COD gets free delivery.
+function deliveryUpsellHTML(subtotal) {
+  const r = Settings.get();
+  if (subtotal >= r.FREE_DELIVERY_THRESHOLD) {
+    return `<div class="delivery-upsell qualified">✓ Your order qualifies for FREE delivery with Advance Payment.</div>`;
+  }
+  const remaining = r.FREE_DELIVERY_THRESHOLD - subtotal;
+  return `<div class="delivery-upsell">
+    <div class="du-text">Add ${CONFIG.CURRENCY} ${remaining} more and pay in advance to unlock FREE delivery.</div>
+    <div class="du-sub">Advance delivery below ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}: ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE}</div>
+    <button type="button" class="btn btn-secondary du-btn" onclick="Router.go(Router.lastCategory)">Add More Seeds</button>
+  </div>`;
+}
+
 // Status chips shown under the journey bar on Delivery/Payment/Confirmed —
 // makes it obvious at a glance what's already locked in.
 function flowStatusHTML(deliveryConfirmed, paymentConfirmed) {
@@ -312,7 +335,11 @@ function exploreMoreHTML(currentCategory) {
   return `<section class="explore-more" aria-labelledby="explore-more-title">
     <h3 id="explore-more-title">Explore More</h3>
     <div class="explore-more-grid">
-      ${categories.map(cat => `<button class="explore-card" type="button" onclick="Router.go('${cat}')">${CATEGORY_META[cat].label}<span>→</span></button>`).join("")}
+      ${categories.map(cat => `
+        <button class="explore-card" data-cat="${cat}" type="button" onclick="Router.go('${cat}')" aria-label="Browse ${CATEGORY_META[cat].label}">
+          <span class="explore-card-label">${CATEGORY_META[cat].tagline}</span>
+          <span class="explore-card-name">${CATEGORY_META[cat].label}<span class="explore-card-arrow">→</span></span>
+        </button>`).join("")}
     </div>
   </section>`;
 }
@@ -410,15 +437,19 @@ const Views = {
         </div>
         <div class="product-table-wrap">
           <table class="product-table">
-            <thead><tr><th>Product</th><th>Price</th><th>Quantity</th><th>Total</th></tr></thead>
+            <thead><tr><th>Product</th><th>Price</th><th>Quantity</th></tr></thead>
             <tbody>
               ${products.map(p => {
                 const qty = items[p.id] || 0;
                 return `
-                <tr class="product-row${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, In cart · ${qty}` : p.name}">
+                <tr class="product-row${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, in cart, ${qty} packet${qty === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${qty * p.price} selected` : p.name}">
                   <td class="p-cell-name">
                     <div class="p-name"><div class="p-icon">${p.icon}</div>
-                      <div>${p.name}${productBadgeHTML(p)}${qty > 0 ? `<span class="in-cart-badge" aria-label="Already in cart">In cart · ${qty}</span>` : ""}<span class="p-unit">per ${p.unit}</span></div>
+                      <div class="p-name-text">
+                        <span class="p-name-title">${p.name}${productBadgeHTML(p)}</span>
+                        <span class="p-unit">per ${p.unit}</span>
+                        <div class="selected-summary" id="sel-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${selectedSummaryHTML(qty, qty * p.price)}</div>
+                      </div>
                     </div>
                   </td>
                   <td class="p-cell-price p-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</td>
@@ -429,7 +460,6 @@ const Views = {
                       <button onclick="Views.changeQty('${p.id}',1)" aria-label="Increase quantity">+</button>
                     </div>
                   </td>
-                  <td class="p-cell-line ${qty > 1 ? "" : "empty"}" id="line-${p.id}">${qty > 1 ? "Line total: " + CONFIG.CURRENCY + " " + (qty * p.price) : ""}</td>
                 </tr>`;
               }).join("")}
             </tbody>
@@ -446,22 +476,17 @@ const Views = {
     Cart.setQty(id, next);
 
     const qtyEl = document.getElementById(`qty-${id}`);
-    const lineEl = document.getElementById(`line-${id}`);
+    const selEl = document.getElementById(`sel-${id}`);
     const p = Prices.get().find(p => p.id === id);
     if (qtyEl) qtyEl.textContent = next;
-    if (lineEl) {
-      lineEl.textContent = next > 1 ? `Line total: ${CONFIG.CURRENCY} ${next * p.price}` : "";
-      lineEl.classList.toggle("empty", next <= 1);
+    if (selEl) {
+      selEl.innerHTML = selectedSummaryHTML(next, next * p.price);
+      selEl.style.display = next > 0 ? "" : "none";
     }
     const row = document.querySelector(`tr[data-product-id="${id}"]`);
     if (row) {
       row.classList.toggle("in-cart", next > 0);
-      row.setAttribute("aria-label", `${p.name}${next > 0 ? `, In cart · ${next}` : ""}`);
-      const name = row.querySelector(".p-name > div:last-child");
-      const badge = name && name.querySelector(".in-cart-badge");
-      if (next > 0 && !badge) name.insertAdjacentHTML("afterbegin", `<span class="in-cart-badge" aria-label="Already in cart">In cart · ${next}</span>`);
-      else if (next > 0 && badge) badge.textContent = `In cart · ${next}`;
-      else if (badge) badge.remove();
+      row.setAttribute("aria-label", `${p.name}${next > 0 ? `, in cart, ${next} packet${next === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${next * p.price} selected` : ""}`);
     }
     const live = document.getElementById("liveAnnouncement");
     if (live) live.textContent = `${p.name}: ${next > 0 ? `In cart, quantity ${next}` : "removed from cart"}`;
@@ -539,8 +564,8 @@ const Views = {
             </div>
           </div>
           <div class="cart-line-right">
-            <div class="cart-line-total mono">${CONFIG.CURRENCY} ${line}</div>
-            <button class="cart-remove-icon" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">🗑️</button>
+            <div class="cart-line-total mono">Selected total: ${CONFIG.CURRENCY} ${line}</div>
+            <button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>
           </div>
         </div>`).join("");
       return `<div class="cat-group-title">${CATEGORY_META[cat].label}</div>${rows}<div class="cat-group-subtotal">Subtotal: ${CONFIG.CURRENCY} ${catSubtotal}</div>`;
@@ -553,8 +578,9 @@ const Views = {
         ${cats.length ? `
           <div id="cartLines">${groupsHTML}</div>
           <div class="cart-summary-card">
-            <div class="summary-line total"><span>Subtotal</span><span class="mono">${CONFIG.CURRENCY} ${subtotal}</span></div>
-            <p style="font-size:.78rem;color:#6b6152;margin:8px 0 0">Delivery fee is added at the Payment step, based on your payment method.</p>
+            <div class="summary-line"><span>Items subtotal</span><span class="mono">${CONFIG.CURRENCY} ${subtotal}</span></div>
+            <div class="summary-line"><span>Delivery</span><span>Calculated at payment</span></div>
+            <div class="summary-line total"><span>Current payable</span><span class="mono">${CONFIG.CURRENCY} ${subtotal} + delivery</span></div>
           </div>
           <div class="cta-split">
             <button class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('${Router.lastCategory}')">← Continue Shopping</button>
@@ -592,12 +618,14 @@ const Views = {
       return;
     }
     const d = (this._order && this._order.delivery) || {};
+    const subtotal = Cart.totalAmount();
     app.innerHTML = `
       <section class="page narrow">
         ${journeyBarHTML(2)}
         ${flowStatusHTML(false, false)}
         <div class="step-nav-row"><button class="back-link" onclick="Router.go('cart')">← Back to Summary</button></div>
         <div class="page-head"><h2>Delivery Details</h2><p class="tagline">Where should we send your order?</p></div>
+        ${deliveryUpsellHTML(subtotal)}
         <div class="form-card">
           <form id="deliveryForm" onsubmit="Views.confirmDelivery(event)">
             <div class="field-row">
@@ -613,6 +641,10 @@ const Views = {
             <button class="inline-submit" type="submit" id="deliverySubmitBtn">Confirm Delivery</button>
             <div id="deliveryStatus"></div>
           </form>
+          <div class="step-actions-secondary">
+            <button type="button" class="btn-text-secondary" onclick="Router.go('cart')">← Back to Order Summary</button>
+            <button type="button" class="btn-text-tertiary" onclick="Router.go(Router.lastCategory)">Continue Shopping</button>
+          </div>
         </div>
       </section>`;
 
@@ -723,6 +755,10 @@ const Views = {
               <button class="inline-submit" type="submit" id="submitBtn">Confirm & Place Order — ${CONFIG.CURRENCY} ${subtotal + defaultFee}</button>
               <div id="orderStatus"></div>
             </form>
+            <div class="step-actions-secondary">
+              <button type="button" class="btn-text-secondary" onclick="Router.go('delivery')">← Back to Delivery</button>
+              <button type="button" class="btn-text-tertiary" onclick="Router.go(Router.lastCategory)">Continue Shopping</button>
+            </div>
           </div>
           <div class="summary-card">
             <h3>Order summary</h3>

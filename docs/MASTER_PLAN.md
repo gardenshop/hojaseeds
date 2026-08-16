@@ -136,6 +136,40 @@ without verifying target identity and explicit operator authorization.
 - The forensic responsive baseline (2026-08-16) covers 320/360/375/390/393/
   412/430/768/1024/1280/1366/1440/1920 widths and confirms no document
   overflow on storefront routes after the category-grid minmax repair.
+- Cart/product-selection UX contract (verified 2026-08-16 via headless
+  Chromium against a local static server): `Cart.totalAmount()`/
+  `Cart.count()` always sum every item in `localStorage`, proven from the
+  first added product onward through a third add and a quantity increase
+  (Rs. 185 → Rs. 306 → Rs. 427 across three sequential adds, matching the
+  sticky bar exactly at each step). Every category row with qty ≥ 1 shows a
+  single consistent `✓ In Cart` badge plus a `N packet(s) · Rs. X selected`
+  line — no separate "Line total" wording anywhere, no separate desktop
+  Total column. Selected state derives from `localStorage` on every render,
+  so it survives reload and return-from-Cart. The Cart page lists each item
+  as a separated card labelled `Selected total: Rs. X` with a text `Remove`
+  control, and the bottom summary reads `Items subtotal` / `Delivery:
+  Calculated at payment` / `Current payable: Rs. X + delivery` — never an
+  implied final total before a payment method is chosen.
+- Delivery-page free-delivery upsell (verified 2026-08-16) reads
+  `FREE_DELIVERY_THRESHOLD`/`ADVANCE_DELIVERY_FEE` live from Settings (never
+  hardcoded), shows the exact remaining amount and an `Add More Seeds`
+  control that returns to shopping without clearing the cart, and switches
+  to a qualified state at/above the threshold — advance-payment only, never
+  implying COD gets free delivery.
+- Delivery and Payment step navigation (verified 2026-08-16) each keep a
+  single primary submit (`Confirm Delivery` / `Confirm & Place Order`) plus
+  secondary (`Back to Order Summary` / `Back to Delivery`) and tertiary
+  (`Continue Shopping`) controls that are plain `type="button"` — no
+  duplicate form submissions — and back-navigation preserves already-entered
+  delivery form data and the cart.
+- Explore More cross-sell (verified 2026-08-16) renders three gradient
+  category cards (reusing the existing `cat-tile` gradient palette, no
+  broken image requests) instead of plain text buttons, 2-column on mobile
+  widths and 3-column at ≥520px.
+- Post-fix responsive regression (2026-08-16, headless Chromium):
+  320×568/375×812/768×1024/1440×900 across Vegetables/Flowers/Mix/Fertilizer
+  report `document.documentElement.scrollWidth <= innerWidth` with zero
+  console errors.
 
 ## Launch Acceptance Gates
 

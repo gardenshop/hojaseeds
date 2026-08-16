@@ -201,3 +201,30 @@ replace it.*
   and server-side mutation audit summaries. No frozen commerce columns/rules
   were changed; status mutation, IP relay, inventory, and OrderItems remain
   deferred.
+- 2026-08-16: Storefront/cart UX repair pass (working readiness baseline
+  corrected to 91% before this pass, per screenshot evidence of unresolved
+  defects). Rebuilt category-row selected state to a consistent `✓ In Cart`
+  badge + `N packet(s) · Rs. X selected` line for every qty ≥ 1 (removed the
+  qty-1-shows-nothing gap and all "Line total"/desktop Total-column
+  wording); confirmed `Cart.totalAmount()` already summed every cart item
+  correctly (the "second-product-only" total was a rendering/visibility
+  illusion from the old Line-total-only-above-qty-1 logic, not a calculation
+  bug) and proved the full add-sequence live (Rs. 185 → 306 → 427) with
+  automated browser assertions. Relabeled Cart-page line items (`Selected
+  total: Rs. X`, text `Remove`) and the bottom summary (`Items subtotal` /
+  `Delivery: Calculated at payment` / `Current payable: Rs. X + delivery`).
+  Rebuilt Explore More as three gradient category cards. Added Delivery-page
+  live-Settings free-delivery upsell with an `Add More Seeds` recovery
+  control, and added secondary/tertiary bottom navigation (`Back to Order
+  Summary`/`Continue Shopping` on Delivery, `Back to Delivery`/`Continue
+  Shopping` on Payment) alongside the existing single primary submit on
+  each step, confirming no duplicate submits and no data loss on back-nav.
+  Verified with headless Chromium against a local static server: acceptance
+  tests A–I (product selection, multi-item subtotal, quantity change,
+  reload persistence, quantity-to-zero removal, Cart page separation,
+  below/at-threshold upsell states, back/continue navigation) all pass, plus
+  a 320/375/768/1440 overflow + zero-console-error regression sweep across
+  all four category routes. `npm test` passes unchanged. Not yet done:
+  re-running this same matrix against the live `www.hojaseeds.pk` production
+  origin, and the git commit/push/Cloudflare redeploy — pending explicit
+  go-ahead before touching the shared `main` branch and production.

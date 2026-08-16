@@ -258,6 +258,16 @@ const Admin = {
 
 Admin.checkSession();
 
+// Chrome (and other browsers) increment/decrement a focused number input on
+// mouse-wheel scroll. In this admin table that can silently mutate a live
+// price while an admin is just scrolling the page. Blur any number input
+// before the wheel event changes its value, wherever it appears on this page.
+document.addEventListener("wheel", event => {
+  if (event.target instanceof HTMLInputElement && event.target.type === "number") {
+    event.target.blur();
+  }
+}, { passive: true });
+
 function escapeHTML(value) {
   return String(value == null ? "" : value)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")

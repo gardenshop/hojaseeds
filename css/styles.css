@@ -168,25 +168,29 @@ table.product-table{width:100%;border-collapse:collapse;}
 .product-table tbody tr:last-child{border-bottom:none;}
 .product-table tbody tr.in-cart{background:rgba(220,234,214,.48);box-shadow:inset 3px 0 0 var(--leaf);}
 .product-table td{padding:11px 14px;vertical-align:middle;}
-.p-name{display:flex;align-items:center;gap:11px;font-weight:600;font-size:.92rem;}
+.p-name{display:flex;align-items:flex-start;gap:11px;font-weight:600;font-size:.92rem;}
 .p-icon{width:36px;height:36px;border-radius:8px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex:none;}
+.p-name-text{min-width:0;overflow-wrap:anywhere;}
+.p-name-title{display:inline;}
 .p-unit{color:#7a6f5c;font-weight:400;font-size:.78rem;display:block;}
 .p-price{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.88rem;}
 
-.stepper{display:inline-flex;align-items:center;border:1px solid var(--kraft-dark);border-radius:20px;overflow:hidden;background:var(--paper);}
-.stepper button{background:none;border:none;width:38px;height:38px;font-size:1.1rem;color:var(--leaf-dark);font-weight:700;transition:background .12s ease;}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--kraft-dark);border-radius:22px;overflow:hidden;background:var(--paper);}
+.stepper button{background:none;border:none;width:44px;height:44px;font-size:1.1rem;color:var(--leaf-dark);font-weight:700;transition:background .12s ease;}
 .stepper button:hover{background:var(--kraft-dark);}
 .stepper button:active{transform:scale(.92);}
-.stepper .qty-display{min-width:24px;text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.88rem;color:var(--ink);}
+.stepper .qty-display{min-width:26px;text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.88rem;color:var(--ink);}
 
-.p-cell-line{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--leaf-dark);white-space:nowrap;font-size:.88rem;}
-.p-cell-line.empty{display:none;}
+/* Consistent "✓ In Cart · N packets · Rs. X selected" summary — the only
+   selected-amount presentation; no separate "Line total" wording anywhere. */
+.selected-summary{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px;}
+.selected-detail{font-family:'IBM Plex Mono',monospace;font-size:.76rem;font-weight:600;color:var(--leaf-dark);white-space:nowrap;}
 
 /* Small product badges (Premium / Advance-only) */
 .badge{display:inline-block;font-size:.64rem;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
 .badge-premium{background:#f3e2c2;color:#8a5a12;}
 .badge-customized{background:#f4ddd8;color:var(--chili);}
-.in-cart-badge{display:inline-block;background:#dcead6;color:var(--leaf-dark);font-size:.64rem;font-weight:700;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
+.in-cart-badge{display:inline-flex;align-items:center;background:var(--leaf);color:#fff;font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap;letter-spacing:.02em;}
 
 /* Commerce info strip on category pages */
 .commerce-info-bar{display:flex;gap:7px;flex-wrap:wrap;margin:-6px 0 16px;}
@@ -205,9 +209,8 @@ table.product-table{width:100%;border-collapse:collapse;}
   .product-table tr{padding:13px 14px;display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;}
   .product-table td{padding:0;border:none;}
   .product-table td.p-cell-name{grid-column:1/-1;}
-  .product-table td.p-cell-price{font-size:.8rem;color:#5b5142;}
-  .product-table td.p-cell-qty{justify-self:start;}
-  .product-table td.p-cell-line{justify-self:end;align-self:center;}
+  .product-table td.p-cell-price{font-size:.8rem;color:#5b5142;align-self:center;}
+  .product-table td.p-cell-qty{justify-self:end;align-self:center;}
   .journey-step .jl{font-size:.62rem;white-space:nowrap;}
   .journey-step .jn{width:26px;height:26px;font-size:.76rem;}
   .journey-line{min-width:10px;}
@@ -224,9 +227,9 @@ table.product-table{width:100%;border-collapse:collapse;}
 .cart-line-info .name{font-weight:700;font-size:.9rem;}
 .cart-line-info .unit-price{font-size:.76rem;color:#7a6f5c;font-family:'IBM Plex Mono',monospace;}
 .cart-line-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
-.cart-line-total{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:.88rem;}
-.cart-remove-icon{background:none;border:none;color:var(--chili);font-size:1rem;padding:4px;border-radius:6px;line-height:1;}
-.cart-remove-icon:hover{background:rgba(184,74,62,.1);}
+.cart-line-total{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:.84rem;color:var(--leaf-dark);white-space:nowrap;}
+.cart-remove-link{background:none;border:none;color:var(--chili);font-size:.78rem;font-weight:700;padding:6px 2px;line-height:1;}
+.cart-remove-link:hover{text-decoration:underline;}
 .empty-cart-block{text-align:center;padding:50px 20px;color:#8a7f6b;}
 .empty-cart-block .ic{font-size:2.4rem;display:block;margin-bottom:10px;}
 
@@ -263,6 +266,23 @@ table.product-table{width:100%;border-collapse:collapse;}
 
 .payment-restricted-note{background:#f4ddd8;border:1px solid #e5b8ae;color:#7c2e25;border-radius:10px;padding:12px 14px;font-size:.85rem;margin-bottom:16px;line-height:1.4;}
 
+/* Bottom secondary/tertiary navigation on Delivery & Payment — the primary
+   action stays the in-form submit button (inline-submit); these never
+   trigger a form submit themselves (type="button"). */
+.step-actions-secondary{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;}
+.btn-text-secondary{background:none;border:none;color:var(--leaf-dark);font-weight:700;font-size:.82rem;padding:8px 2px;min-height:44px;}
+.btn-text-secondary:hover{text-decoration:underline;}
+.btn-text-tertiary{background:none;border:none;color:#8a7f6b;font-weight:600;font-size:.8rem;padding:8px 2px;min-height:44px;}
+.btn-text-tertiary:hover{color:var(--ink);}
+
+/* Delivery-page free-delivery upsell — live Settings-driven, advance-only */
+.delivery-upsell{background:#fdf3e4;border:1px solid #f0d9ad;border-radius:12px;padding:13px 15px;margin-bottom:16px;}
+.delivery-upsell.qualified{background:#e2eedd;border-color:#bfdcb2;}
+.du-text{font-size:.86rem;font-weight:700;color:#8a5a12;line-height:1.35;}
+.delivery-upsell.qualified .du-text{color:var(--leaf-dark);}
+.du-sub{font-size:.76rem;color:#6b6152;margin-top:4px;}
+.du-btn{margin-top:10px;padding:9px 16px;font-size:.82rem;background:var(--paper);color:var(--ink);border:1px solid var(--kraft-dark);box-shadow:none;}
+
 .free-delivery-progress{margin:4px 0 16px;}
 .fdp-text{font-size:.8rem;color:#5b5142;margin-bottom:6px;}
 .fdp-text.unlocked{color:var(--leaf-dark);font-weight:600;}
@@ -295,12 +315,24 @@ table.product-table{width:100%;border-collapse:collapse;}
 /* ══════════════ Footer ══════════════ */
 .site-footer{background:var(--soil);color:rgba(241,230,208,.7);padding:20px 16px;text-align:center;font-size:.78rem;}
 
-/* ══════════════ Category cross-sell ══════════════ */
-.explore-more{margin:24px 0 4px;}
+/* ══════════════ Category cross-sell (visual gradient cards) ══════════════ */
+.explore-more{margin:28px 0 4px;}
 .explore-more h3{font-size:1.15rem;margin:0 0 10px;}
-.explore-more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.explore-card{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;background:var(--paper);border:1px solid var(--kraft-dark);border-radius:10px;padding:10px 11px;color:var(--ink);font-size:.76rem;font-weight:700;text-align:left;}
-.explore-card span{color:var(--leaf-dark);font-size:1rem;}
+.explore-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.explore-card{
+  position:relative;overflow:hidden;min-width:0;min-height:112px;border-radius:14px;border:none;
+  display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-start;gap:2px;
+  padding:14px;color:#fff;text-align:left;box-shadow:var(--shadow-sm);background-size:cover;background-position:center;
+}
+.explore-card::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg, rgba(20,15,8,.8) 0%, rgba(20,15,8,.15) 60%, transparent 100%);}
+.explore-card[data-cat="vegetables"]{background-image:linear-gradient(150deg,#3F6B3F,#274526);}
+.explore-card[data-cat="flowers"]{background-image:linear-gradient(150deg,#D68C2E,#9C5D18);}
+.explore-card[data-cat="mix"]{background-image:linear-gradient(150deg,#B84A3E,#7C2E25);}
+.explore-card[data-cat="fertilizer"]{background-image:linear-gradient(150deg,#6B4A2A,#432D19);}
+.explore-card-label{position:relative;z-index:1;font-size:.66rem;font-weight:600;letter-spacing:.02em;opacity:.85;overflow-wrap:anywhere;}
+.explore-card-name{position:relative;z-index:1;display:flex;align-items:center;gap:6px;font-family:'Fraunces',serif;font-weight:600;font-size:1rem;}
+.explore-card-arrow{font-family:'Inter',sans-serif;font-weight:700;font-size:1rem;}
+@media (min-width:520px){.explore-more-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 
 /* ══════════════ Toast ══════════════ */
 .toast{position:fixed;bottom:calc(var(--sticky-h) + 14px);left:50%;transform:translateX(-50%) translateY(20px);background:var(--soil);color:var(--kraft);padding:11px 18px;border-radius:8px;font-size:.86rem;opacity:0;pointer-events:none;transition:all .25s ease;z-index:80;box-shadow:var(--shadow);}
