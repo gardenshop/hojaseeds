@@ -136,15 +136,26 @@ without verifying target identity and explicit operator authorization.
 - The forensic responsive baseline (2026-08-16) covers 320/360/375/390/393/
   412/430/768/1024/1280/1366/1440/1920 widths and confirms no document
   overflow on storefront routes after the category-grid minmax repair.
+- Category product-selection presentation (verified 2026-08-16 locally and
+  against production): all four category routes share rounded product cards
+  with image/icon fallback, product details, a vertical `+ / quantity / −`
+  control, and a separate per-product `Total` block including `Rs. 0` for
+  unselected products. Qty > 0 adds the nearby `✓ In Cart` badge and packet
+  count, selected cards receive the green accent, and the sticky checkout bar
+  continues to show the global item count/subtotal. The category renderer
+  remains `Views.category(cat)`; `Views.cart()` and all Cart/checkout handlers
+  are unchanged. Production screenshots at 390×844 and 1440×900 show the
+  required hierarchy, with zero overflow, console errors, or failed requests
+  across 320–1920 and Vegetables/Flowers/Mix/Fertilizer.
 - Cart/product-selection UX contract (verified 2026-08-16 via headless
   Chromium against a local static server): `Cart.totalAmount()`/
   `Cart.count()` always sum every item in `localStorage`, proven from the
   first added product onward through a third add and a quantity increase
   (Rs. 185 → Rs. 306 → Rs. 427 across three sequential adds, matching the
   sticky bar exactly at each step). Every category row with qty ≥ 1 shows a
-  single consistent `✓ In Cart` badge plus a `N packet(s) · Rs. X selected`
-  line — no separate "Line total" wording anywhere, no separate desktop
-  Total column. Selected state derives from `localStorage` on every render,
+   single consistent `✓ In Cart` badge plus a `N packet(s) selected` line and
+   a separate per-product `Total: Rs. X` block — no "Line total" wording.
+   Selected state derives from `localStorage` on every render,
   so it survives reload and return-from-Cart. The Cart page lists each item
   as a separated card labelled `Selected total: Rs. X` with a text `Remove`
   control, and the bottom summary reads `Items subtotal` / `Delivery:

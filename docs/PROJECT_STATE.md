@@ -306,4 +306,16 @@ replace it.*
   Tomato→qty2 Rs.370, 4 items/Rs.612; remove Tomato → Okra remains, 2
   items/Rs.242; reload persists; Continue to Delivery unchanged; empty-cart
   state), an 11-viewport (320–1920) overflow sweep on the actual Cart
-  route, and `npm test`.
+   route, and `npm test`.
+- 2026-08-16: Corrected the target screen to the category product listing,
+  not the Cart route. `Views.category(cat)` now shares one responsive premium
+  card system across Vegetables, Flowers, Mix, and Fertilizer: larger current
+  image/icon tile, details and live payment chips, vertical `+ / qty / −`
+  stepper with accessible labels, visible zero-quantity Total block, nearby
+  `✓ In Cart` plus packet-selection count, and selected-card accent. No Cart,
+  checkout, pricing, settings, localStorage, server, Apps Script, or admin
+  operations changed. Local and production Playwright checks passed at
+  320×568, 360×800, 375×812, 390×844, 412×915, 430×932, 768×1024,
+  1024×768, 1366×768, 1440×900, and 1920×1080; all four category routes
+  passed overflow/network/console checks and category-to-Cart-to-Delivery
+  regression. Production Pages deployment commit `1343b96` is live.
