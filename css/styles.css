@@ -106,9 +106,9 @@ button{font-family:inherit;cursor:pointer;}
 /* ══════════════ CATEGORY TILES (with real-asset slots) ══════════════ */
 /* Drop real photos into assets/images/ using these filenames — the tile
    falls back to its gradient automatically if the file isn't there yet. */
-.cat-grid{max-width:1180px;margin:-20px auto 0;padding:0 14px;position:relative;z-index:2;display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.cat-grid{max-width:1180px;margin:-20px auto 0;padding:0 14px;position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;}
 .cat-tile{
-  border-radius:16px;overflow:hidden;position:relative;height:128px;aspect-ratio:4/3;box-shadow:var(--shadow);
+  border-radius:16px;overflow:hidden;position:relative;height:128px;box-shadow:var(--shadow);min-width:0;
   background-size:cover;background-position:center;
 }
 .cat-tile[data-cat="vegetables"]{background-image:linear-gradient(150deg,#3F6B3F,#274526);}
@@ -116,11 +116,11 @@ button{font-family:inherit;cursor:pointer;}
 .cat-tile[data-cat="mix"]{background-image:linear-gradient(150deg,#B84A3E,#7C2E25);}
 .cat-tile[data-cat="fertilizer"]{background-image:linear-gradient(150deg,#6B4A2A,#432D19);}
 .cat-tile::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg, rgba(20,15,8,.78) 0%, rgba(20,15,8,.15) 55%, transparent 90%);}
-.cat-tile-content{position:absolute;left:0;right:0;bottom:0;padding:12px 14px;color:#fff;z-index:1;}
-.cat-tile-content .name{font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;display:block;}
+.cat-tile-content{position:absolute;left:0;right:0;bottom:0;padding:12px 14px;color:#fff;z-index:1;min-width:0;}
+.cat-tile-content .name{font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;display:block;min-width:0;overflow-wrap:anywhere;}
 .cat-tile-content .count{font-size:.72rem;opacity:.85;font-family:'IBM Plex Mono',monospace;}
 .cat-tile-btn{position:absolute;inset:0;background:none;border:none;width:100%;height:100%;z-index:2;}
-@media (min-width:640px){.cat-grid{grid-template-columns:repeat(4,1fr);}.cat-tile{height:160px;}}
+@media (min-width:640px){.cat-grid{grid-template-columns:repeat(4,minmax(0,1fr));}.cat-tile{height:160px;}}
 
 /* ══════════════ Page shell ══════════════ */
 .page{max-width:1180px;margin:0 auto;padding:26px 14px 40px;}
