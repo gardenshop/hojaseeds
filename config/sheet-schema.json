@@ -19,6 +19,7 @@
       "quantity", "unitPrice", "lineTotal"
     ],
     "Contact": ["timestamp", "name", "phone", "message"],
+    "AuditLog": ["timestamp", "admin_email", "action", "entity_type", "entity_id", "before", "after", "result"],
     "Settings": ["key", "value"]
   }
 }

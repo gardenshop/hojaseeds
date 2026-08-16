@@ -49,8 +49,9 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
     if (payload.type === "order") return jsonResponse(submitOrder(payload));
     if (payload.type === "contact") logContact(payload);
-    else if (payload.type === "priceUpdate") { requireAdmin(payload); updateProducts(payload.updates); }
-    else if (payload.type === "settingsUpdate") { requireAdmin(payload); updateSettings(payload.rules); }
+    else if (payload.type === "adminRead") { requireAdmin(payload); return jsonResponse(readAdminResource(payload.resource, payload.limit)); }
+    else if (payload.type === "priceUpdate") { const adminEmail = requireAdmin(payload); updateProducts(payload.updates, adminEmail); }
+    else if (payload.type === "settingsUpdate") { const adminEmail = requireAdmin(payload); updateSettings(payload.rules, adminEmail); }
     else throw new OrderError("UNKNOWN_ACTION", "Unknown request type.");
     return jsonResponse({ ok: true });
   } catch (error) {
@@ -340,7 +341,7 @@ function getProducts() {
     });
 }
 
-function updateProducts(updates) {
+function updateProducts(updates, adminEmail) {
   if (!Array.isArray(updates) || updates.length > 1000) throw new OrderError("INVALID_ADMIN_UPDATE", "Product updates are invalid.");
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Products");
   const rows = sheet.getDataRange().getValues();
@@ -349,6 +350,7 @@ function updateProducts(updates) {
   const typeCol = rows[0].indexOf("type");
   const idToRow = {};
   for (let i = 1; i < rows.length; i++) idToRow[rows[i][idCol]] = i + 1; // 1-indexed sheet row
+  const before = updates.map(u => ({ id: u?.id, price: rows[idToRow[u?.id] - 1]?.[priceCol], type: rows[idToRow[u?.id] - 1]?.[typeCol] }));
 
   updates.forEach(u => {
     if (!u || typeof u.id !== "string") throw new OrderError("INVALID_ADMIN_UPDATE", "A product update is invalid.");
@@ -359,6 +361,7 @@ function updateProducts(updates) {
     if (u.price != null) sheet.getRange(row, priceCol + 1).setValue(u.price);
     if (u.type && typeCol > -1) sheet.getRange(row, typeCol + 1).setValue(u.type);
   });
+  logAudit(adminEmail, "priceUpdate", "Product", updates.map(u => u.id).join(","), before, updates, "success");
 }
 
 // Settings sheet is just key/value rows — read them into a flat object,
@@ -380,7 +383,7 @@ function getSettings() {
   return out;
 }
 
-function updateSettings(rules) {
+function updateSettings(rules, adminEmail) {
   if (!rules || typeof rules !== "object" || Array.isArray(rules)) throw new OrderError("INVALID_ADMIN_UPDATE", "Store settings are invalid.");
   const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE"];
   Object.keys(rules).forEach(key => {
@@ -391,13 +394,79 @@ function updateSettings(rules) {
   if (!sheet) return;
   const rows = sheet.getDataRange().getValues();
   const keyToRow = {};
+  const beforeSettings = {};
   for (let i = 1; i < rows.length; i++) keyToRow[rows[i][0]] = i + 1;
+  Object.keys(rules).forEach(key => { const row = keyToRow[key]; beforeSettings[key] = row ? rows[row - 1][1] : null; });
 
   Object.keys(rules).forEach(key => {
     const row = keyToRow[key];
     if (row) sheet.getRange(row, 2).setValue(rules[key]);
     else sheet.appendRow([key, rules[key]]);
   });
+  logAudit(adminEmail, "settingsUpdate", "Settings", Object.keys(rules).join(","), beforeSettings, rules, "success");
+}
+
+function readAdminResource(resource, limit) {
+  const boundedLimit = Math.min(Math.max(Number(limit) || 100, 1), 250);
+  if (resource === "orders") return { ok: true, resource: resource, items: readAdminOrders(boundedLimit) };
+  if (resource === "contacts") return { ok: true, resource: resource, items: readAdminRows("Contact", boundedLimit) };
+  if (resource === "audit") return { ok: true, resource: resource, items: readAdminRows("AuditLog", boundedLimit) };
+  if (resource === "dashboard") return { ok: true, resource: resource, summary: buildAdminDashboard(boundedLimit) };
+  throw new OrderError("INVALID_ADMIN_READ", "The requested admin resource is not available.");
+}
+
+function readAdminRows(sheetName, limit) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return [];
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) return [];
+  const headers = values.shift();
+  return values.reverse().slice(0, limit).map(row => {
+    const item = {};
+    headers.forEach((header, index) => { item[header] = row[index] instanceof Date ? row[index].toISOString() : row[index]; });
+    return item;
+  });
+}
+
+function readAdminOrders(limit) {
+  return readAdminRows("Orders", limit).map(order => {
+    const rawItems = order.items;
+    try {
+      const snapshot = JSON.parse(String(rawItems || "[]"));
+      order.items = Array.isArray(snapshot) ? snapshot : snapshot.items || [];
+    } catch (error) { order.items = []; }
+    delete order.idempotencyFingerprint;
+    order.paymentStatus = order.paymentStatus || (order.paymentMethod === "Advance Payment" ? "Payment Verification" : "COD Due");
+    order.orderStatus = order.orderStatus || "New";
+    return order;
+  });
+}
+
+function buildAdminDashboard(limit) {
+  const orders = readAdminOrders(Math.min(limit, 250));
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = {
+    totalProducts: getProducts().length,
+    activeProducts: getProducts().filter(product => String(product.active || "").trim() !== "false").length,
+    suspendedProducts: getProducts().filter(product => String(product.active || "").trim().toLowerCase() === "false").length,
+    ordersToday: orders.filter(order => String(order.timestamp || "").slice(0, 10) === today).length,
+    pendingOrders: orders.filter(order => ["New", "Pending Payment", "Payment Verification"].indexOf(order.orderStatus) !== -1).length,
+    paymentVerificationPending: orders.filter(order => order.paymentStatus === "Payment Verification").length,
+    codDue: orders.filter(order => order.paymentStatus === "COD Due").length,
+    revenue: orders.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
+    recentOrders: orders.slice(0, 10)
+  };
+  return summary;
+}
+
+function logAudit(adminEmail, action, entityType, entityId, before, after, result) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("AuditLog");
+  if (!sheet) return;
+  sheet.appendRow([
+    new Date().toISOString(), safeSheetText(adminEmail || ""), safeSheetText(action),
+    safeSheetText(entityType), safeSheetText(entityId), safeSheetText(JSON.stringify(before || {})),
+    safeSheetText(JSON.stringify(after || {})), safeSheetText(result || "success")
+  ]);
 }
 
 function logOrder(o) {

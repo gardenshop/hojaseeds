@@ -415,10 +415,10 @@ const Views = {
               ${products.map(p => {
                 const qty = items[p.id] || 0;
                 return `
-                <tr>
+                <tr class="product-row${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, In cart · ${qty}` : p.name}">
                   <td class="p-cell-name">
                     <div class="p-name"><div class="p-icon">${p.icon}</div>
-                      <div>${p.name}${productBadgeHTML(p)}<span class="p-unit">per ${p.unit}</span></div>
+                      <div>${p.name}${productBadgeHTML(p)}${qty > 0 ? `<span class="in-cart-badge" aria-label="Already in cart">In cart · ${qty}</span>` : ""}<span class="p-unit">per ${p.unit}</span></div>
                     </div>
                   </td>
                   <td class="p-cell-price p-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</td>
@@ -453,6 +453,18 @@ const Views = {
       lineEl.textContent = next > 1 ? `Line total: ${CONFIG.CURRENCY} ${next * p.price}` : "";
       lineEl.classList.toggle("empty", next <= 1);
     }
+    const row = document.querySelector(`tr[data-product-id="${id}"]`);
+    if (row) {
+      row.classList.toggle("in-cart", next > 0);
+      row.setAttribute("aria-label", `${p.name}${next > 0 ? `, In cart · ${next}` : ""}`);
+      const name = row.querySelector(".p-name > div:last-child");
+      const badge = name && name.querySelector(".in-cart-badge");
+      if (next > 0 && !badge) name.insertAdjacentHTML("afterbegin", `<span class="in-cart-badge" aria-label="Already in cart">In cart · ${next}</span>`);
+      else if (next > 0 && badge) badge.textContent = `In cart · ${next}`;
+      else if (badge) badge.remove();
+    }
+    const live = document.getElementById("liveAnnouncement");
+    if (live) live.textContent = `${p.name}: ${next > 0 ? `In cart, quantity ${next}` : "removed from cart"}`;
     if (next > current) Analytics.addToCart(p, next - current);
     else if (next < current) Analytics.removeFromCart(p, current - next);
     if (current === 0 && next === 1) Toast.show("Added to cart");

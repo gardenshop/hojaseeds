@@ -22,13 +22,13 @@
 }
 *{box-sizing:border-box;}
 body{margin:0;font-family:'Inter',sans-serif;color:var(--ink);background:var(--paper);padding-bottom:0;}
-body.has-sticky-bar{padding-bottom:var(--sticky-h);}
+body.has-sticky-bar{padding-bottom:calc(var(--sticky-h) + env(safe-area-inset-bottom));}
 h1,h2,h3,.display{font-family:'Fraunces',serif;}
 .mono{font-family:'IBM Plex Mono',monospace;}
 a{color:inherit;}
 img,svg{max-width:100%;}
 button{font-family:inherit;cursor:pointer;}
-.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+.visually-hidden,.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
 
 /* ══════════════ HEADER (mobile-first) ══════════════ */
 .site-header{background:var(--soil);color:var(--kraft);position:sticky;top:0;z-index:40;box-shadow:0 2px 10px rgba(0,0,0,.2);height:var(--header-h);}
@@ -166,6 +166,7 @@ table.product-table{width:100%;border-collapse:collapse;}
 }
 .product-table tbody tr{border-bottom:1px solid rgba(228,212,180,.7);}
 .product-table tbody tr:last-child{border-bottom:none;}
+.product-table tbody tr.in-cart{background:rgba(220,234,214,.48);box-shadow:inset 3px 0 0 var(--leaf);}
 .product-table td{padding:11px 14px;vertical-align:middle;}
 .p-name{display:flex;align-items:center;gap:11px;font-weight:600;font-size:.92rem;}
 .p-icon{width:36px;height:36px;border-radius:8px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex:none;}
@@ -185,6 +186,7 @@ table.product-table{width:100%;border-collapse:collapse;}
 .badge{display:inline-block;font-size:.64rem;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
 .badge-premium{background:#f3e2c2;color:#8a5a12;}
 .badge-customized{background:#f4ddd8;color:var(--chili);}
+.in-cart-badge{display:inline-block;background:#dcead6;color:var(--leaf-dark);font-size:.64rem;font-weight:700;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
 
 /* Commerce info strip on category pages */
 .commerce-info-bar{display:flex;gap:7px;flex-wrap:wrap;margin:-6px 0 16px;}

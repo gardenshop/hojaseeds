@@ -9,6 +9,12 @@ const Admin = {
   OV_KEY: "hoja_admin_overrides",     // { [id]: { price?, type? } }
   RULES_KEY: "hoja_pricing_rules",    // pricing-rules override object
   idToken: "",
+  activeTab: "dashboard",
+  tabs: [
+    ["dashboard", "Dashboard"], ["products", "Products"], ["orders", "Orders"],
+    ["customers", "Customers"], ["delivery", "Delivery & Payments"], ["analytics", "Analytics"],
+    ["settings", "Store Settings"], ["audit", "Audit Log"]
+  ],
 
   login(response) {
     if (!response || !response.credential) return this.showError("Google sign-in did not return a credential.");
@@ -55,6 +61,10 @@ const Admin = {
     return result;
   },
 
+  async authorizedRead(resource, limit = 100) {
+    return this.authorizedPost({ type: "adminRead", resource, limit });
+  },
+
   overrides() {
     try { return JSON.parse(localStorage.getItem(this.OV_KEY)) || {}; }
     catch { return {}; }
@@ -71,8 +81,81 @@ const Admin = {
     document.getElementById("modeNote").textContent = CONFIG.SHEET_WEBHOOK_URL
       ? "(live — synced to Google Sheet)"
       : "(demo mode — saved in this browser only, see README to connect Google Sheets)";
+    this.renderTabs();
     this.renderRules();
     this.renderTables();
+    this.renderAnalytics();
+    this.loadDashboard();
+  },
+
+  renderTabs() {
+    const render = target => {
+      target.innerHTML = this.tabs.map(([id, label]) => `<button class="admin-tab ${id === this.activeTab ? "active" : ""}" type="button" data-tab="${id}">${label}</button>`).join("");
+      target.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => this.showTab(button.dataset.tab)));
+    };
+    render(document.getElementById("adminSidebar"));
+    render(document.getElementById("adminTabbar"));
+  },
+
+  showTab(tab) {
+    this.activeTab = tab;
+    document.querySelectorAll("[data-panel]").forEach(panel => panel.classList.toggle("active", panel.dataset.panel === tab));
+    document.querySelectorAll("[data-tab]").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
+  },
+
+  async loadDashboard() {
+    try {
+      const [dashboard, orders, contacts, audit] = await Promise.all([
+        this.authorizedRead("dashboard", 100), this.authorizedRead("orders", 100),
+        this.authorizedRead("contacts", 100), this.authorizedRead("audit", 100)
+      ]);
+      this.renderDashboard(dashboard.summary || {});
+      this.renderOrders(orders.items || []);
+      this.renderCustomers(orders.items || []);
+      this.renderContacts(contacts.items || []);
+      this.renderAudit(audit.items || []);
+    } catch (error) {
+      const message = `<p class="admin-muted">Live admin data could not be loaded: ${escapeHTML(error.message)}</p>`;
+      ["dashboardContent", "ordersContent", "customersContent", "auditContent"].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = message; });
+    }
+  },
+
+  renderDashboard(summary) {
+    const metrics = [
+      ["Products", summary.totalProducts], ["Active products", summary.activeProducts],
+      ["Suspended/out of stock", summary.suspendedProducts], ["Orders today", summary.ordersToday],
+      ["Pending orders", summary.pendingOrders], ["Payment verification", summary.paymentVerificationPending],
+      ["COD due", summary.codDue], ["Revenue (Rs.)", summary.revenue]
+    ];
+    document.getElementById("dashboardContent").innerHTML = `<div class="admin-metrics">${metrics.map(([label, value]) => `<div class="admin-metric"><strong>${escapeHTML(value ?? 0)}</strong><span>${label}</span></div>`).join("")}</div><div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Recent order</th><th>Customer</th><th>Status</th><th>Total</th></tr></thead><tbody>${(summary.recentOrders || []).map(order => `<tr><td>${escapeHTML(order.orderId)}</td><td>${escapeHTML(order.name)}<br><span class="admin-muted">${escapeHTML(order.city)}</span></td><td>${escapeHTML(order.orderStatus)}<br>${escapeHTML(order.paymentStatus)}</td><td>Rs. ${escapeHTML(order.total)}</td></tr>`).join("") || `<tr><td colspan="4">No orders yet.</td></tr>`}</tbody></table></div>`;
+  },
+
+  renderOrders(orders) {
+    document.getElementById("ordersContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Order</th><th>Timestamp</th><th>Customer</th><th>Payment</th><th>Total</th><th>Items</th></tr></thead><tbody>${orders.map(order => `<tr><td>${escapeHTML(order.orderId)}</td><td>${escapeHTML(order.timestamp)}</td><td>${escapeHTML(order.name)}<br>${escapeHTML(order.phone)}<br>${escapeHTML(order.city)}</td><td>${escapeHTML(order.paymentMethod)}<br>${escapeHTML(order.paymentStatus)}</td><td>Rs. ${escapeHTML(order.total)}<br><span class="admin-muted">${escapeHTML(order.orderStatus)}</span></td><td>${escapeHTML((order.items || []).map(item => `${item.name} × ${item.quantity}`).join(", "))}</td></tr>`).join("") || `<tr><td colspan="6">No orders yet.</td></tr>`}</tbody></table></div>`;
+  },
+
+  renderCustomers(orders) {
+    const customers = {};
+    orders.forEach(order => {
+      const key = order.phone || order.name;
+      const customer = customers[key] || { name: order.name, phone: order.phone, city: order.city, count: 0, spend: 0, first: order.timestamp, last: order.timestamp };
+      customer.count += 1; customer.spend += Number(order.total) || 0;
+      customer.first = customer.first < order.timestamp ? customer.first : order.timestamp;
+      customer.last = customer.last > order.timestamp ? customer.last : order.timestamp;
+      customers[key] = customer;
+    });
+    document.getElementById("customersContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Customer</th><th>City</th><th>Orders</th><th>Total spend</th><th>First / Last</th></tr></thead><tbody>${Object.values(customers).map(c => `<tr><td>${escapeHTML(c.name)}<br>${escapeHTML(c.phone)}</td><td>${escapeHTML(c.city)}</td><td>${c.count}</td><td>Rs. ${c.spend}</td><td>${escapeHTML(c.first)}<br>${escapeHTML(c.last)}</td></tr>`).join("") || `<tr><td colspan="5">No customers yet.</td></tr>`}</tbody></table></div>`;
+  },
+
+  renderContacts(contacts) { this.contacts = contacts; },
+  renderAudit(items) {
+    document.getElementById("auditContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Timestamp</th><th>Admin</th><th>Action</th><th>Entity</th><th>Result</th></tr></thead><tbody>${items.map(item => `<tr><td>${escapeHTML(item.timestamp)}</td><td>${escapeHTML(item.admin_email)}</td><td>${escapeHTML(item.action)}</td><td>${escapeHTML(item.entity_type)}: ${escapeHTML(item.entity_id)}</td><td>${escapeHTML(item.result)}</td></tr>`).join("") || `<tr><td colspan="5">No audit entries yet.</td></tr>`}</tbody></table></div>`;
+  },
+
+  renderAnalytics() {
+    const ga4 = CONFIG.GA4_MEASUREMENT_ID || "Not configured";
+    const meta = CONFIG.META_PIXEL_ID || "Not configured";
+    document.getElementById("analyticsContent").innerHTML = `<div class="settings-card"><p><strong>GA4:</strong> ${escapeHTML(ga4)}</p><p><strong>Meta Pixel:</strong> ${escapeHTML(meta)}</p><p class="admin-muted">Purchase is emitted only after a confirmed authoritative order response.</p></div>`;
   },
 
   // ── Store-wide commercial rules ──────────────────────────────
@@ -174,3 +257,9 @@ const Admin = {
 };
 
 Admin.checkSession();
+
+function escapeHTML(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
