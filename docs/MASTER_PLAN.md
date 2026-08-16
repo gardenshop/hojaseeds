@@ -163,6 +163,16 @@ without verifying target identity and explicit operator authorization.
   glow; qualified state is stable. Payment is one column in the order
   `Payment Method → Order Summary → Confirm & Place Order`, with exactly one
   submit button and no payment-page sticky duplicate.
+- Full-site forensic baseline (verified 2026-08-16 against production): Home,
+  all four categories, Contact, Cart, Delivery, Payment, Confirmation, and
+  the Super Admin shell were exercised at 320/360/390/412/430/768/1024/1280/
+  1366/1440/1920 widths with no document overflow or first-party request
+  failures. Category and Cart selected cards now use a compact baseline of
+  approximately 181–190px at 390px+ while retaining the 44px vertical
+  controls and required status/Total information. Admin content has
+  `min-width:0`, responsive metrics, mobile tab navigation, narrower desktop
+  sidebar, and contained horizontal table scrolling; no body overflow hack is
+  used.
 - Cart/product-selection UX contract (verified 2026-08-16 via headless
   Chromium against a local static server): `Cart.totalAmount()`/
   `Cart.count()` always sum every item in `localStorage`, proven from the

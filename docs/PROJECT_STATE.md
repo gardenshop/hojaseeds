@@ -67,12 +67,12 @@ replace it.*
 
 ## Readiness
 
-- Production readiness: **97%** (up from 96%)
-- Remaining: **3%**
-- Expanded operations scope readiness: **90%**. The responsive admin shell,
+- Production readiness: **98%** (up from 96%)
+- Remaining: **2%**
+- Expanded operations scope readiness: **92%**. The responsive admin shell,
   authenticated bounded reads, derived dashboard/customers views, delivery/
   analytics status panels, and additive AuditLog foundation are implemented.
-- Expanded scope readiness remains **90%**: full product CRUD, order status
+- Expanded scope readiness remains **92%**: full product CRUD, order status
   mutations, customer status actions, trusted IP relay, and browser-authorized
   admin mutation/restore are not claimed complete.
 - Verified locally: COD and advance totals, free-delivery boundary,
@@ -341,4 +341,15 @@ replace it.*
   `production-final-cart-390.png`, `production-final-cart-1440.png`,
   `production-final-delivery-390.png`, `production-final-payment-390.png`,
   and `production-final-payment-1440.png`. The full 11-viewport production
-  matrix passed overflow, route, sequence, and first-party network checks.
+ matrix passed overflow, route, sequence, and first-party network checks.
+- 2026-08-16: Full-site forensic repair deployed in `c9cd930` to the existing
+  Pages project deployment `2eb95734`. Production Playwright covered Home,
+  Vegetables, Flowers, Mix, Fertilizer, Contact, Cart, Delivery, Payment,
+  Confirmation, and the admin shell at all 11 requested viewports. Category
+  and Cart selected cards now measure approximately 181–190px at 390px+;
+  mobile fallbacks remain contained at 320/360px. Admin 390/768/1024/1280/
+  1366/1440/1920 layouts have no page overflow, responsive metrics, mobile
+  tab navigation, and Products tables contained within `.admin-data-card`.
+  All eight admin tabs, one Payment submit CTA, compact cards, checkout
+  routing, and reduced-motion upsell behavior passed local and production
+  browser checks. No commerce/backend rules changed.
