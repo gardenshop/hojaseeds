@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  This is a single-page app: everything after the first load is rendered
+  by JavaScript, so there's really only one crawlable URL right now. Listing
+  fake per-category URLs here would just tell Google broken pages exist.
+  See README.md "SEO notes" for how to get real indexable category pages.
+-->
+<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.hojaseeds.pk/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

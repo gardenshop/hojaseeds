@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hoja Seeds — Vegetable, Flower &amp; Mix Seeds, Delivered in Pakistan</title>
+<meta name="description" content="Order fresh vegetable, flower and mix seed packets plus fertilizer online. Nationwide delivery across Pakistan — pay Cash on Delivery or by advance transfer.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://www.hojaseeds.pk/">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Hoja Seeds">
+<meta property="og:title" content="Hoja Seeds — Vegetable, Flower & Mix Seeds, Delivered in Pakistan">
+<meta property="og:description" content="Order fresh vegetable, flower and mix seed packets plus fertilizer online. Nationwide delivery — Cash on Delivery available.">
+<meta property="og:url" content="https://www.hojaseeds.pk/">
+<meta property="og:image" content="https://www.hojaseeds.pk/assets/images/hero.jpg">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Hoja Seeds — Vegetable, Flower & Mix Seeds, Delivered in Pakistan">
+<meta name="twitter:description" content="Order fresh vegetable, flower and mix seed packets plus fertilizer online. Nationwide delivery — Cash on Delivery available.">
+<meta name="twitter:image" content="https://www.hojaseeds.pk/assets/images/hero.jpg">
+
+<!-- Structured data: helps Google understand this is a store, not a blog -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "OnlineStore",
+  "name": "Hoja Seeds",
+  "url": "https://www.hojaseeds.pk/",
+  "description": "Vegetable, flower and mix seed packets plus fertilizer, delivered across Pakistan.",
+  "areaServed": "PK",
+  "paymentAccepted": ["Cash on Delivery", "JazzCash", "EasyPaisa", "Bank Transfer"]
+}
+</script>
+
+<link rel="stylesheet" href="css/styles.css">
+<script src="js/config.js"></script>
+<script>
+  // ── Analytics bootstrap ──────────────────────────────────────────
+  // Both trackers stay completely inert until you add real IDs in
+  // js/config.js — no script loads, no events fire, nothing breaks.
+  // send_page_view is off here because this is a single-page app: app.js
+  // fires exactly one page_view per route change instead, so routes don't
+  // get double-counted (once automatically, once manually).
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  if (CONFIG.GA4_MEASUREMENT_ID) {
+    var gaScript = document.createElement("script");
+    gaScript.async = true;
+    gaScript.src = "https://www.googletagmanager.com/gtag/js?id=" + CONFIG.GA4_MEASUREMENT_ID;
+    document.head.appendChild(gaScript);
+    gtag("js", new Date());
+    gtag("config", CONFIG.GA4_MEASUREMENT_ID, { send_page_view: false });
+  }
+  if (CONFIG.META_PIXEL_ID) {
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+    document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    fbq('init', CONFIG.META_PIXEL_ID);
+    // First PageView only — app.js fires the rest on each route change.
+    fbq('track', 'PageView');
+  }
+</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <button class="mobile-nav-toggle" id="navToggle" aria-expanded="false" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+    <button class="logo" onclick="Router.go('home')" aria-label="Hoja Seeds home">
+      <svg class="seed-mark" viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="18" rx="9" ry="12" fill="#D68C2E"/><path d="M16 6C16 6 20 9 20 13" stroke="#3F6B3F" stroke-width="2" stroke-linecap="round"/></svg>
+      Hoja Seeds
+    </button>
+    <nav class="nav-tabs" id="navTabs">
+      <button class="nav-tab" data-cat="vegetables" onclick="Router.go('vegetables')">Vegetable Seeds</button>
+      <button class="nav-tab" data-cat="flowers" onclick="Router.go('flowers')">Flower Seeds</button>
+      <button class="nav-tab" data-cat="mix" onclick="Router.go('mix')">Mix Seeds</button>
+      <button class="nav-tab" data-cat="fertilizer" onclick="Router.go('fertilizer')">Fertilizer</button>
+      <button class="nav-tab" data-cat="contact" onclick="Router.go('contact')">Contact</button>
+    </nav>
+    <button class="cart-icon-btn" onclick="Router.go('cart')" aria-label="View cart">
+      🧺<span class="count" id="cartCount">0</span>
+    </button>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<footer class="site-footer">
+  © <span id="year"></span> Hoja Seeds — Quality seeds &amp; fertilizer, delivered across Pakistan.
+</footer>
+
+<!-- Sticky bottom commerce bar: primary thumb-reach action through every step -->
+<div class="sticky-bar" id="stickyBar" style="display:none">
+  <div class="sticky-bar-info">
+    <span class="sb-count mono" id="sbCount">0 items</span>
+    <span class="sb-total mono" id="sbTotal">Rs. 0</span>
+  </div>
+  <button class="sticky-bar-btn" id="sbAction">Continue →</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/products.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

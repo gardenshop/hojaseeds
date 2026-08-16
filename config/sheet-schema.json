@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "spreadsheet_title": "Hoja Seeds",
+  "sheets": {
+    "Products": [
+      "id", "name", "cat", "unit", "icon", "price", "type",
+      "description", "pack_size", "seed_count", "weight", "sale_price",
+      "stock_status", "active", "featured", "image_url", "image_alt",
+      "season", "sowing_months", "sort_order", "updated_at"
+    ],
+    "Inventory": ["product_id", "available_quantity", "reserved_quantity", "updated_at"],
+    "Orders": [
+      "timestamp", "orderId", "name", "phone", "address", "city", "postal", "notes",
+      "paymentMethod", "advanceMethod", "transactionRef", "items", "subtotal",
+      "deliveryFee", "total"
+    ],
+    "OrderItems": [
+      "orderId", "productId", "productNameSnapshot", "packSizeSnapshot",
+      "quantity", "unitPrice", "lineTotal"
+    ],
+    "Contact": ["timestamp", "name", "phone", "message"],
+    "Settings": ["key", "value"]
+  }
+}

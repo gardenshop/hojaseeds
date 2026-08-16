@@ -1,0 +1,12 @@
+node_modules/
+.tools/
+.clasp.json
+.clasprc.json
+.env
+.env.*
+!.env.example
+credentials/
+*.service-account.json
+*.key.json
+*.pem
+reports/

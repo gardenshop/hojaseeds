@@ -1,0 +1,16 @@
+{
+  "name": "hoja-seeds",
+  "private": true,
+  "scripts": {
+    "test": "node tests/order-submission.test.js && node tests/tooling.test.mjs",
+    "sheets:verify": "node scripts/sheets-verify.mjs",
+    "sheets:migrate": "node scripts/sheets-migrate.mjs",
+    "products:migrate": "node scripts/products-migrate.mjs",
+    "clasp:push": "node scripts/deploy-hoja.mjs --push",
+    "release": "npm run test && npm run sheets:verify && node scripts/deploy-hoja.mjs --release --remote"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "googleapis": "^144.0.0"
+  }
+}
