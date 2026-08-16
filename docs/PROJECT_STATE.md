@@ -67,8 +67,8 @@ replace it.*
 
 ## Readiness
 
-- Production readiness: **93%** (up from 90%)
-- Remaining: **7%**
+- Production readiness: **96%** (up from 93%)
+- Remaining: **4%**
 - Verified locally: COD and advance totals, free-delivery boundary,
   customized COD rejection, tamper resistance, invalid items/quantities,
   server order IDs, locked duplicate replay, readable JSON contract,
@@ -77,8 +77,7 @@ replace it.*
   deterministic migration dry-runs, guarded remote actions, and basic cart,
   category, sticky-bar, and mobile CSS regression checks.
 - Verified live against production (2026-08-16, direct HTTPS to the deployed
-  `/exec` endpoint — no browser-automation tool was available this session,
-  so this is server/API-level, not real-browser DOM verification): 47
+  `/exec` endpoint and real-domain Playwright browser): 47
   products and settings readable anonymously; COD order (correct COD fee/
   status); advance order below Rs. 1,500 (correct advance fee); advance order
   at exactly Rs. 1,500 (free delivery boundary, inclusive); customized
@@ -94,14 +93,19 @@ replace it.*
   all serve correctly with no syntax errors from a local static server.
   All test writes to Orders used the same marked-test convention as prior
   sessions (customer name `LAUNCH TEST DO NOT FULFILL`) — safe to delete.
- - Verified by Playwright Chromium: 360x800, 390x844, 412x915, 768x1024,
+- Verified by Playwright Chromium: 360x800, 390x844, 412x915, 768x1024,
   1440x900; homepage, 47 live products, five-menu navigation, all categories,
   quantity controls, persistence, sticky cart, checkout success/failure,
   server order ID, no overflow, no sticky overlap, and no unexpected failed
   requests. Expected missing image assets were removed in favor of documented
   gradient/emoji fallbacks, so the browser audit is 404-clean.
- - Remaining: authorized admin Google browser flow, temporary price/settings
+- Remaining: authorized admin Google browser flow, temporary price/settings
   mutation restore, and vendor Purchase delivery (GA4/Meta IDs remain blank).
+- GitHub `gardenshop/hojaseeds` `main` is initialized, merged with remote
+  history, and pushed at the finalized baseline. Cloudflare Pages project
+  `hojaseeds` is deployed under `gisupp@gmail.com`; `hojaseeds.pages.dev`,
+  `hojaseeds.pk`, and `www.hojaseeds.pk` return HTTPS 200 with canonical
+  `www.hojaseeds.pk`. R2 was inspected and intentionally not used.
 
 ## Changelog
 *Append-only. One line per session/change.*

@@ -119,6 +119,10 @@ without verifying target identity and explicit operator authorization.
   server-confirmed checkout, and failure cart retention.
 - Category pages use compact truthful payment chips, unambiguous unit pricing,
   and three-card `Explore More` cross-sell navigation excluding the current category.
+- The canonical GitHub baseline is `gardenshop/hojaseeds` `main`; the public
+  frontend is deployed to Cloudflare Pages project `hojaseeds` under the
+  verified `gisupp@gmail.com` account. R2 is intentionally not used because
+  launch images are safe local gradient/emoji fallbacks.
 
 ## Launch Acceptance Gates
 
