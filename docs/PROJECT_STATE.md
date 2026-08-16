@@ -342,8 +342,8 @@ replace it.*
   `production-final-delivery-390.png`, `production-final-payment-390.png`,
   and `production-final-payment-1440.png`. The full 11-viewport production
  matrix passed overflow, route, sequence, and first-party network checks.
-- 2026-08-16: Full-site forensic repair deployed in `c9cd930` to the existing
-  Pages project deployment `2eb95734`. Production Playwright covered Home,
+- 2026-08-16: Full-site forensic repair deployed in `1a9a415` to the existing
+  Pages project deployment `4eeaba02`. Production Playwright covered Home,
   Vegetables, Flowers, Mix, Fertilizer, Contact, Cart, Delivery, Payment,
   Confirmation, and the admin shell at all 11 requested viewports. Category
   and Cart selected cards now measure approximately 181–190px at 390px+;
