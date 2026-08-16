@@ -334,7 +334,7 @@ const PAGE_TITLES = {
   mix: "Mix Seed Kits — Hoja Seeds",
   fertilizer: "Fertilizer — Hoja Seeds",
   contact: "Contact — Hoja Seeds",
-  cart: "Order Summary — Hoja Seeds",
+  cart: "Your Cart — Hoja Seeds",
   delivery: "Delivery Details — Hoja Seeds",
   payment: "Payment — Hoja Seeds",
   confirmation: "Order Confirmed — Hoja Seeds"
@@ -560,32 +560,38 @@ const Views = {
     const groupsHTML = cats.map(cat => {
       const catSubtotal = byCat[cat].reduce((s, l) => s + l.line, 0);
       const rows = byCat[cat].map(({ p, qty, line }) => `
-        <div class="cart-line" data-pid="${p.id}">
-          <div class="p-icon">${p.icon}</div>
-          <div class="cart-line-info">
-            <div class="name">${p.name}${productBadgeHTML(p)}</div>
-            <div class="unit-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
-            <div class="stepper" style="margin-top:7px">
+        <article class="cart-line in-cart" data-pid="${p.id}">
+          <div class="cl-media">${p.icon}</div>
+          <div class="cl-body">
+            <div class="cl-name">${p.name}${productBadgeHTML(p)}</div>
+            <div class="cl-unit">per ${p.unit}</div>
+            <div class="cl-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
+            <div class="cl-instock"><span class="in-cart-badge">In cart: ${qty}</span></div>
+          </div>
+          <div class="cl-actions">
+            <div class="stepper">
               <button onclick="Views.cartChangeQty('${p.id}',-1)" aria-label="Decrease quantity">−</button>
               <span class="qty-display">${qty}</span>
               <button onclick="Views.cartChangeQty('${p.id}',1)" aria-label="Increase quantity">+</button>
             </div>
-          </div>
-          <div class="cart-line-right">
-            <div class="cart-line-total mono">Selected total: ${CONFIG.CURRENCY} ${line}</div>
+            <div class="cl-total">
+              <span class="cl-total-label">Selected total</span>
+              <span class="cl-total-value mono">${CONFIG.CURRENCY} ${line}</span>
+            </div>
             <button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>
           </div>
-        </div>`).join("");
+        </article>`).join("");
       return `<div class="cat-group-title">${CATEGORY_META[cat].label}</div>${rows}<div class="cat-group-subtotal">Subtotal: ${CONFIG.CURRENCY} ${catSubtotal}</div>`;
     }).join("");
 
     app.innerHTML = `
       <section class="page narrow">
         ${journeyBarHTML(1)}
-        <div class="page-head"><h2>Order Summary</h2></div>
+        <div class="page-head"><h2>Your Cart</h2>${cats.length ? `<p class="tagline">Review your seeds before delivery</p>` : ""}</div>
         ${cats.length ? `
           <div id="cartLines">${groupsHTML}</div>
           <div class="cart-summary-card">
+            <div class="summary-line"><span>Items</span><span class="mono">${Cart.count()}</span></div>
             <div class="summary-line"><span>Items subtotal</span><span class="mono">${CONFIG.CURRENCY} ${subtotal}</span></div>
             <div class="summary-line"><span>Delivery</span><span>Calculated at payment</span></div>
             <div class="summary-line total"><span>Current payable</span><span class="mono">${CONFIG.CURRENCY} ${subtotal} + delivery</span></div>
@@ -597,8 +603,11 @@ const Views = {
         ` : `
           <div class="empty-cart-block">
             <span class="ic">🧺</span>
-            <p>Your basket is empty — pick some seeds to get started.</p>
-            <button class="btn btn-primary" onclick="Router.go('vegetables')" style="margin-top:14px">Browse Vegetable Seeds</button>
+            <p>Your cart is empty</p>
+            <div class="cta-split" style="margin-top:14px">
+              <button class="btn btn-primary" onclick="Router.go('vegetables')">Shop Vegetable Seeds</button>
+              <button class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('flowers')">Explore Flower Seeds</button>
+            </div>
           </div>`}
       </section>`;
 

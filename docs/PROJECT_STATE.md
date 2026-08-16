@@ -289,3 +289,21 @@ replace it.*
   Confirmation flow) all pass; 11-viewport (320–1920) × four-category
   overflow sweep, zero console errors, zero failed requests. `npm test`
   passes.
+- 2026-08-16: Premium Cart-route restyle (Views.cart(), not the category
+  product listing). Cart heading changed from "Order Summary" to "Your
+  Cart" with a "Review your seeds before delivery" subtitle. Each selected
+  item is now a rounded `.cart-line` card (icon tile, name/badge, unit
+  price, `In cart: N` badge on the left; stepper + `Selected total` box +
+  `Remove` on the right, image/details | quantity | total on desktop
+  ≥640px). Summary card gained an explicit `Items` count row above `Items
+  subtotal`/`Delivery: Calculated at payment`/`Current payable`. Empty
+  state reads "Your cart is empty" with two recovery buttons (Shop
+  Vegetable Seeds / Explore Flower Seeds) and no stray sticky bar.
+  `Cart.setQty()`, `cartChangeQty()`, `Cart.totalAmount()`, localStorage
+  shape, and the Continue-to-Delivery route are unchanged — only the DOM
+  the same handlers render into changed. Verified locally against the
+  exact spec sequence (Tomato qty1 Rs.185, Okra qty2 Rs.242, 3 items/Rs.427;
+  Tomato→qty2 Rs.370, 4 items/Rs.612; remove Tomato → Okra remains, 2
+  items/Rs.242; reload persists; Continue to Delivery unchanged; empty-cart
+  state), an 11-viewport (320–1920) overflow sweep on the actual Cart
+  route, and `npm test`.

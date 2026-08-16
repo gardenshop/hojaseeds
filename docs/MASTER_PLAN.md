@@ -224,6 +224,18 @@ without verifying target identity and explicit operator authorization.
   page, full Summary→Delivery→Payment→Confirmation flow) all pass, plus an
   11-viewport (320–1920) × four-category overflow sweep with zero console
   errors and zero failed requests.
+- Cart-route (`Views.cart()`) presentation contract (2026-08-16, distinct
+  from the category product-card contract above): heading is `Your Cart` /
+  "Review your seeds before delivery", never a category name. Each selected
+  item is a rounded `.cart-line` card — icon, name/badge, unit price,
+  `In cart: N` on the left; stepper, a labelled `Selected total` box, and a
+  `Remove` control on the right — desktop ≥640px lays out
+  image/details | quantity | total in one row. The summary card shows
+  `Items` count, `Items subtotal`, `Delivery: Calculated at payment`, and
+  `Current payable` — delivery is never calculated early. Empty cart shows
+  "Your cart is empty" with two recovery buttons and no sticky bar.
+  `Cart.setQty()`, `cartChangeQty()`, `Cart.totalAmount()`, localStorage
+  shape, and the Cart→Delivery route are unchanged.
 
 ## Launch Acceptance Gates
 
