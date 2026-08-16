@@ -34,6 +34,15 @@
   .admin-data-table th,.admin-data-table td{padding:10px 12px;border-bottom:1px solid rgba(228,212,180,.7);text-align:left;vertical-align:top;}
   .admin-data-table th{font-family:'IBM Plex Mono',monospace;font-size:.68rem;text-transform:uppercase;background:var(--kraft-dark);}
   .admin-muted{color:#6b6152;font-size:.82rem;}
+  .admin-error{background:#f4ddd8;color:#7c2e25;border:1px solid #e5b8ae;border-radius:8px;padding:10px 12px;font-size:.82rem;}
+  .payment-settings-heading{margin:24px 0 10px;font-size:1rem;}
+  .payment-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:12px;}
+  .payment-settings-card{background:var(--paper);border:1px solid var(--kraft-dark);border-radius:10px;padding:12px;min-width:0;}
+  .payment-settings-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;}
+  .payment-settings-card h4{margin:0;color:var(--leaf-dark);}
+  .payment-settings-card .field{margin-bottom:9px;}
+  .payment-settings-card input[type=text],.payment-settings-card input[type=url]{font-size:.82rem;padding:8px;}
+  .payment-preview{font-size:.7rem;color:#7a6f5c;margin-top:4px;}
   .admin-tabbar{display:none;min-width:0;max-width:100%;}
   @media (max-width:700px){.admin-shell{padding:14px 10px 56px;}.admin-layout{display:block;}.admin-sidebar{display:none;}.admin-tabbar{display:flex;overflow-x:auto;gap:5px;margin-bottom:12px;padding-bottom:3px;scrollbar-width:thin;}.admin-tabbar .admin-tab{background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark);white-space:nowrap;padding:8px 9px;font-size:.75rem;}.admin-tabbar .admin-tab.active{background:var(--leaf);color:#fff;}.admin-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}.admin-content .page-head{margin-bottom:12px;}.admin-content .page-head h2{font-size:1.3rem;}.admin-table{table-layout:fixed;min-width:0;font-size:.68rem;}.admin-table th,.admin-table td{padding:6px 5px;overflow-wrap:anywhere;}.admin-table th:nth-child(1){width:37%;}.admin-table th:nth-child(2){width:18%;}.admin-table th:nth-child(3){width:22%;}.admin-table th:nth-child(4){width:23%;}.admin-table input,.admin-table select{width:100%;min-width:0;padding:6px 3px;font-size:.68rem;}}
   @media (min-width:701px) and (max-width:1050px){.admin-shell{padding-left:14px;padding-right:14px;}.admin-layout{grid-template-columns:170px minmax(0,1fr);gap:14px;}.admin-metrics{grid-template-columns:repeat(2,minmax(0,1fr));}}

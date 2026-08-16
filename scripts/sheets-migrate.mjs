@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schema = JSON.parse(await fs.readFile(path.join(root, "config", "sheet-schema.json"), "utf8"));
+const paymentDefaults = JSON.parse(await fs.readFile(path.join(root, "config", "payment-settings-defaults.json"), "utf8"));
 const target = JSON.parse(await fs.readFile(path.join(root, "config", "production-target.json"), "utf8"));
 const apply = process.argv.includes("--apply");
 const local = process.argv.includes("--local");
@@ -43,7 +44,7 @@ for (const sheet of metadata.data.sheets || []) {
   existing[title] = row.map(cell => cell.effectiveValue?.stringValue ?? cell.effectiveValue?.numberValue ?? "").map(String).filter(Boolean);
 }
 const migrationPlan = plan(existing);
-console.log(JSON.stringify({ ok: true, mode: apply ? "live" : "dry-run", schema_version: schema.schema_version, plan: migrationPlan }, null, 2));
+console.log(JSON.stringify({ ok: true, mode: apply ? "live" : "dry-run", schema_version: schema.schema_version, plan: migrationPlan, paymentSettings: Object.keys(paymentDefaults) }, null, 2));
 if (!apply) process.exit(0);
 
 const requests = [];
@@ -72,13 +73,18 @@ for (const sheet of refreshed.data.sheets || []) {
 }
 const settings = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Settings!A:C" });
 const settingRows = settings.data.values || [];
+const existingSettingKeys = new Set(settingRows.map(row => String(row[0] || "")));
+const missingPaymentSettings = Object.entries(paymentDefaults).filter(([key]) => !existingSettingKeys.has(key));
+if (missingPaymentSettings.length) {
+  await sheets.spreadsheets.values.append({ spreadsheetId: sheetId, range: "Settings!A:B", valueInputOption: "RAW", insertDataOption: "INSERT_ROWS", requestBody: { values: missingPaymentSettings } });
+}
 const schemaVersionRow = settingRows.findIndex(row => row[0] === "schema_version");
 if (schemaVersionRow === -1) {
   await sheets.spreadsheets.values.append({ spreadsheetId: sheetId, range: "Settings!A:B", valueInputOption: "RAW", insertDataOption: "INSERT_ROWS", requestBody: { values: [["schema_version", schema.schema_version]] } });
 } else if (String(settingRows[schemaVersionRow][1]) !== String(schema.schema_version)) {
   await sheets.spreadsheets.values.update({ spreadsheetId: sheetId, range: `Settings!B${schemaVersionRow + 1}`, valueInputOption: "RAW", requestBody: { values: [[schema.schema_version]] } });
 }
-console.log("Migration applied additively; existing data and columns were not deleted or renamed.");
+console.log(JSON.stringify({ ok: true, migration: "applied", addedPaymentSettings: missingPaymentSettings.map(([key]) => key), message: "Migration applied additively; existing data and columns were not deleted or renamed." }));
 
 function columnName(number) {
   let result = "";

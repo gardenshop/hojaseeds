@@ -26,6 +26,23 @@ const CONFIG = {
     CUSTOMIZED_REQUIRES_FULL_ADVANCE: true, // Customized-collection items always force 100% advance, no COD
   },
 
+  PAYMENT_DISPLAY: {
+    JAZZCASH_ENABLED: true,
+    JAZZCASH_NUMBER: "0300-XXXXXXX",
+    JAZZCASH_ACCOUNT_TITLE: "Hoja Seeds",
+    JAZZCASH_QR_URL: "",
+    EASYPAISA_ENABLED: true,
+    EASYPAISA_NUMBER: "0300-XXXXXXX",
+    EASYPAISA_ACCOUNT_TITLE: "Hoja Seeds",
+    EASYPAISA_QR_URL: "",
+    BANK_ENABLED: true,
+    BANK_NAME: "HBL",
+    BANK_ACCOUNT_TITLE: "Hoja Seeds",
+    BANK_ACCOUNT_NUMBER: "XXXXXXXXXXXX",
+    BANK_IBAN: "",
+    BANK_QR_URL: ""
+  },
+
   // Shown to customers who choose Advance Payment — fill in your real details.
   PAYMENT_ACCOUNTS: {
     JazzCash: "0300-XXXXXXX (Account title: Hoja Seeds)",

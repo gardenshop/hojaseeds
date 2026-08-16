@@ -9,7 +9,8 @@
  *   Contact   | timestamp | name | phone | message
  *   Settings  | key | value
  *     (rows: FREE_DELIVERY_THRESHOLD, ADVANCE_DELIVERY_FEE, COD_DELIVERY_FEE,
- *      COD_ALLOWED, CUSTOMIZED_REQUIRES_FULL_ADVANCE — see README.md Step 1)
+ *      COD_ALLOWED, CUSTOMIZED_REQUIRES_FULL_ADVANCE, and payment-display
+ *      settings — see README.md Step 1)
  *
  * Deploy: Extensions > Apps Script > paste this file > Deploy > New
  * deployment > type "Web app" > Execute as "Me" > Who has access
@@ -116,6 +117,23 @@ const ORDER_DEFAULT_RULES = {
 };
 const ORDER_PAYMENT_METHODS = ["Cash on Delivery", "Advance Payment"];
 const ORDER_ADVANCE_METHODS = ["JazzCash", "EasyPaisa", "Bank Transfer"];
+const PAYMENT_DISPLAY_DEFAULTS = {
+  JAZZCASH_ENABLED: true,
+  JAZZCASH_NUMBER: "0300-XXXXXXX",
+  JAZZCASH_ACCOUNT_TITLE: "Hoja Seeds",
+  JAZZCASH_QR_URL: "",
+  EASYPAISA_ENABLED: true,
+  EASYPAISA_NUMBER: "0300-XXXXXXX",
+  EASYPAISA_ACCOUNT_TITLE: "Hoja Seeds",
+  EASYPAISA_QR_URL: "",
+  BANK_ENABLED: true,
+  BANK_NAME: "HBL",
+  BANK_ACCOUNT_TITLE: "Hoja Seeds",
+  BANK_ACCOUNT_NUMBER: "XXXXXXXXXXXX",
+  BANK_IBAN: "",
+  BANK_QR_URL: ""
+};
+const PAYMENT_DISPLAY_KEYS = Object.keys(PAYMENT_DISPLAY_DEFAULTS);
 const PRODUCT_TYPES = ["regular", "premium", "standard-collection", "customized-collection"];
 
 function OrderError(code, message) {
@@ -219,6 +237,8 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
     if (ORDER_ADVANCE_METHODS.indexOf(advanceMethod) === -1) {
       throw new OrderError("INVALID_ADVANCE_METHOD", "Choose a supported advance payment method.");
     }
+    const enabledKey = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED" }[advanceMethod];
+    if (!booleanValue(settings[enabledKey])) throw new OrderError("ADVANCE_METHOD_DISABLED", "That advance payment method is not currently available.");
     transactionReference = requiredText(paymentInput.transactionReference, "Transaction reference", 3, 100);
   }
 
@@ -242,7 +262,7 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
 }
 
 function getOrderSettings() {
-  const rules = Object.assign({}, ORDER_DEFAULT_RULES, getSettings());
+  const rules = Object.assign({}, ORDER_DEFAULT_RULES, PAYMENT_DISPLAY_DEFAULTS, getSettings());
   ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE"].forEach(key => {
     rules[key] = Number(rules[key]);
     if (!Number.isFinite(rules[key]) || rules[key] < 0) {
@@ -368,10 +388,10 @@ function updateProducts(updates, adminEmail) {
 // coercing "true"/"false" text and numeric strings back to real types.
 function getSettings() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Settings");
-  if (!sheet) return {};
+  if (!sheet) return Object.assign({}, PAYMENT_DISPLAY_DEFAULTS);
   const rows = sheet.getDataRange().getValues();
   rows.shift(); // header row: key | value
-  const out = {};
+  const out = Object.assign({}, PAYMENT_DISPLAY_DEFAULTS);
   rows.forEach(r => {
     if (!r[0]) return;
     let v = r[1];
@@ -385,11 +405,18 @@ function getSettings() {
 
 function updateSettings(rules, adminEmail) {
   if (!rules || typeof rules !== "object" || Array.isArray(rules)) throw new OrderError("INVALID_ADMIN_UPDATE", "Store settings are invalid.");
-  const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE"];
+  const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE"].concat(PAYMENT_DISPLAY_KEYS);
   Object.keys(rules).forEach(key => {
     if (allowedKeys.indexOf(key) === -1) throw new OrderError("INVALID_ADMIN_UPDATE", "A store setting is not allowed.");
   });
+  rules = Object.assign({}, rules);
   rules.CUSTOMIZED_REQUIRES_FULL_ADVANCE = true;
+  PAYMENT_DISPLAY_KEYS.forEach(key => {
+    if (!(key in rules)) return;
+    if (key.endsWith("_ENABLED") && typeof rules[key] !== "boolean") throw new OrderError("INVALID_ADMIN_UPDATE", key + " must be true or false.");
+    if (!key.endsWith("_ENABLED") && String(rules[key] || "").length > 500) throw new OrderError("INVALID_ADMIN_UPDATE", key + " is too long.");
+    if (key.endsWith("_QR_URL") && rules[key] && !/^https?:\/\//i.test(String(rules[key]))) throw new OrderError("INVALID_ADMIN_UPDATE", key + " must be an http(s) image URL.");
+  });
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Settings");
   if (!sheet) return;
   const rows = sheet.getDataRange().getValues();
@@ -411,6 +438,7 @@ function readAdminResource(resource, limit) {
   if (resource === "orders") return { ok: true, resource: resource, items: readAdminOrders(boundedLimit) };
   if (resource === "contacts") return { ok: true, resource: resource, items: readAdminRows("Contact", boundedLimit) };
   if (resource === "audit") return { ok: true, resource: resource, items: readAdminRows("AuditLog", boundedLimit) };
+  if (resource === "settings") return { ok: true, resource: resource, settings: getSettings() };
   if (resource === "dashboard") return { ok: true, resource: resource, summary: buildAdminDashboard(boundedLimit) };
   throw new OrderError("INVALID_ADMIN_READ", "The requested admin resource is not available.");
 }

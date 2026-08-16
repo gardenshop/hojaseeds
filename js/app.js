@@ -33,7 +33,7 @@ const Prices = {
   get() { return this._cache || DEFAULT_PRODUCTS; }
 };
 
-// ---- Store settings (pricing rules): merges CONFIG.PRICING_RULES with
+// ---- Store settings: merges live Sheet settings with local defaults and
 // Super Admin overrides — Sheet first if configured, else local storage.
 const Settings = {
   KEY: "hoja_pricing_rules",
@@ -47,13 +47,13 @@ const Settings = {
       try {
         const res = await fetch(`${CONFIG.SHEET_WEBHOOK_URL}?action=settings`);
         const data = await res.json();
-        if (data && Object.keys(data).length) return { ...CONFIG.PRICING_RULES, ...data };
+        if (data && Object.keys(data).length) return { ...CONFIG.PRICING_RULES, ...CONFIG.PAYMENT_DISPLAY, ...data };
       } catch (e) { console.warn("Sheet settings fetch failed, using local data:", e); }
     }
-    return { ...CONFIG.PRICING_RULES, ...this.overrides() };
+    return { ...CONFIG.PRICING_RULES, ...CONFIG.PAYMENT_DISPLAY, ...this.overrides() };
   },
   async load() { this._cache = await this.fetchRules(); return this._cache; },
-  get() { return this._cache || { ...CONFIG.PRICING_RULES, ...this.overrides() }; }
+  get() { return this._cache || { ...CONFIG.PRICING_RULES, ...CONFIG.PAYMENT_DISPLAY, ...this.overrides() }; }
 };
 
 // Payable-amount label: COD is money owed at the door; Advance is money the
@@ -718,7 +718,15 @@ const Views = {
     this._order.deliveryFee = defaultFee;
     this._order.total = subtotal + defaultFee;
     this._order.codAllowed = codAllowed;
-    const accounts = CONFIG.PAYMENT_ACCOUNTS;
+    const paymentSettings = Settings.get();
+    const advanceMethods = [
+      { id: "JazzCash", label: "JazzCash", enabled: paymentSettings.JAZZCASH_ENABLED },
+      { id: "EasyPaisa", label: "EasyPaisa", enabled: paymentSettings.EASYPAISA_ENABLED },
+      { id: "Bank Transfer", label: "Bank Transfer", enabled: paymentSettings.BANK_ENABLED }
+    ].filter(method => method.enabled);
+    const selectedAdvanceMethod = this._order.advanceMethod && advanceMethods.some(method => method.id === this._order.advanceMethod)
+      ? this._order.advanceMethod : advanceMethods[0]?.id || "";
+    this._order.advanceMethod = selectedAdvanceMethod;
 
     const restrictedNote = !codAllowed
       ? `<div class="payment-restricted-note">${hasCustomized
@@ -741,30 +749,26 @@ const Views = {
                 ${codAllowed ? `
                 <label class="pay-option" id="payCOD">
                   <input type="radio" name="pay" value="Cash on Delivery" checked onchange="Views.selectPay('payCOD','payAdvance')">
-                  <div class="pay-option-title">Cash on Delivery</div>
+                  <span class="pay-option-icon" aria-hidden="true">💵</span><div class="pay-option-copy"><div class="pay-option-title">Cash on Delivery</div>
                   <div class="pay-option-sub">Pay when it arrives · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
+                  </div>
                 </label>` : ""}
                 <label class="pay-option ${codAllowed ? "" : "selected"}" id="payAdvance">
                   <input type="radio" name="pay" value="Advance Payment" ${codAllowed ? "" : "checked"} onchange="Views.selectPay('payAdvance','payCOD')">
-                  <div class="pay-option-title">Advance Payment</div>
+                  <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Advance Payment <span class="payment-benefit">FREE DELIVERY BENEFIT</span></div>
                   <div class="pay-option-sub">JazzCash · EasyPaisa · Bank Transfer · Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE} (free at ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}+)</div>
+                  </div>
                 </label>
               </div>
 
               <div class="free-delivery-progress" id="freeDeliveryProgress"></div>
 
               <div class="advance-details" id="advanceDetails" style="display:${codAllowed ? "none" : "block"}">
-                <h4>Send payment to one of these</h4>
-                <div class="acct-row"><span>JazzCash</span><span class="mono">${accounts.JazzCash}</span></div>
-                <div class="acct-row"><span>EasyPaisa</span><span class="mono">${accounts.EasyPaisa}</span></div>
-                <div class="acct-row"><span>Bank Transfer</span><span class="mono">${accounts["Bank Transfer"]}</span></div>
-                <div class="field" style="margin-top:12px"><label for="o-advance-method">Paid via</label>
-                  <select id="o-advance-method">
-                    <option value="JazzCash">JazzCash</option>
-                    <option value="EasyPaisa">EasyPaisa</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                  </select>
+                <div class="advance-method-tabs" role="tablist" aria-label="Advance payment method">
+                  ${advanceMethods.map(method => `<button type="button" class="advance-method-tab${method.id === selectedAdvanceMethod ? " selected" : ""}" data-method="${method.id}" onclick="Views.selectAdvanceMethod('${method.id}')">${method.label}</button>`).join("") || `<p class="payment-restricted-note">No advance payment method is currently enabled. Please contact the store.</p>`}
                 </div>
+                <input type="hidden" id="o-advance-method" value="${selectedAdvanceMethod}">
+                <div id="advanceMethodDetails"></div>
                 <div class="field"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
                 <p class="advance-note">We'll confirm your payment and dispatch your order once received.</p>
               </div>
@@ -788,8 +792,42 @@ const Views = {
       </section>`;
 
     if (codAllowed) document.getElementById("payCOD").classList.add("selected");
+    this.renderAdvanceMethod(selectedAdvanceMethod);
     this.renderFreeDeliveryProgress(defaultMethod, subtotal, hasCustomized);
     Analytics.addPaymentInfo(lines, subtotal, defaultMethod);
+  },
+
+  paymentDisplaySettings() {
+    return Settings.get();
+  },
+
+  selectAdvanceMethod(method) {
+    const allowed = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED" };
+    const settings = this.paymentDisplaySettings();
+    if (!allowed[method] || !settings[allowed[method]]) return;
+    this._order.advanceMethod = method;
+    document.querySelectorAll(".advance-method-tab").forEach(button => button.classList.toggle("selected", button.dataset.method === method));
+    const input = document.getElementById("o-advance-method");
+    if (input) input.value = method;
+    this.renderAdvanceMethod(method);
+  },
+
+  renderAdvanceMethod(method) {
+    const container = document.getElementById("advanceMethodDetails");
+    if (!container) return;
+    const s = this.paymentDisplaySettings();
+    const definitions = {
+      JazzCash: { number: s.JAZZCASH_NUMBER, title: s.JAZZCASH_ACCOUNT_TITLE, qr: s.JAZZCASH_QR_URL },
+      EasyPaisa: { number: s.EASYPAISA_NUMBER, title: s.EASYPAISA_ACCOUNT_TITLE, qr: s.EASYPAISA_QR_URL },
+      "Bank Transfer": { bank: s.BANK_NAME, title: s.BANK_ACCOUNT_TITLE, number: s.BANK_ACCOUNT_NUMBER, iban: s.BANK_IBAN, qr: s.BANK_QR_URL }
+    };
+    const details = definitions[method];
+    if (!details) { container.innerHTML = `<p class="admin-muted">Select an enabled advance payment method.</p>`; return; }
+    const qr = typeof details.qr === "string" && /^https?:\/\//i.test(details.qr)
+      ? `<img class="payment-qr" src="${escapeHTML(details.qr)}" alt="${escapeHTML(method)} QR or barcode" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="payment-qr-fallback" hidden>QR image unavailable</span>` : "";
+    container.innerHTML = method === "Bank Transfer"
+      ? `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Bank</span><span>${escapeHTML(details.bank || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div><div class="payment-detail"><span>Account number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>IBAN</span><span class="mono">${escapeHTML(details.iban || "Not configured")}</span></div>${qr}</div>`
+      : `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div>${qr}</div>`;
   },
 
   // "Rs.320 more for FREE delivery" — only meaningful while paying in
@@ -801,12 +839,12 @@ const Views = {
     if (method !== "Advance Payment" && !hasCustomized) { el.innerHTML = ""; return; }
     const pct = Math.min(100, Math.round((subtotal / r.FREE_DELIVERY_THRESHOLD) * 100));
     if (subtotal >= r.FREE_DELIVERY_THRESHOLD) {
-      el.innerHTML = `<div class="fdp-text unlocked">🎉 You've unlocked FREE delivery!</div>`;
+      el.innerHTML = `<div class="fdp-callout unlocked"><span class="fdp-badge">FREE DELIVERY</span><span class="fdp-text">Advance payment qualifies this order for free delivery.</span></div><div class="fdp-track"><div class="fdp-fill" style="width:100%"></div></div>`;
       return;
     }
     const remaining = r.FREE_DELIVERY_THRESHOLD - subtotal;
     el.innerHTML = `
-      <div class="fdp-text">${CONFIG.CURRENCY} ${remaining} more for FREE delivery</div>
+      <div class="fdp-callout"><span class="fdp-badge">🌱 FREE DELIVERY</span><span class="fdp-text">Only ${CONFIG.CURRENCY} ${remaining} away from free delivery.</span></div>
       <div class="fdp-track"><div class="fdp-fill" style="width:${pct}%"></div></div>`;
   },
 
@@ -814,6 +852,7 @@ const Views = {
     document.getElementById(onId).classList.add("selected");
     document.getElementById(offId)?.classList.remove("selected");
     this.updateDeliveryFee();
+    if (onId === "payAdvance") this.renderAdvanceMethod(this._order.advanceMethod);
     refreshStickyBar();
   },
 

@@ -9,6 +9,7 @@ const Admin = {
   OV_KEY: "hoja_admin_overrides",     // { [id]: { price?, type? } }
   RULES_KEY: "hoja_pricing_rules",    // pricing-rules override object
   idToken: "",
+  liveSettings: null,
   activeTab: "dashboard",
   tabs: [
     ["dashboard", "Dashboard"], ["products", "Products"], ["orders", "Orders"],
@@ -85,6 +86,7 @@ const Admin = {
     this.renderRules();
     this.renderTables();
     this.renderAnalytics();
+    this.loadSettings();
     this.loadDashboard();
   },
 
@@ -117,6 +119,21 @@ const Admin = {
     } catch (error) {
       const message = `<p class="admin-muted">Live admin data could not be loaded: ${escapeHTML(error.message)}</p>`;
       ["dashboardContent", "ordersContent", "customersContent", "auditContent"].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = message; });
+    }
+  },
+
+  settings() {
+    return { ...CONFIG.PRICING_RULES, ...CONFIG.PAYMENT_DISPLAY, ...this.rules(), ...(this.liveSettings || {}) };
+  },
+
+  async loadSettings() {
+    try {
+      const result = await this.authorizedRead("settings", 1);
+      this.liveSettings = result.settings || {};
+      this.renderRules();
+    } catch (error) {
+      const form = document.getElementById("rulesForm");
+      if (form) form.insertAdjacentHTML("afterbegin", `<p class="admin-error">Live payment settings could not be loaded: ${escapeHTML(error.message)}</p>`);
     }
   },
 
@@ -160,7 +177,7 @@ const Admin = {
 
   // ── Store-wide commercial rules ──────────────────────────────
   renderRules() {
-    const r = this.rules();
+    const r = this.settings();
     document.getElementById("rulesForm").innerHTML = `
       <div class="field-row">
         <div class="field"><label for="r-cod-fee">COD delivery fee</label><input type="number" min="0" id="r-cod-fee" value="${r.COD_DELIVERY_FEE}" class="mono"></div>
@@ -179,7 +196,26 @@ const Admin = {
       </label>
       <button class="btn btn-primary" onclick="Admin.saveRules()">Save store settings</button>
       <span class="save-note" id="rulesSaveNote"></span>
+      <h3 class="payment-settings-heading">Payment method display</h3>
+      <div class="payment-settings-grid">
+        ${this.paymentEditorCard("JazzCash", r, [
+          ["JAZZCASH_NUMBER", "Mobile / account number"], ["JAZZCASH_ACCOUNT_TITLE", "Account title"], ["JAZZCASH_QR_URL", "QR / barcode image URL"]
+        ])}
+        ${this.paymentEditorCard("EasyPaisa", r, [
+          ["EASYPAISA_NUMBER", "Mobile / account number"], ["EASYPAISA_ACCOUNT_TITLE", "Account title"], ["EASYPAISA_QR_URL", "QR / barcode image URL"]
+        ])}
+        ${this.paymentEditorCard("Bank Transfer", r, [
+          ["BANK_NAME", "Bank name"], ["BANK_ACCOUNT_TITLE", "Account title"], ["BANK_ACCOUNT_NUMBER", "Account number"], ["BANK_IBAN", "IBAN"], ["BANK_QR_URL", "QR / barcode image URL"]
+        ])}
+      </div>
+      <button class="btn btn-primary" onclick="Admin.savePaymentSettings()">Save Payment Settings</button>
+      <span class="save-note" id="paymentSaveNote"></span>
     `;
+  },
+
+  paymentEditorCard(method, settings, fields) {
+    const prefix = method === "JazzCash" ? "JAZZCASH" : method === "EasyPaisa" ? "EASYPAISA" : "BANK";
+    return `<div class="payment-settings-card"><div class="payment-settings-card-head"><h4>${method}</h4><label><input type="checkbox" id="${prefix}_ENABLED" ${settings[`${prefix}_ENABLED`] ? "checked" : ""}> Enabled</label></div>${fields.map(([key, label]) => `<div class="field"><label for="${key}">${label}</label><input id="${key}" value="${escapeHTML(settings[key] ?? "")}" ${key.endsWith("_QR_URL") ? "type=\"url\" placeholder=\"https://...\"" : ""}></div>`).join("")}<div class="payment-preview" id="preview-${prefix}">Preview updates after save.</div></div>`;
   },
 
   async saveRules() {
@@ -197,6 +233,24 @@ const Admin = {
       note.textContent = "Saved and authorized by the server.";
     } catch (e) { note.textContent = e.message; }
     setTimeout(() => note.textContent = "", 4000);
+  },
+
+  async savePaymentSettings() {
+    const keys = ["JAZZCASH_ENABLED", "JAZZCASH_NUMBER", "JAZZCASH_ACCOUNT_TITLE", "JAZZCASH_QR_URL", "EASYPAISA_ENABLED", "EASYPAISA_NUMBER", "EASYPAISA_ACCOUNT_TITLE", "EASYPAISA_QR_URL", "BANK_ENABLED", "BANK_NAME", "BANK_ACCOUNT_TITLE", "BANK_ACCOUNT_NUMBER", "BANK_IBAN", "BANK_QR_URL"];
+    const settings = {};
+    keys.forEach(key => {
+      const el = document.getElementById(key);
+      if (!el) return;
+      settings[key] = el.type === "checkbox" ? el.checked : el.value.trim();
+    });
+    const note = document.getElementById("paymentSaveNote");
+    try {
+      await this.authorizedPost({ type: "settingsUpdate", rules: settings });
+      this.liveSettings = { ...(this.liveSettings || {}), ...settings };
+      this.renderRules();
+      note.textContent = "Payment settings saved and authorized by the server.";
+    } catch (e) { note.textContent = e.message; }
+    setTimeout(() => { if (note) note.textContent = ""; }, 5000);
   },
 
   // ── Per-product price + type ──────────────────────────────
