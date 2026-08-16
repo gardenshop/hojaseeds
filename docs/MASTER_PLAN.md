@@ -205,6 +205,25 @@ without verifying target identity and explicit operator authorization.
   described as "submitted", never "paid", since it is pending
   verification); the itemized breakdown lives in a secondary collapsible
   `<details>` card, not the main view.
+- Premium product-card contract (2026-08-16): category pages render
+  `.product-card` articles (`data-product-id`, keyed exactly as the prior
+  table rows were) instead of a table — icon tile, name/badge, unit price
+  on the left; a stepper and a `Selected total` box on the right; desktop
+  ≥640px lays the three groups out in one row, mobile stacks stepper+total
+  under the product details. Selected state is `✓ In Cart: N` (`#sel-{id}`)
+  plus the `Selected total` box (`#tot-{id}`), both hidden at qty 0 with no
+  "Line total" wording and no desktop Total column anywhere. `Cart.setQty`,
+  `Cart.totalAmount`, and all cart/order behavior are unchanged — only the
+  DOM the same ids/handlers render into changed. The header and sticky
+  checkout bar use a deep-green gradient; the sticky bar adds a cart icon,
+  a `Total Amount` caption, `View Cart & Checkout →` on the browsing
+  action, and a `Secure checkout · Safe & Reliable` note shown at ≥640px
+  only — the underlying route/action per step is unchanged. Verified
+  locally: acceptance tests A–G (neutral qty-0 card, first-item sticky
+  appearance, multi-item selection, qty-to-zero, reload persistence, Cart
+  page, full Summary→Delivery→Payment→Confirmation flow) all pass, plus an
+  11-viewport (320–1920) × four-category overflow sweep with zero console
+  errors and zero failed requests.
 
 ## Launch Acceptance Gates
 

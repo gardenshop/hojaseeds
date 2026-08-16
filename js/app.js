@@ -73,11 +73,15 @@ function computeDeliveryFee(paymentMethod, subtotal, forceAdvance) {
   return r.COD_DELIVERY_FEE;
 }
 
-// Consistent "✓ In Cart · N packets · Rs. X selected" summary used on every
-// category row and nowhere else (no separate "Line total" wording).
-function selectedSummaryHTML(qty, amount) {
+// Left-side in-cart status ("✓ In Cart: N") and right-side "Selected total"
+// box used on every product card — the only selected-state presentation;
+// no separate "Line total" wording and no desktop Total column anywhere.
+function inCartStatusHTML(qty) {
   if (qty <= 0) return "";
-  return `<span class="in-cart-badge">✓ In Cart</span><span class="selected-detail">${qty} packet${qty === 1 ? "" : "s"} · ${CONFIG.CURRENCY} ${amount} selected</span>`;
+  return `<span class="in-cart-badge">✓ In Cart: ${qty}</span>`;
+}
+function selectedTotalHTML(amount) {
+  return `<span class="pc-total-label">Selected total</span><span class="pc-total-value mono">${CONFIG.CURRENCY} ${amount}</span>`;
 }
 
 // Small "★ Premium" / "100% Advance" markers next to a product's name.
@@ -275,7 +279,7 @@ function refreshStickyBar() {
   } else {
     countEl.textContent = `${count} item${count === 1 ? "" : "s"}`;
     totalEl.textContent = `${CONFIG.CURRENCY} ${subtotal}`;
-    btn.textContent = "View Cart →";
+    btn.textContent = "View Cart & Checkout →";
     btn.onclick = () => Router.go("cart");
   }
   bar.style.display = "flex";
@@ -441,35 +445,28 @@ const Views = {
           <div class="trust-chip"><span class="ic">🚚</span>Advance Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE}</div>
           <div class="trust-chip"><span class="ic">🌱</span>Free Delivery ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}+</div>
         </div>
-        <div class="product-table-wrap">
-          <table class="product-table">
-            <thead><tr><th>Product</th><th>Price</th><th>Quantity</th></tr></thead>
-            <tbody>
-              ${products.map(p => {
-                const qty = items[p.id] || 0;
-                return `
-                <tr class="product-row${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, in cart, ${qty} packet${qty === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${qty * p.price} selected` : p.name}">
-                  <td class="p-cell-name">
-                    <div class="p-name"><div class="p-icon">${p.icon}</div>
-                      <div class="p-name-text">
-                        <span class="p-name-title">${p.name}${productBadgeHTML(p)}</span>
-                        <span class="p-unit">per ${p.unit}</span>
-                        <div class="selected-summary" id="sel-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${selectedSummaryHTML(qty, qty * p.price)}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="p-cell-price p-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</td>
-                  <td class="p-cell-qty">
-                    <div class="stepper">
-                      <button onclick="Views.changeQty('${p.id}',-1)" aria-label="Decrease quantity">−</button>
-                      <span class="qty-display" id="qty-${p.id}">${qty}</span>
-                      <button onclick="Views.changeQty('${p.id}',1)" aria-label="Increase quantity">+</button>
-                    </div>
-                  </td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
+        <div class="product-list">
+          ${products.map(p => {
+            const qty = items[p.id] || 0;
+            return `
+            <article class="product-card${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, in cart, ${qty} packet${qty === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${qty * p.price} selected` : p.name}">
+              <div class="pc-media">${p.icon}</div>
+              <div class="pc-body">
+                <div class="pc-name">${p.name}${productBadgeHTML(p)}</div>
+                <div class="pc-unit">per ${p.unit}</div>
+                <div class="pc-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
+                <div class="pc-instock" id="sel-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${inCartStatusHTML(qty)}</div>
+              </div>
+              <div class="pc-actions">
+                <div class="stepper">
+                  <button onclick="Views.changeQty('${p.id}',-1)" aria-label="Decrease quantity">−</button>
+                  <span class="qty-display" id="qty-${p.id}">${qty}</span>
+                  <button onclick="Views.changeQty('${p.id}',1)" aria-label="Increase quantity">+</button>
+                </div>
+                <div class="pc-total" id="tot-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${selectedTotalHTML(qty * p.price)}</div>
+              </div>
+            </article>`;
+          }).join("")}
         </div>
         ${exploreMoreHTML(cat)}
       </section>`;
@@ -483,13 +480,18 @@ const Views = {
 
     const qtyEl = document.getElementById(`qty-${id}`);
     const selEl = document.getElementById(`sel-${id}`);
+    const totEl = document.getElementById(`tot-${id}`);
     const p = Prices.get().find(p => p.id === id);
     if (qtyEl) qtyEl.textContent = next;
     if (selEl) {
-      selEl.innerHTML = selectedSummaryHTML(next, next * p.price);
+      selEl.innerHTML = inCartStatusHTML(next);
       selEl.style.display = next > 0 ? "" : "none";
     }
-    const row = document.querySelector(`tr[data-product-id="${id}"]`);
+    if (totEl) {
+      totEl.innerHTML = selectedTotalHTML(next * p.price);
+      totEl.style.display = next > 0 ? "" : "none";
+    }
+    const row = document.querySelector(`[data-product-id="${id}"]`);
     if (row) {
       row.classList.toggle("in-cart", next > 0);
       row.setAttribute("aria-label", `${p.name}${next > 0 ? `, in cart, ${next} packet${next === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${next * p.price} selected` : ""}`);

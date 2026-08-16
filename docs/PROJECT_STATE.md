@@ -270,3 +270,22 @@ replace it.*
   thank-you amount blocks, back/continue-shopping data retention) all pass,
   plus a 320–1440 × Payment/Cart/Delivery overflow sweep with zero console
   errors and zero failed requests. `npm test` passes.
+- 2026-08-16: Premium product-card/sticky-bar restyle. Category pages now
+  render rounded `.product-card` articles (icon/name/badge/unit price left,
+  stepper + `Selected total` box right) instead of a table; selected state
+  is `✓ In Cart: N` plus the `Selected total` box, both hidden at qty 0 —
+  no "Line total" wording, no desktop Total column. `changeQty()` and
+  `Cart.setQty()/totalAmount()` unchanged; only the DOM ids they already
+  targeted (`qty-`, `sel-`, now also `tot-{id}`) moved into the new
+  markup, plus a generic `[data-product-id]` selector replacing the old
+  `tr[data-product-id]`. Header and sticky bar restyled to a deep-green
+  gradient; sticky bar gained a cart icon, `Total Amount` caption, `View
+  Cart & Checkout →` label on the browsing action, and a `Secure checkout ·
+  Safe & Reliable` note at ≥640px — same underlying route/action per step.
+  Cart page, checkout flow, delivery/payment logic, and all business rules
+  untouched. Verified locally: acceptance tests A–G (neutral qty-0 card,
+  immediate first-item sticky bar, multi-item + qty-2 selection, qty-to-
+  zero, reload persistence, Cart page, full Summary→Delivery→Payment→
+  Confirmation flow) all pass; 11-viewport (320–1920) × four-category
+  overflow sweep, zero console errors, zero failed requests. `npm test`
+  passes.
