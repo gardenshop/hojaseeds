@@ -246,7 +246,7 @@ function refreshStickyBar() {
   const view = Router.current;
   const count = Cart.count();
 
-  if (count === 0 || view === "confirmation") {
+  if (count === 0 || view === "confirmation" || view === "payment") {
     bar.style.display = "none";
     document.body.classList.remove("has-sticky-bar");
     return;
@@ -267,9 +267,11 @@ function refreshStickyBar() {
   } else if (view === "payment" && Views._order) {
     countEl.textContent = `${count} item${count === 1 ? "" : "s"}`;
     totalEl.textContent = `${CONFIG.CURRENCY} ${Views._order.total}`;
-    btn.textContent = "Confirm & Place Order";
-    btn.setAttribute("form", "paymentForm");
-    btn.setAttribute("type", "submit");
+    btn.textContent = "Review order below";
+    btn.disabled = true;
+    btn.removeAttribute("form");
+    btn.setAttribute("type", "button");
+    btn.classList.add("sticky-bar-status");
   } else if (view === "cart") {
     countEl.textContent = `${count} item${count === 1 ? "" : "s"}`;
     totalEl.textContent = `${CONFIG.CURRENCY} ${subtotal}`;
@@ -281,6 +283,7 @@ function refreshStickyBar() {
     btn.textContent = "View Cart & Checkout →";
     btn.onclick = () => Router.go("cart");
   }
+  if (view !== "payment") btn.classList.remove("sticky-bar-status");
   bar.style.display = "flex";
   document.body.classList.add("has-sticky-bar");
 }
@@ -306,11 +309,11 @@ function journeyBarHTML(step) {
 function deliveryUpsellHTML(subtotal) {
   const r = Settings.get();
   if (subtotal >= r.FREE_DELIVERY_THRESHOLD) {
-    return `<div class="delivery-upsell qualified">✓ Your order qualifies for FREE delivery with Advance Payment.</div>`;
+    return `<div class="delivery-upsell qualified"><span class="du-icon" aria-hidden="true">✓</span><span class="du-text">Your order qualifies for FREE delivery with Advance Payment.</span></div>`;
   }
   const remaining = r.FREE_DELIVERY_THRESHOLD - subtotal;
   return `<div class="delivery-upsell">
-    <div class="du-text">Add ${CONFIG.CURRENCY} ${remaining} more and pay in advance to unlock FREE delivery.</div>
+    <div class="du-head"><span class="du-icon" aria-hidden="true">🚚</span><div class="du-text">Add ${CONFIG.CURRENCY} ${remaining} more and pay in advance to unlock FREE delivery.</div></div>
     <div class="du-sub">Advance delivery below ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}: ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE}</div>
     <button type="button" class="btn btn-secondary du-btn" onclick="Router.go(Router.lastCategory)">Add More Seeds</button>
   </div>`;
@@ -449,12 +452,11 @@ const Views = {
             const qty = items[p.id] || 0;
             return `
             <article class="product-card${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, in cart, ${qty} packet${qty === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${qty * p.price} selected` : p.name}">
+              <div class="pc-title"><div class="pc-name">${p.name}</div><div class="pc-badge">${productBadgeHTML(p)}</div></div>
               <div class="pc-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
               <div class="pc-body">
-                <div class="pc-name">${p.name}${productBadgeHTML(p)}</div>
                 <div class="pc-unit">per ${p.unit}</div>
                 <div class="pc-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
-                <div class="pc-instock" id="sel-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${inCartStatusHTML(qty)}</div>
               </div>
               <div class="pc-actions">
                 <div class="stepper">
@@ -464,6 +466,7 @@ const Views = {
                 </div>
               </div>
               <div class="pc-total" id="tot-${p.id}">${selectedTotalHTML(qty * p.price)}</div>
+              <div class="pc-status" id="sel-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${inCartStatusHTML(qty)}</div>
             </article>`;
           }).join("")}
         </div>
@@ -560,25 +563,22 @@ const Views = {
       const catSubtotal = byCat[cat].reduce((s, l) => s + l.line, 0);
       const rows = byCat[cat].map(({ p, qty, line }) => `
         <article class="cart-line in-cart" data-pid="${p.id}">
-          <div class="cl-media">${p.icon}</div>
+          <div class="cl-title"><div class="cl-name">${p.name}</div><div class="cl-badge">${productBadgeHTML(p)}</div></div>
+          <div class="cl-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
           <div class="cl-body">
-            <div class="cl-name">${p.name}${productBadgeHTML(p)}</div>
             <div class="cl-unit">per ${p.unit}</div>
             <div class="cl-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
-            <div class="cl-instock"><span class="in-cart-badge">In cart: ${qty}</span></div>
           </div>
           <div class="cl-actions">
             <div class="stepper">
-              <button onclick="Views.cartChangeQty('${p.id}',-1)" aria-label="Decrease quantity">−</button>
+              <button onclick="Views.cartChangeQty('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button>
               <span class="qty-display">${qty}</span>
-              <button onclick="Views.cartChangeQty('${p.id}',1)" aria-label="Increase quantity">+</button>
+              <button onclick="Views.cartChangeQty('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button>
             </div>
-            <div class="cl-total">
-              <span class="cl-total-label">Selected total</span>
-              <span class="cl-total-value mono">${CONFIG.CURRENCY} ${line}</span>
-            </div>
-            <button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>
           </div>
+          <div class="cl-total"><span class="cl-total-label">Total</span><span class="cl-total-value mono">${CONFIG.CURRENCY} ${line}</span></div>
+          <div class="cl-status"><span class="in-cart-badge">✓ In Cart</span><span class="pc-selected-count">${qty} ${qty === 1 ? "packet" : "packets"} selected</span></div>
+          <button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>
         </article>`).join("");
       return `<div class="cat-group-title">${CATEGORY_META[cat].label}</div>${rows}<div class="cat-group-subtotal">Subtotal: ${CONFIG.CURRENCY} ${catSubtotal}</div>`;
     }).join("");
@@ -733,7 +733,7 @@ const Views = {
         <div class="step-nav-row"><button class="back-link" onclick="Router.go('delivery')">← Back to Delivery</button></div>
         <div class="page-head"><h2>Payment</h2><p class="tagline">Choose how you'd like to pay, then confirm below</p></div>
         <form id="paymentForm" onsubmit="Views.submitOrder(event)">
-          <div class="checkout-grid">
+          <div class="checkout-grid payment-sequence">
             <div class="form-card">
               <h3>Payment Method</h3>
               ${restrictedNote}
