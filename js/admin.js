@@ -210,7 +210,7 @@ const Admin = {
     const wrap = document.getElementById("tables");
     wrap.innerHTML = Object.keys(byCat).map(cat => `
       <div class="cat-group">${CATEGORY_META[cat].label}</div>
-      <table class="admin-table">
+      <div class="admin-data-card"><table class="admin-table">
         <thead><tr><th>Product</th><th>Default price</th><th>Current price</th><th>Type</th></tr></thead>
         <tbody>
           ${byCat[cat].map(p => {
@@ -227,7 +227,7 @@ const Admin = {
             </tr>`;
           }).join("")}
         </tbody>
-      </table>
+      </table></div>
     `).join("");
   },
 
