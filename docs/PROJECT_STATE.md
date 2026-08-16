@@ -72,6 +72,9 @@ replace it.*
 - Expanded operations scope readiness: **90%**. The responsive admin shell,
   authenticated bounded reads, derived dashboard/customers views, delivery/
   analytics status panels, and additive AuditLog foundation are implemented.
+- Expanded scope readiness remains **90%**: full product CRUD, order status
+  mutations, customer status actions, trusted IP relay, and browser-authorized
+  admin mutation/restore are not claimed complete.
 - Verified locally: COD and advance totals, free-delivery boundary,
   customized COD rejection, tamper resistance, invalid items/quantities,
   server order IDs, locked duplicate replay, readable JSON contract,
@@ -102,6 +105,11 @@ replace it.*
   server order ID, no overflow, no sticky overlap, and no unexpected failed
   requests. Expected missing image assets were removed in favor of documented
   gradient/emoji fallbacks, so the browser audit is 404-clean.
+- Forensic production/local matrix additionally covered 320x568, 360x640,
+  375x667, 375x812, 393x852, 430x932, 1024x768, 1280x720, 1366x768, and
+  1920x1080; all storefront routes reported scrollWidth within viewport after
+  the category grid repair. One third-party Google Fonts 404 remains at a
+  wide viewport; no first-party runtime/network errors were observed.
 - Remaining: authorized admin Google browser flow, temporary price/settings
   mutation restore, and vendor Purchase delivery (GA4/Meta IDs remain blank).
 - Production Web GIS client is synchronized in `js/config.js`, the standalone

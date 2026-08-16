@@ -133,6 +133,9 @@ without verifying target identity and explicit operator authorization.
   Store Settings, and Audit Log. Sensitive reads and mutations remain behind
   the existing server-side Google authorization; order/customer views derive
   from bounded existing Sheets data without changing frozen order columns.
+- The forensic responsive baseline (2026-08-16) covers 320/360/375/390/393/
+  412/430/768/1024/1280/1366/1440/1920 widths and confirms no document
+  overflow on storefront routes after the category-grid minmax repair.
 
 ## Launch Acceptance Gates
 
