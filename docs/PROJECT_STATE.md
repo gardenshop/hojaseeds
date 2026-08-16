@@ -69,6 +69,9 @@ replace it.*
 
 - Production readiness: **97%** (up from 96%)
 - Remaining: **3%**
+- Expanded operations scope readiness: **90%**. The responsive admin shell,
+  authenticated bounded reads, derived dashboard/customers views, delivery/
+  analytics status panels, and additive AuditLog foundation are implemented.
 - Verified locally: COD and advance totals, free-delivery boundary,
   customized COD rejection, tamper resistance, invalid items/quantities,
   server order IDs, locked duplicate replay, readable JSON contract,
@@ -183,4 +186,10 @@ replace it.*
    JSON blob in the `Orders.items` column. Current `Orders` rows are
    sufficient for manual fulfillment today. Normalizing into `OrderItems`
    (for reporting/inventory) is real but separate schema-migration work and
-   should be its own task, not folded into a browser-smoke-test pass.
+ should be its own task, not folded into a browser-smoke-test pass.
+- Added launch-safe operations dashboard foundation: responsive eight-tab
+  admin shell, authenticated bounded dashboard/orders/customers/audit reads,
+  Delivery & Payments and Analytics status panels, additive AuditLog schema,
+  and server-side mutation audit summaries. No frozen commerce columns/rules
+  were changed; status mutation, IP relay, inventory, and OrderItems remain
+  deferred.
