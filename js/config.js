@@ -12,7 +12,7 @@ const CONFIG = {
   // Public Google Identity Services client ID for the admin sign-in button.
   // This is not a secret. Leave blank until the Apps Script allowlist and
   // Google OAuth client have been configured.
-  ADMIN_GOOGLE_CLIENT_ID: "804856718644-9jbk23vd23rsrs9dci7gepcmtbmq40ob.apps.googleusercontent.com",
+  ADMIN_GOOGLE_CLIENT_ID: "804856718644-6eknoj1m8jcsbh5v9f6362p3gac9u5cs.apps.googleusercontent.com",
 
   // ── Commercial / pricing rules layer ──────────────────────────────
   // All of this is editable from Super Admin (admin.html) at runtime —

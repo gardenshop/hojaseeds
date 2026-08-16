@@ -123,10 +123,15 @@ without verifying target identity and explicit operator authorization.
   frontend is deployed to Cloudflare Pages project `hojaseeds` under the
   verified `gisupp@gmail.com` account. R2 is intentionally not used because
   launch images are safe local gradient/emoji fallbacks.
+- The production GIS Web client is
+  `804856718644-6eknoj1m8jcsbh5v9f6362p3gac9u5cs.apps.googleusercontent.com`;
+  its approved JavaScript origins include `https://www.hojaseeds.pk` and
+  `https://hojaseeds.pk`. The Apps Script audience and frontend client ID must
+  remain identical.
 
 ## Launch Acceptance Gates
 
-- [ ] Google OAuth client ID configured for the approved admin origin.
+- [x] Google OAuth Web client ID configured for the approved admin origins.
 - [ ] Protected Sheet target verified: `hoja-seeds-2026` /
       `1XKU3Q2r1dLxZVL0-OWOButHHp2MrFPIFA2V9ozhp6WY`.
 - [ ] Apps Script Script Properties contain approved client ID and admin email allowlist.
@@ -139,9 +144,8 @@ without verifying target identity and explicit operator authorization.
 - [x] Anonymous price/settings mutations are rejected — reconfirmed live
       2026-08-16 with no token, a forged/garbage token (round-tripped
       through Google's tokeninfo endpoint), and a forged `Origin` header.
-- [ ] Authorized price/settings mutations are accepted and audited — blocked
-      on a real Google sign-in as `gisupp@gmail.com`; no browser-automation
-      or computer-use tool was available to complete interactive OAuth.
+- [ ] Authorized price/settings mutations are accepted and audited — Web
+      client synchronized; final interactive mutation/restore verification remains.
 - [x] Public order and contact submissions work — full commercial order
       matrix (COD, advance below/at Rs. 1,500, customized-collection
       COD block/advance accept, idempotent replay, idempotency conflict,

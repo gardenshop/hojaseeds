@@ -28,7 +28,7 @@ function doGet(e) {
 // Run once through an authenticated Apps Script execution request. These
 // values remain server-side Script Properties and are never returned by doGet.
 function configureAdminProperties(clientId, adminEmail) {
-  clientId = clientId || "804856718644-9jbk23vd23rsrs9dci7gepcmtbmq40ob.apps.googleusercontent.com";
+  clientId = clientId || "804856718644-6eknoj1m8jcsbh5v9f6362p3gac9u5cs.apps.googleusercontent.com";
   adminEmail = adminEmail || "gisupp@gmail.com";
   if (String(adminEmail || "").toLowerCase() !== "gisupp@gmail.com") {
     throw new OrderError("INVALID_ADMIN_CONFIG", "The Hoja Seeds admin email is invalid.");
@@ -67,9 +67,10 @@ function doPost(e) {
 
 function ensureAdminProperties() {
   const properties = PropertiesService.getScriptProperties();
-  if (!properties.getProperty("HOJA_GOOGLE_CLIENT_ID") || !properties.getProperty("HOJA_ADMIN_EMAILS")) {
+  const currentClientId = String(properties.getProperty("HOJA_GOOGLE_CLIENT_ID") || "");
+  if (!currentClientId || currentClientId === "804856718644-9jbk23vd23rsrs9dci7gepcmtbmq40ob.apps.googleusercontent.com" || !properties.getProperty("HOJA_ADMIN_EMAILS")) {
     properties.setProperties({
-      HOJA_GOOGLE_CLIENT_ID: "804856718644-9jbk23vd23rsrs9dci7gepcmtbmq40ob.apps.googleusercontent.com",
+      HOJA_GOOGLE_CLIENT_ID: "804856718644-6eknoj1m8jcsbh5v9f6362p3gac9u5cs.apps.googleusercontent.com",
       HOJA_ADMIN_EMAILS: "gisupp@gmail.com"
     });
   }
