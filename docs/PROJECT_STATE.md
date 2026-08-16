@@ -319,3 +319,14 @@ replace it.*
   1024×768, 1366×768, 1440×900, and 1920×1080; all four category routes
   passed overflow/network/console checks and category-to-Cart-to-Delivery
   regression. Production Pages deployment commit `1343b96` is live.
+- 2026-08-16: Production visual-fidelity refinement completed in CSS only
+  (`d6ee65a`). Category cards now match the target composition more closely:
+  substantial fallback visual zone, stronger product-details hierarchy,
+  aligned four-zone desktop/390px layout, centered vertical stepper, compact
+  independent Total panel, selected-state surface treatment, deeper premium
+  header, and readable grid-based sticky checkout bar. Production screenshots
+  `production-visual-after-390.png` and `production-visual-after-1440.png`
+  show Tomato qty2 at Rs.370 and Okra qty2 at Rs.242. The 11-viewport × four-
+  category production matrix passed geometry, zero overflow, and zero
+  first-party failures; category-to-Payment regression passed. A known
+  third-party Google Fonts 404 can occur at one 412px font-range request.

@@ -147,6 +147,14 @@ without verifying target identity and explicit operator authorization.
   are unchanged. Production screenshots at 390×844 and 1440×900 show the
   required hierarchy, with zero overflow, console errors, or failed requests
   across 320–1920 and Vegetables/Flowers/Mix/Fertilizer.
+- Category visual-fidelity contract (verified 2026-08-16 against production):
+  category cards use four aligned visual zones at 390px+ — substantial
+  product visual, readable details hierarchy, centered vertical stepper, and
+  compact independent Total panel — with a controlled two-row fallback below
+  380px. Cards use premium spacing, selected-state background/accent, a deeper
+  header hierarchy, and a grid-based sticky checkout bar that keeps count,
+  subtotal, CTA, and trust text readable. Production proof is captured at
+  390×844 and 1440×900; Cart/checkout operations remain unchanged.
 - Cart/product-selection UX contract (verified 2026-08-16 via headless
   Chromium against a local static server): `Cart.totalAmount()`/
   `Cart.count()` always sum every item in `localStorage`, proven from the
