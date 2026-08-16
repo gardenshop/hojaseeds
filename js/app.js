@@ -73,15 +73,14 @@ function computeDeliveryFee(paymentMethod, subtotal, forceAdvance) {
   return r.COD_DELIVERY_FEE;
 }
 
-// Left-side in-cart status ("✓ In Cart: N") and right-side "Selected total"
-// box used on every product card — the only selected-state presentation;
-// no separate "Line total" wording and no desktop Total column anywhere.
+// Category product-card status and total presentation. Cart state remains
+// localStorage-backed and all quantity changes still flow through Cart.setQty.
 function inCartStatusHTML(qty) {
   if (qty <= 0) return "";
-  return `<span class="in-cart-badge">✓ In Cart: ${qty}</span>`;
+  return `<span class="in-cart-badge">✓ In Cart</span><span class="pc-selected-count">${qty} ${qty === 1 ? "packet" : "packets"} selected</span>`;
 }
 function selectedTotalHTML(amount) {
-  return `<span class="pc-total-label">Selected total</span><span class="pc-total-value mono">${CONFIG.CURRENCY} ${amount}</span>`;
+  return `<span class="pc-total-label">Total</span><span class="pc-total-value mono">${CONFIG.CURRENCY} ${amount}</span>`;
 }
 
 // Small "★ Premium" / "100% Advance" markers next to a product's name.
@@ -450,7 +449,7 @@ const Views = {
             const qty = items[p.id] || 0;
             return `
             <article class="product-card${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, in cart, ${qty} packet${qty === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${qty * p.price} selected` : p.name}">
-              <div class="pc-media">${p.icon}</div>
+              <div class="pc-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
               <div class="pc-body">
                 <div class="pc-name">${p.name}${productBadgeHTML(p)}</div>
                 <div class="pc-unit">per ${p.unit}</div>
@@ -459,12 +458,12 @@ const Views = {
               </div>
               <div class="pc-actions">
                 <div class="stepper">
-                  <button onclick="Views.changeQty('${p.id}',-1)" aria-label="Decrease quantity">−</button>
+                  <button onclick="Views.changeQty('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button>
                   <span class="qty-display" id="qty-${p.id}">${qty}</span>
-                  <button onclick="Views.changeQty('${p.id}',1)" aria-label="Increase quantity">+</button>
+                  <button onclick="Views.changeQty('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button>
                 </div>
-                <div class="pc-total" id="tot-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${selectedTotalHTML(qty * p.price)}</div>
               </div>
+              <div class="pc-total" id="tot-${p.id}">${selectedTotalHTML(qty * p.price)}</div>
             </article>`;
           }).join("")}
         </div>
@@ -489,7 +488,7 @@ const Views = {
     }
     if (totEl) {
       totEl.innerHTML = selectedTotalHTML(next * p.price);
-      totEl.style.display = next > 0 ? "" : "none";
+      totEl.style.display = "";
     }
     const row = document.querySelector(`[data-product-id="${id}"]`);
     if (row) {

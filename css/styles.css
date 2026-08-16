@@ -160,34 +160,36 @@ button{font-family:inherit;cursor:pointer;}
 /* ══════════════ Product cards (category pages, premium redesign) ══════════════ */
 .product-list{display:flex;flex-direction:column;gap:10px;}
 .product-card{
-  display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:start;
+  display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;align-items:start;
   background:var(--kraft);border:1px solid var(--kraft-dark);border-radius:16px;
   padding:14px;box-shadow:var(--shadow-sm);position:relative;transition:border-color .15s ease, background .15s ease;
 }
 .product-card.in-cart{border-color:var(--leaf);background:rgba(220,234,214,.42);box-shadow:inset 4px 0 0 var(--leaf), var(--shadow-sm);}
-.pc-media{width:52px;height:52px;border-radius:12px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex:none;overflow:hidden;}
+.pc-media{width:64px;height:64px;border-radius:14px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:1.85rem;flex:none;overflow:hidden;}
 .pc-media img{width:100%;height:100%;object-fit:cover;}
 .pc-body{min-width:0;overflow-wrap:anywhere;}
 .pc-name{font-weight:700;font-size:.94rem;}
 .pc-unit{color:#7a6f5c;font-weight:400;font-size:.78rem;margin-top:1px;}
 .pc-price{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.88rem;margin-top:5px;color:var(--ink);}
-.pc-instock{margin-top:6px;}
+.pc-instock{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:8px;}
+.pc-selected-count{font-size:.75rem;color:var(--leaf-dark);font-weight:700;}
 
-.pc-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--kraft-dark);}
+.pc-actions{grid-column:1;display:flex;align-items:center;justify-content:center;align-self:end;margin-top:12px;padding-top:12px;border-top:1px dashed var(--kraft-dark);}
 
-.stepper{display:inline-flex;align-items:center;border:1px solid var(--kraft-dark);border-radius:22px;overflow:hidden;background:var(--paper);}
-.stepper button{background:none;border:none;width:44px;height:44px;font-size:1.1rem;color:var(--leaf-dark);font-weight:700;transition:background .12s ease;}
+.stepper{display:flex;flex-direction:column;align-items:stretch;border:1px solid var(--kraft-dark);border-radius:12px;overflow:hidden;background:var(--paper);width:52px;}
+.stepper button{background:none;border:0;width:50px;height:44px;font-size:1.1rem;color:var(--leaf-dark);font-weight:700;transition:background .12s ease;}
 .stepper button:hover{background:var(--kraft-dark);}
 .stepper button:active{transform:scale(.92);}
-.stepper .qty-display{min-width:26px;text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.88rem;color:var(--ink);}
+.stepper button + .qty-display{border-top:1px solid var(--kraft-dark);}
+.stepper .qty-display + button{border-top:1px solid var(--kraft-dark);}
+.stepper .qty-display{min-height:44px;display:flex;align-items:center;justify-content:center;text-align:center;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.88rem;color:var(--ink);}
 
-/* "✓ In Cart: N" left-side status + right-side "Selected total" box — the
-   only selected-state presentation; no "Line total" wording, no desktop
-   Total column anywhere. */
+/* Selected state and separate per-product Total block. */
 .in-cart-badge{display:inline-flex;align-items:center;background:var(--leaf);color:#fff;font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap;letter-spacing:.02em;}
-.pc-total{display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1.3;}
-.pc-total-label{font-size:.66rem;color:#7a6f5c;text-transform:uppercase;letter-spacing:.03em;}
-.pc-total-value{font-weight:700;font-size:.94rem;color:var(--leaf-dark);}
+.pc-total{grid-column:2;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;align-self:end;min-width:0;min-height:88px;padding:10px 12px;border:1px solid var(--kraft-dark);border-radius:12px;background:rgba(255,255,255,.38);line-height:1.3;text-align:left;}
+.product-card.in-cart .pc-total{border-color:rgba(55,104,54,.4);background:rgba(220,234,214,.78);}
+.pc-total-label{font-size:.66rem;color:#7a6f5c;text-transform:uppercase;letter-spacing:.08em;}
+.pc-total-value{font-weight:700;font-size:.94rem;color:var(--leaf-dark);white-space:nowrap;}
 
 /* Small product badges (Premium / Advance-only) */
 .badge{display:inline-block;font-size:.64rem;font-weight:700;letter-spacing:.02em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap;}
@@ -206,9 +208,10 @@ button{font-family:inherit;cursor:pointer;}
 .cta-split .btn{flex:1;justify-content:center;}
 
 @media (min-width:640px){
-  .product-card{grid-template-columns:64px 1fr auto;gap:16px;padding:16px;}
-  .pc-actions{grid-column:3;flex-direction:column;align-items:flex-end;gap:10px;margin-top:0;padding-top:0;border-top:none;}
-  .pc-total{align-items:flex-end;}
+  .product-card{grid-template-columns:88px minmax(0,1fr) 56px 132px;gap:16px;padding:16px;}
+  .pc-media{width:88px;height:88px;}
+  .pc-actions{grid-column:3;grid-row:1;align-items:center;margin-top:0;padding-top:0;border-top:none;}
+  .pc-total{grid-column:4;grid-row:1;align-items:flex-start;align-self:center;}
 }
 
 @media (max-width:700px){
