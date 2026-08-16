@@ -128,6 +128,11 @@ without verifying target identity and explicit operator authorization.
   its approved JavaScript origins include `https://www.hojaseeds.pk` and
   `https://hojaseeds.pk`. The Apps Script audience and frontend client ID must
   remain identical.
+- The launch-safe admin dashboard foundation provides responsive tabs for
+  Dashboard, Products, Orders, Customers, Delivery & Payments, Analytics,
+  Store Settings, and Audit Log. Sensitive reads and mutations remain behind
+  the existing server-side Google authorization; order/customer views derive
+  from bounded existing Sheets data without changing frozen order columns.
 
 ## Launch Acceptance Gates
 
