@@ -330,3 +330,15 @@ replace it.*
   category production matrix passed geometry, zero overflow, and zero
   first-party failures; category-to-Payment regression passed. A known
   third-party Google Fonts 404 can occur at one 412px font-range request.
+- 2026-08-16: Unified category, actual Cart, Delivery, and Payment hierarchy
+  refinement deployed in `233ff89`. Category and Cart now use full-width
+  title rows with top-right badges, shared visual/body/stepper/Total zones,
+  and selected status below the Total hierarchy. Delivery below-threshold
+  upsell has a subtle `prefers-reduced-motion`-safe glow. Payment is a
+  single-column Payment Method → Order Summary → final Confirm sequence; the
+  sticky payment duplicate is removed. Production screenshots captured:
+  `production-final-category-390.png`, `production-final-category-1440.png`,
+  `production-final-cart-390.png`, `production-final-cart-1440.png`,
+  `production-final-delivery-390.png`, `production-final-payment-390.png`,
+  and `production-final-payment-1440.png`. The full 11-viewport production
+  matrix passed overflow, route, sequence, and first-party network checks.

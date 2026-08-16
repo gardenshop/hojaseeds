@@ -155,6 +155,14 @@ without verifying target identity and explicit operator authorization.
   header hierarchy, and a grid-based sticky checkout bar that keeps count,
   subtotal, CTA, and trust text readable. Production proof is captured at
   390×844 and 1440×900; Cart/checkout operations remain unchanged.
+- Unified category/Cart/checkout visual contract (verified 2026-08-16 against
+  production): category and actual `Your Cart` cards use a full-width title
+  row with top-right product badge, substantial visual, unit price, vertical
+  `+ / qty / −`, independent Total panel, and secondary selected status below
+  the body. Delivery's below-threshold upsell uses a subtle reduced-motion-safe
+  glow; qualified state is stable. Payment is one column in the order
+  `Payment Method → Order Summary → Confirm & Place Order`, with exactly one
+  submit button and no payment-page sticky duplicate.
 - Cart/product-selection UX contract (verified 2026-08-16 via headless
   Chromium against a local static server): `Cart.totalAmount()`/
   `Cart.count()` always sum every item in `localStorage`, proven from the
@@ -164,8 +172,8 @@ without verifying target identity and explicit operator authorization.
    single consistent `✓ In Cart` badge plus a `N packet(s) selected` line and
    a separate per-product `Total: Rs. X` block — no "Line total" wording.
    Selected state derives from `localStorage` on every render,
-  so it survives reload and return-from-Cart. The Cart page lists each item
-  as a separated card labelled `Selected total: Rs. X` with a text `Remove`
+   so it survives reload and return-from-Cart. The Cart page lists each item
+   as a separated card with an independent `Total: Rs. X` panel and a text `Remove`
   control, and the bottom summary reads `Items subtotal` / `Delivery:
   Calculated at payment` / `Current payable: Rs. X + delivery` — never an
   implied final total before a payment method is chosen.
