@@ -69,10 +69,10 @@ replace it.*
 
 - Production readiness: **98%** (up from 96%)
 - Remaining: **2%**
-- Expanded operations scope readiness: **92%**. The responsive admin shell,
+- Expanded operations scope readiness: **94%**. The responsive admin shell,
   authenticated bounded reads, derived dashboard/customers views, delivery/
   analytics status panels, and additive AuditLog foundation are implemented.
-- Expanded scope readiness remains **92%**: full product CRUD, order status
+- Expanded scope readiness remains **94%**: full product CRUD, order status
   mutations, customer status actions, trusted IP relay, and browser-authorized
   admin mutation/restore are not claimed complete.
 - Verified locally: COD and advance totals, free-delivery boundary,
@@ -353,3 +353,13 @@ replace it.*
   All eight admin tabs, one Payment submit CTA, compact cards, checkout
   routing, and reduced-motion upsell behavior passed local and production
   browser checks. No commerce/backend rules changed.
+- 2026-08-16: Payment-display Settings schema version 2 migrated live with 14
+  additive keys; first apply added all keys and second apply added none.
+  `sheets:verify` passes. Apps Script source was deployed to version 10 on the
+  verified web-app deployment, and frontend payment UI deployed in `f320fcb`
+  / Pages deployment `72057f0e`. Production confirms live settings, premium
+  COD/Advance cards, selected-only JazzCash/EasyPaisa/Bank details, optional
+  QR-safe rendering, exact FREE-delivery progress/qualified states, and one
+  final payment submit CTA across the full viewport matrix. Authorized admin
+  save/restore browser capture remains pending; no fake account values or QR
+  URLs were introduced.

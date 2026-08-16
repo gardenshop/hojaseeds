@@ -173,6 +173,18 @@ without verifying target identity and explicit operator authorization.
   `min-width:0`, responsive metrics, mobile tab navigation, narrower desktop
   sidebar, and contained horizontal table scrolling; no body overflow hack is
   used.
+- Payment-display settings contract (verified 2026-08-16): schema version 2
+  adds 14 additive Settings keys for JazzCash, EasyPaisa, and Bank Transfer
+  enabled state, customer-visible account details, and optional QR/barcode
+  URLs. The authorized admin editor writes only validated customer-visible
+  instructions and audit logs the mutation; no secrets or upload pipeline are
+  introduced. Payment cards show COD/Advance as premium first-level choices,
+  Advance exposes only enabled methods, and only the selected method's details
+  render. Server order validation rejects disabled advance methods while
+  preserving the existing payment method, totals, delivery, and idempotency
+  contract. The below-threshold FREE-delivery progress callout pulses subtly;
+  qualified Advance state is green and stable, and COD never receives the
+  benefit callout.
 - Cart/product-selection UX contract (verified 2026-08-16 via headless
   Chromium against a local static server): `Cart.totalAmount()`/
   `Cart.count()` always sum every item in `localStorage`, proven from the
