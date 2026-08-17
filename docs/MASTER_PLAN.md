@@ -163,6 +163,12 @@ without verifying target identity and explicit operator authorization.
   glow; qualified state is stable. Payment is one column in the order
   `Payment Method → Order Summary → Confirm & Place Order`, with exactly one
   submit button and no payment-page sticky duplicate.
+- Production-verified shared commerce-card geometry (2026-08-17): category and
+  Your Cart cards are rendered by the same `commerceProductCardHTML()` structure
+  with content-driven title, body, and footer rows. The vertical stepper retains
+  three 44px controls; selected status and Cart `Remove` stay in the dedicated
+  footer row. Requested production viewport checks found no card child
+  intersections, no offscreen essential content, and no horizontal overflow.
 - Full-site forensic baseline (verified 2026-08-16 against production): Home,
   all four categories, Contact, Cart, Delivery, Payment, Confirmation, and
   the Super Admin shell were exercised at 320/360/390/412/430/768/1024/1280/
