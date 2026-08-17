@@ -121,9 +121,11 @@ async function backendTests() {
   {
     const customRules = { ...rules, SPLIT_ADVANCE_PERCENT: 30 };
     const { api } = createBackend(products(), customRules);
-    const result = api.submitOrder(split("regular-1000"));
-    assert.equal(result.payNow, 375, "PAY-F2: configured 30% split rounds up on final total");
-    assert.equal(result.codDue, 875, "PAY-F2: configured 70% remainder is due at delivery");
+    const result = api.submitOrder(split("regular-1000")); // total 1250 (1000+250 fee)
+    // 30% -> rawPayNow=375, rawCodDue=875, COD rounds to 900, payNow=350
+    assert.equal(result.payNow, 350, "PAY-F2: 30% split with COD rounding");
+    assert.equal(result.codDue, 900, "PAY-F2: COD rounds to nearest 100");
+    assert.equal(result.payNow + result.codDue, result.total, "PAY-F2: split preserves total");
   }
   {
     const anonymous = createBackend(products(), rules);
@@ -286,23 +288,24 @@ async function backendTests() {
     assert.equal(result.error.code, "CUSTOM_SELECTION_REQUIRES_ADVANCE", "PAY-E: rejection reason surfaced");
   }
   {
-    // PAY-F: split calculation, even total (subtotal 1000 + advance-tier COD fee 250 = 1250 total... use exact even case)
+    // PAY-F: split calculation, even total (subtotal 1000 + COD_DELIVERY_FEE(250) = 1250 total)
+    // COD rounds 625->600, payNow = 650 to preserve total
     const { api } = createBackend(products(), rules);
-    const result = api.submitOrder(split("regular-1000")); // 1000 + COD_DELIVERY_FEE(250) = 1250 total (even)
+    const result = api.submitOrder(split("regular-1000"));
     assert.equal(result.total, 1250, "PAY-F: even total computed");
-    assert.equal(result.payNow, 625, "PAY-F: even split pay-now");
-    assert.equal(result.codDue, 625, "PAY-F: even split cod-due");
-    assert.equal(result.payNow + result.codDue, result.total, "PAY-F: split halves reconstitute total exactly");
+    assert.equal(result.payNow, 650, "PAY-F: even split COD rounds to 600, payNow=650");
+    assert.equal(result.codDue, 600, "PAY-F: even split cod-due rounds to 600");
+    assert.equal(result.payNow + result.codDue, result.total, "PAY-F: split preserves total exactly");
   }
   {
-    // PAY-G: split calculation, odd total — pay-now rounds up, cod-due absorbs remainder
+    // PAY-G: split calculation, odd total — COD rounds to nearest 100, payNow adjusts
     const { api } = createBackend(products(), rules);
     const result = api.submitOrder(split("regular-333")); // 333 + COD_DELIVERY_FEE(250) = 583 (odd)
     assert.equal(result.total, 583, "PAY-G: odd total computed");
-    assert.equal(result.payNow, 292, "PAY-G: odd split pay-now rounds up (ceil 583/2)");
-    assert.equal(result.codDue, 291, "PAY-G: odd split cod-due absorbs the remainder");
+    // rawPayNow=ceil(583/2)=292, rawCodDue=291, rounds to 300, payNow=283
+    assert.equal(result.payNow, 283, "PAY-G: odd split with COD rounding to 300, payNow=283");
+    assert.equal(result.codDue, 300, "PAY-G: odd split cod-due rounds to 300");
     assert.equal(result.payNow + result.codDue, result.total, "PAY-G: split halves reconstitute total exactly");
-    assert.ok(result.payNow >= result.codDue, "PAY-G: pay-now never less than cod-due");
   }
   {
     // PAY-H: full-advance delivery threshold below/at/above (existing free-delivery rule, unaffected by this change)

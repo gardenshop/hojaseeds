@@ -306,8 +306,12 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
     if (!Number.isInteger(splitPercent) || splitPercent < 1 || splitPercent > 99) {
       throw new OrderError("INVALID_SPLIT_PERCENT", "The split payment percentage is not configured correctly.");
     }
-    payNow = Math.ceil(total * splitPercent / 100);
-    codDue = total - payNow;
+    const rawPayNow = Math.ceil(total * splitPercent / 100);
+  const rawCodDue = total - rawPayNow;
+  const roundingUnit = Math.max(100, Number(settings.SPLIT_COD_ROUNDING_UNIT) || 100);
+  const roundedCodDue = Math.round(rawCodDue / roundingUnit) * roundingUnit;
+  payNow = total - roundedCodDue;
+  codDue = roundedCodDue;
   }
 
   return {

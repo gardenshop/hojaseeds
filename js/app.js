@@ -770,13 +770,14 @@ const Views = {
     // Restricted note: customized-collection keeps its existing strict
      // advance-only copy; a custom-selection cart (vegetables/flowers) gets
     // the new explanatory copy instead of the old generic COD-unavailable line.
-    const restrictedNote = !codAllowed
+const restrictedNote = !codAllowed
       ? `<div class="payment-restricted-note">${hasCustomized
           ? "Customized orders are prepared specially for you and require 100% advance payment."
           : "This order contains your personally selected seed packets — these are prepared to order and require Advance or the configured Split, not Cash on Delivery."}</div>`
-      : (containsMixPack ? `<div class="pay-cod-banner"><span class="pay-cod-banner-icon" aria-hidden="true">✓</span><div><strong>100% Cash on Delivery Available</strong><p>These ready-made Mix Packs can be paid completely at your doorstep.</p></div></div>` : "");
+      : (containsMixPack ? `<div class="pay-cod-banner premium-cod-card"><span class="pay-cod-badge premium-cod-badge">✓</span><div><strong>100% Cash on Delivery Available</strong><p>Pay nothing now · Pay ${CONFIG.CURRENCY} ${this._order.total} at your doorstep.</p></div></div>` : "");
 
     const codMixUpsell = !codAllowed ? this.codMixPackUpsellHTML() : "";
+    const orderTotal = this._order.total || subtotal + computeDeliveryFee(defaultMethod, subtotal, !codAllowed);
 
     app.innerHTML = `
       <section class="page narrow">
@@ -791,24 +792,26 @@ const Views = {
               ${restrictedNote}
               <div class="pay-options">
                 ${codAllowed ? `
-                <label class="pay-option" id="payCOD">
-                  <input type="radio" name="pay" value="Cash on Delivery" checked onchange="Views.selectPay('payCOD','payAdvance,paySplit')">
+                <label class="pay-option premium-cod-card" id="payCOD">
+                  <input type="radio" name="pay" value="Cash on Delivery" ${defaultMethod === "Cash on Delivery" ? "checked" : ""} onchange="Views.selectPay('payCOD','payAdvance,paySplit')">
                   <span class="pay-option-icon" aria-hidden="true">💵</span><div class="pay-option-copy"><div class="pay-option-title">Cash on Delivery</div>
-                  <div class="pay-option-sub">Pay when it arrives · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
+                  <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} 0</div>
+                  <div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} ${orderTotal}</div>
                   </div>
                 </label>` : ""}
                 <label class="pay-option ${codAllowed ? "" : "selected"}" id="payAdvance">
                   <input type="radio" name="pay" value="Advance Payment" ${codAllowed ? "" : "checked"} onchange="Views.selectPay('payAdvance','payCOD,paySplit')">
                   <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Pay 100% in Advance <span class="payment-benefit">FREE DELIVERY BENEFIT</span></div>
-                  <div class="pay-option-sub">Best value · JazzCash · EasyPaisa · Bank Transfer · Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE} (free at ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}+)</div>
+                  ${hasCustomized ? `<div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${orderTotal}</div><div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} 0</div>` : `<div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${orderTotal}</div><div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} 0<br>(Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE}${orderTotal >= r.FREE_DELIVERY_THRESHOLD ? " (FREE)" : ""})</div>`}
                   </div>
                 </label>
                 ${splitAllowed ? `
                 <label class="pay-option" id="paySplit">
                   <input type="radio" name="pay" value="Split Payment" onchange="Views.selectPay('paySplit','payCOD,payAdvance')">
                    <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay ${r.SPLIT_ADVANCE_PERCENT}% Now + ${100 - r.SPLIT_ADVANCE_PERCENT}% on Delivery</div>
-                   <div class="pay-option-sub">Pay ${r.SPLIT_ADVANCE_PERCENT}% now + ${100 - r.SPLIT_ADVANCE_PERCENT}% on delivery · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
-                  </div>
+                   <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} ${Math.ceil(orderTotal * r.SPLIT_ADVANCE_PERCENT / 100)}</div>
+                   <div class="payment-paydable-due">Pay on delivery: ${CONFIG.CURRENCY} ${Math.ceil((orderTotal - Math.ceil(orderTotal * r.SPLIT_ADVANCE_PERCENT / 100)) / 100) * 100}</div>
+                   </div>
                 </label>` : ""}
               </div>
 
@@ -861,13 +864,14 @@ const Views = {
     const mixPacks = Prices.get().filter(p => p.cat === "mix" && p.type === "standard-collection").slice(0, 3);
     if (!mixPacks.length) return "";
     const restoreDraft = Cart.hasCustomDraft() ? `<button type="button" class="btn-text-secondary" onclick="Views.restoreCustomOrder()">Restore Custom Order</button>` : "";
+    const total = this._order?.total || 0;
     return `
       <div class="cod-mixpack-upsell">
         <p class="cod-mixpack-question"><strong>Want Cash on Delivery?</strong><br>Choose a ready-made Mix Pack instead.</p>
-        <button type="button" class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('mix')">Choose a Mix Pack</button>
+        <button type="button" class="btn btn-secondary premium-cod-card" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('mix')">Choose a Mix Pack</button>
         <button type="button" class="btn-text-tertiary" onclick="Router.go('mix')">Keep Custom Order</button>${restoreDraft}
         <div class="cod-mixpack-grid">
-           ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card" onclick="Views.convertToCodMixPack('${p.id}')"><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span><span class="cod-mixpack-cod">100% COD</span><span class="cod-mixpack-action">Convert to this COD Mix Pack</span></button>`).join("")}
+           ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card premium-cod-card" onclick="Views.convertToCodMixPack('${p.id}')"><span class="cod-mixpack-badge premium-cod-badge">100% COD</span><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span><span class="cod-mixpack-action">Convert to this COD Mix Pack</span></button>`).join("")}
         </div>
       </div>`;
   },

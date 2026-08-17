@@ -257,32 +257,36 @@ const Admin = {
   renderTables() {
     const ov = this.overrides();
     const byCat = {};
-    DEFAULT_PRODUCTS.forEach(p => {
-      byCat[p.cat] = byCat[p.cat] || [];
-      byCat[p.cat].push(p);
-    });
+    DEFAULT_PRODUCTS.forEach(p => { byCat[p.cat] = byCat[p.cat] || []; byCat[p.cat].push(p); });
     const wrap = document.getElementById("tables");
-    wrap.innerHTML = Object.keys(byCat).map(cat => `
-      <div class="cat-group">${CATEGORY_META[cat].label}</div>
-      <div class="admin-data-card"><table class="admin-table">
-        <thead><tr><th>Product</th><th>Default price</th><th>Current price</th><th>Type</th></tr></thead>
-        <tbody>
-          ${byCat[cat].map(p => {
-            const o = ov[p.id] || {};
-            const currentPrice = o.price != null ? o.price : p.price;
-            const currentType = o.type || p.type;
-            return `<tr>
-              <td>${p.icon} ${p.name} <span style="color:#9a8f7a;font-size:.8rem">/${p.unit}</span></td>
-              <td class="mono">${CONFIG.CURRENCY} ${p.price}</td>
-              <td><input type="number" min="0" id="price-${p.id}" value="${currentPrice}" class="mono"></td>
-              <td><select id="type-${p.id}">
-                ${Object.entries(PRODUCT_TYPES).map(([val, label]) => `<option value="${val}" ${currentType === val ? "selected" : ""}>${label}</option>`).join("")}
-              </select></td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table></div>
-    `).join("");
+    wrap.innerHTML = Object.keys(byCat).map(cat => {
+      const title = CATEGORY_META[cat].label;
+      return `<div class="cat-group">${title}</div>
+        <div class="admin-products-grid">
+          <h4 class="admin-products-heading">${title} Products</h4>
+          <div class="admin-product-rows">
+            ${byCat[cat].map(p => {
+              const o = ov[p.id] || {};
+              const currentPrice = o.price != null ? o.price : p.price;
+              const currentType = o.type || p.type;
+              return `<div class="admin-product-row">
+                <div class="admin-product-info">
+                  <span class="admin-product-icon">${p.icon}</span>
+                  <span class="admin-product-name">${p.name}</span>
+                  <span class="admin-product-unit">/${p.unit}</span>
+                </div>
+                <div class="admin-product-default"><span class="admin-label">Default</span><span class="mono">${CONFIG.CURRENCY} ${p.price}</span></div>
+                <div class="admin-product-current"><span class="admin-label">Current</span><input type="number" min="0" id="price-${p.id}" value="${currentPrice}" class="mono"></div>
+                <div class="admin-product-type"><span class="admin-label">Type</span>
+                  <select id="type-${p.id}">
+                    ${Object.entries(PRODUCT_TYPES).map(([val, label]) => `<option value="${val}" ${currentType === val ? "selected" : ""}>${label}</option>`).join("")}
+                  </select>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+        </div>`;
+    }).join("");
   },
 
   async saveAll() {
