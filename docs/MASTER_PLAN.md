@@ -169,6 +169,13 @@ without verifying target identity and explicit operator authorization.
   three 44px controls; selected status and Cart `Remove` stay in the dedicated
   footer row. Requested production viewport checks found no card child
   intersections, no offscreen essential content, and no horizontal overflow.
+- Production-verified Total/footer alignment refinement (2026-08-17): Total is
+  aligned at the top of the body group on desktop and centered in the compact
+  mobile action row; both contexts reserve a normal 44px footer row. At
+  390/768/1440, Tomato qty5 category/Cart cards differ by 1.2px or less,
+  Total-to-footer gaps are 39px mobile and 60px desktop, and required
+  Total/footer, stepper/footer, badge/name, and Remove/status intersections are
+  zero. No arbitrary card height or commerce logic was changed.
 - Full-site forensic baseline (verified 2026-08-16 against production): Home,
   all four categories, Contact, Cart, Delivery, Payment, Confirmation, and
   the Super Admin shell were exercised at 320/360/390/412/430/768/1024/1280/

@@ -371,3 +371,10 @@ replace it.*
   checks cover all requested storefront viewports with zero overflow and zero
   console/page errors; production deployment and authorized mutation/restore
   verification remain pending.
+- 2026-08-17: Applied the limited Total/footer geometry refinement. Total now
+  aligns upward within the body, both contexts reserve the same normal footer
+  row, and Cart Remove remains in normal footer flow. Production Playwright
+  verification across Home, all categories, Contact, Cart, Delivery, and
+  Payment at 320–1920 found 0px overflow, zero console errors, zero failed
+  first-party requests, and zero required geometry intersections. No product,
+  cart, checkout, payment, admin, or business logic changed.
