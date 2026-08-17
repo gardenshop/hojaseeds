@@ -83,6 +83,24 @@ function selectedTotalHTML(amount) {
   return `<span class="pc-total-label">Total</span><span class="pc-total-value mono">${CONFIG.CURRENCY} ${amount}</span>`;
 }
 
+function commerceProductCardHTML(p, qty, context = "category") {
+  const isCart = context === "cart";
+  const total = qty * p.price;
+  const wrapper = isCart ? "cart-line" : "product-card";
+  const identity = isCart ? `data-pid="${p.id}"` : `data-product-id="${p.id}"`;
+  const statusId = isCart ? "" : ` id="sel-${p.id}"`;
+  return `<article class="${wrapper} commerce-product-card${qty > 0 ? " in-cart" : ""}" ${identity}>
+    <div class="commerce-title ${isCart ? "cl-title" : "pc-title"}"><div class="commerce-name ${isCart ? "cl-name" : "pc-name"}">${p.name}</div><div class="commerce-badge ${isCart ? "cl-badge" : "pc-badge"}">${productBadgeHTML(p)}</div></div>
+    <div class="commerce-body ${isCart ? "cl-body" : "pc-body"}">
+      <div class="commerce-media ${isCart ? "cl-media" : "pc-media"}">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
+      <div class="commerce-details"><div class="commerce-unit ${isCart ? "cl-unit" : "pc-unit"}">per ${p.unit}</div><div class="commerce-price ${isCart ? "cl-price" : "pc-price"}">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div></div>
+      <div class="commerce-actions ${isCart ? "cl-actions" : "pc-actions"}"><div class="stepper"><button onclick="Views.${isCart ? "cartChangeQty" : "changeQty"}('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button><span class="qty-display"${isCart ? "" : ` id="qty-${p.id}"`}>${qty}</span><button onclick="Views.${isCart ? "cartChangeQty" : "changeQty"}('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button></div></div>
+      <div class="commerce-total ${isCart ? "cl-total" : "pc-total"}"${isCart ? "" : ` id="tot-${p.id}"`}>${selectedTotalHTML(total)}</div>
+    </div>
+    <div class="commerce-footer ${isCart ? "cl-footer" : "pc-status"}"${statusId}${!isCart && qty <= 0 ? ' style="display:none"' : ""}>${inCartStatusHTML(qty)}${isCart ? `<button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>` : ""}</div>
+  </article>`;
+}
+
 // Small "★ Premium" / "100% Advance" markers next to a product's name.
 function productBadgeHTML(p) {
   if (p.type === "premium") return `<span class="badge badge-premium">★ Premium</span>`;
@@ -450,24 +468,7 @@ const Views = {
         <div class="product-list">
           ${products.map(p => {
             const qty = items[p.id] || 0;
-            return `
-            <article class="product-card${qty > 0 ? " in-cart" : ""}" data-product-id="${p.id}" aria-label="${qty > 0 ? `${p.name}, in cart, ${qty} packet${qty === 1 ? "" : "s"}, ${CONFIG.CURRENCY} ${qty * p.price} selected` : p.name}">
-              <div class="pc-title"><div class="pc-name">${p.name}</div><div class="pc-badge">${productBadgeHTML(p)}</div></div>
-              <div class="pc-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
-              <div class="pc-body">
-                <div class="pc-unit">per ${p.unit}</div>
-                <div class="pc-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
-              </div>
-              <div class="pc-actions">
-                <div class="stepper">
-                  <button onclick="Views.changeQty('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button>
-                  <span class="qty-display" id="qty-${p.id}">${qty}</span>
-                  <button onclick="Views.changeQty('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button>
-                </div>
-              </div>
-              <div class="pc-total" id="tot-${p.id}">${selectedTotalHTML(qty * p.price)}</div>
-              <div class="pc-status" id="sel-${p.id}"${qty > 0 ? "" : ' style="display:none"'}>${inCartStatusHTML(qty)}</div>
-            </article>`;
+             return commerceProductCardHTML(p, qty);
           }).join("")}
         </div>
         ${exploreMoreHTML(cat)}
@@ -561,25 +562,7 @@ const Views = {
 
     const groupsHTML = cats.map(cat => {
       const catSubtotal = byCat[cat].reduce((s, l) => s + l.line, 0);
-      const rows = byCat[cat].map(({ p, qty, line }) => `
-        <article class="cart-line in-cart" data-pid="${p.id}">
-          <div class="cl-title"><div class="cl-name">${p.name}</div><div class="cl-badge">${productBadgeHTML(p)}</div></div>
-          <div class="cl-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
-          <div class="cl-body">
-            <div class="cl-unit">per ${p.unit}</div>
-            <div class="cl-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
-          </div>
-          <div class="cl-actions">
-            <div class="stepper">
-              <button onclick="Views.cartChangeQty('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button>
-              <span class="qty-display">${qty}</span>
-              <button onclick="Views.cartChangeQty('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button>
-            </div>
-          </div>
-          <div class="cl-total"><span class="cl-total-label">Total</span><span class="cl-total-value mono">${CONFIG.CURRENCY} ${line}</span></div>
-          <div class="cl-status"><span class="in-cart-badge">✓ In Cart</span><span class="pc-selected-count">${qty} ${qty === 1 ? "packet" : "packets"} selected</span></div>
-          <button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>
-        </article>`).join("");
+       const rows = byCat[cat].map(({ p, qty }) => commerceProductCardHTML(p, qty, "cart")).join("");
       return `<div class="cat-group-title">${CATEGORY_META[cat].label}</div>${rows}<div class="cat-group-subtotal">Subtotal: ${CONFIG.CURRENCY} ${catSubtotal}</div>`;
     }).join("");
 

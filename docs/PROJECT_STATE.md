@@ -363,3 +363,11 @@ replace it.*
   final payment submit CTA across the full viewport matrix. Authorized admin
   save/restore browser capture remains pending; no fake account values or QR
   URLs were introduced.
+- 2026-08-17: Repaired the reproduced product-card geometry defect with one
+  shared category/Cart renderer and content-driven title/body/footer rows;
+  retained the 44px stepper controls and unchanged cart handlers. Admin reads
+  now settle independently so Dashboard, Orders, Customers, and Audit render
+  isolated error states instead of clearing unrelated panels. Local Playwright
+  checks cover all requested storefront viewports with zero overflow and zero
+  console/page errors; production deployment and authorized mutation/restore
+  verification remain pending.

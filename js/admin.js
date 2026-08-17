@@ -106,20 +106,18 @@ const Admin = {
   },
 
   async loadDashboard() {
-    try {
-      const [dashboard, orders, contacts, audit] = await Promise.all([
-        this.authorizedRead("dashboard", 100), this.authorizedRead("orders", 100),
-        this.authorizedRead("contacts", 100), this.authorizedRead("audit", 100)
-      ]);
-      this.renderDashboard(dashboard.summary || {});
-      this.renderOrders(orders.items || []);
-      this.renderCustomers(orders.items || []);
-      this.renderContacts(contacts.items || []);
-      this.renderAudit(audit.items || []);
-    } catch (error) {
-      const message = `<p class="admin-muted">Live admin data could not be loaded: ${escapeHTML(error.message)}</p>`;
-      ["dashboardContent", "ordersContent", "customersContent", "auditContent"].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = message; });
-    }
+    const read = (resource, onSuccess, targetIds) => this.authorizedRead(resource, 100)
+      .then(onSuccess)
+      .catch(error => {
+        const message = `<div class="admin-error"><strong>${escapeHTML(resource)} unavailable.</strong><br>${escapeHTML(error.message)}</div>`;
+        targetIds.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = message; });
+      });
+    await Promise.all([
+      read("dashboard", result => this.renderDashboard(result.summary || {}), ["dashboardContent"]),
+      read("orders", result => { this.renderOrders(result.items || []); this.renderCustomers(result.items || []); }, ["ordersContent", "customersContent"]),
+      read("contacts", result => this.renderContacts(result.items || []), []),
+      read("audit", result => this.renderAudit(result.items || []), ["auditContent"])
+    ]);
   },
 
   settings() {
