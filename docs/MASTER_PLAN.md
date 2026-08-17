@@ -121,8 +121,23 @@ without verifying target identity and explicit operator authorization.
   and three-card `Explore More` cross-sell navigation excluding the current category.
 - The canonical GitHub baseline is `gardenshop/hojaseeds` `main`; the public
   frontend is deployed to Cloudflare Pages project `hojaseeds` under the
-  verified `gisupp@gmail.com` account. R2 is intentionally not used because
-  launch images are safe local gradient/emoji fallbacks.
+  verified `gisupp@gmail.com` account.
+- Real-image baseline (HS-20260817-03): a dedicated Cloudflare R2 bucket
+  `hoja-seeds-images` (created under the same verified `gisupp@gmail.com`
+  account/`85f6a618…a474`, distinct from the account's other project
+  buckets) holds the four locked winter-seed category photos supplied in
+  `assets/` (see `assets/ASSET_DETAILS.md` for provenance/dimensions),
+  optimized to WebP (category cards ~900px/66-84KB, hero ~1800px/176KB) and
+  served publicly over the `images.hojaseeds.pk` custom domain on the
+  existing `hojaseeds.pk` zone. Object paths: `hero/home-garden.webp`,
+  `categories/vegetable-seeds.webp`, `categories/flower-seeds.webp`,
+  `categories/mix-seeds.webp`, `categories/fertilizer.webp` — stable,
+  deterministic, no query-string cache-busting. `.hero` and each
+  `.cat-tile[data-cat]` layer the real photo as the first `background-image`
+  with the original brand gradient as the fallback layer beneath it, so an
+  R2 failure degrades to the existing gradient with no broken-image icon and
+  no layout shift. No product/category card geometry, cart, or checkout
+  logic was touched by this change.
 - The production GIS Web client is
   `804856718644-6eknoj1m8jcsbh5v9f6362p3gac9u5cs.apps.googleusercontent.com`;
   its approved JavaScript origins include `https://www.hojaseeds.pk` and
@@ -202,6 +217,22 @@ without verifying target identity and explicit operator authorization.
   already works. The reported cut-off screenshot was not reproducible against
   live production and is attributed to a stale/cached asset in that browser
   tab, not a code defect; no admin CSS/HTML was changed.
+- Super Admin Products-table hardening (HS-20260817-03): re-investigated the
+  same report after the user reiterated it. Re-tested against live production
+  at 1024/1280/1366/1440/1600/1920, at true 100% zoom and at a 125%-zoom-
+  equivalent effective viewport (physical/1.25) for 1366/1440/1920 — 0px
+  overflow and all four columns visible in every one of 9 configurations,
+  confirmed by screenshot as well as rects. Root cause remains unreproduced,
+  but `.admin-shell` was changed from a fixed `max-width:1280px` to
+  `width:min(1400px, calc(100vw - 32px))`, and `.admin-table` was changed
+  from browser-computed column widths to `table-layout:fixed` with explicit
+  percentage columns (Product 44% / Default Price 17% / Current Price 18% /
+  Type 21%) plus `width:100%` on every input/select, applied at every desktop
+  width (not just the pre-existing <=700px mobile rule). This removes any
+  intrinsic-content-width dependency (long select option text, font metrics)
+  that a browser/OS environment difference could otherwise exploit, as a
+  defensive hardening independent of whether the original report reflected
+  live code.
 - Full-site forensic baseline (verified 2026-08-16 against production): Home,
   all four categories, Contact, Cart, Delivery, Payment, Confirmation, and
   the Super Admin shell were exercised at 320/360/390/412/430/768/1024/1280/

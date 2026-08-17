@@ -67,14 +67,16 @@ replace it.*
 
 ## Readiness
 
-- Production readiness: **96%** (corrected to 95% at the start of
-  HS-20260817-02 per rejected-geometry screenshot evidence, then the card
-  regression was repaired and deployed; up to 96%)
-- Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test,
-  and live analytics vendor delivery (GA4/Meta IDs still placeholders)
-- Expanded operations scope readiness: **92%** (corrected to 91% at the start
-  of HS-20260817-02, then the confirmed-not-reproducible admin overflow audit
-  closed one open question; up to 92%). The responsive admin shell,
+- Production readiness: **96%** (held at 95% at the start of HS-20260817-03
+  since the admin report was still open; the table hardened deterministically
+  and real R2-backed hero/category imagery shipped; up to 96%)
+- Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test
+  (still requires a human or DevTools-MCP-capable session), and live
+  analytics vendor delivery (GA4/Meta IDs still placeholders)
+- Expanded operations scope readiness: **92%** (held at 92% entering
+  HS-20260817-03; admin table hardening and real R2 imagery landed without
+  moving this number since neither closes an expanded-scope gap). The
+  responsive admin shell,
   authenticated bounded reads, derived dashboard/customers views, delivery/
   analytics status panels, and additive AuditLog foundation are implemented.
 - Expanded scope readiness remains capped at 92%: full product CRUD, order
@@ -420,3 +422,43 @@ replace it.*
   numerically for overflow/console/network; screenshots were captured for
   the specific card/admin states shown in this task's images, not the full
   matrix).
+- 2026-08-17 (HS-20260817-03): Re-audited the Super Admin Products-table
+  clipping report at 1024/1280/1366/1440/1600/1920, at true 100% zoom, and at
+  a 125%-zoom-equivalent effective viewport for 1366/1440/1920 (9
+  configurations total) directly against live production — 0px overflow and
+  all four columns visible every time, confirmed with screenshots, not just
+  rects. Root cause remains unreproduced, but hardened `.admin-shell` to
+  `width:min(1400px, calc(100vw - 32px))` and `.admin-table` to
+  `table-layout:fixed` with explicit percentage columns (44/17/18/21%) plus
+  `width:100%`/`box-sizing:border-box` on every input/select at all desktop
+  widths, removing any intrinsic-content-width dependency regardless of
+  whether the report reflected live code. Separately: local image assets
+  (`assets/01-04_*_hd.png`, four locked winter-seed category photos, see
+  `assets/ASSET_DETAILS.md`) were optimized to WebP via a temporary local
+  `sharp` install (not a project dependency) and uploaded to a new dedicated
+  Cloudflare R2 bucket `hoja-seeds-images`, created under the same verified
+  `gisupp@gmail.com`/`85f6a618…a474` account already used for Pages (confirmed
+  distinct from that account's other project buckets before creating). Bound
+  to the `images.hojaseeds.pk` custom domain on the existing `hojaseeds.pk`
+  zone (verified HTTPS 200 on all 5 objects, correct content-type/cache
+  headers). `.hero` and each `.cat-tile[data-cat]` now layer the real photo
+  over the original brand gradient (gradient stays as the fallback layer, so
+  an R2 failure never shows a broken image or blank tile) — no `<img>` tags
+  introduced, category tile buttons already carry `aria-label`. Hero overlay
+  darkened slightly for text contrast against the busier photo. No product,
+  cart, checkout, pricing, or admin-mutation logic touched; card geometry
+  from HS-20260817-02 left untouched. Verified: local Playwright (12s
+  cold-cache wait confirmed all 5 R2 images do load, just with fresh-domain
+  TLS/cold-cache latency in automated headless runs — not a code defect),
+  then directly against `www.hojaseeds.pk` at 390/768/1366/1440/1920 for
+  Home (0px overflow, hero+all 4 tiles confirmed loading from
+  `images.hojaseeds.pk`, 0 console/page/request errors) and at
+  1366/1440/1920 for Admin Products (0px overflow, all 4 columns visible).
+  `npm test` passes. Deployed via `wrangler pages deploy` against the
+  existing `hojaseeds` project, `--branch=main`, `--commit-hash=969b9c8`;
+  deployment `46c49ce8` confirmed live (`css/styles.css` contains
+  `images.hojaseeds.pk`, `admin.html` contains `table-layout:fixed`). Not
+  done this session: the authorized GIS admin sign-in + Tomato price/payment-
+  setting mutation-and-restore test — no DevTools MCP was exposed to attach
+  to the user's existing Chrome session, and headless Playwright cannot
+  complete interactive Google OAuth, so this remains a human-required step.
