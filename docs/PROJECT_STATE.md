@@ -664,5 +664,11 @@ replace it.*
   acceptance remains pending because MCP was unavailable.
 - Local browser matrix passed 320–1920px with zero page overflow, runtime
   errors, or failed requests. `npm test`, `npm run sheets:verify`, and JS
-  syntax validation pass. Production deployment and authenticated mutation
-  verification are pending final release action.
+  syntax validation pass. Commit `818134b` was pushed to `main` and deployed
+  to the existing Cloudflare Pages project `hojaseeds` as deployment
+  `ff7093a7.hojaseeds.pages.dev`. Post-deploy production smoke passed with
+  zero console/request errors and zero page overflow. Production timing at
+  1366px was TTFB 604ms, FCP 1560ms, DOMContentLoaded 1554ms, and load
+  2429ms; the slowest startup resources were Cloudflare Insights and the
+  Google Fonts stylesheet. Authenticated Admin geometry and mutation/restore
+  remain pending because MCP was unavailable.
