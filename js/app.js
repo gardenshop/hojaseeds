@@ -867,7 +867,7 @@ const Views = {
         <button type="button" class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('mix')">Choose a Mix Pack</button>
         <button type="button" class="btn-text-tertiary" onclick="Router.go('mix')">Keep Custom Order</button>${restoreDraft}
         <div class="cod-mixpack-grid">
-           ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card" onclick="Views.convertToCodMixPack('${p.id}')"><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span></button>`).join("")}
+           ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card" onclick="Views.convertToCodMixPack('${p.id}')"><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span><span class="cod-mixpack-cod">100% COD</span><span class="cod-mixpack-action">Convert to this COD Mix Pack</span></button>`).join("")}
         </div>
       </div>`;
   },
@@ -912,11 +912,15 @@ const Views = {
     };
     const details = definitions[method];
     if (!details) { container.innerHTML = `<p class="admin-muted">Select an enabled advance payment method.</p>`; return; }
+    const selectedMethod = document.querySelector('input[name="pay"]:checked')?.value || "Advance Payment";
+    const total = Number(this._order?.total || 0);
+    const amounts = selectedMethod === "Split Payment" ? splitAmounts(total) : { payNow: total, codDue: 0 };
+    const payable = `<div class="payment-payable"><strong>Pay now with ${escapeHTML(method)}: ${CONFIG.CURRENCY} ${amounts.payNow}</strong><span>Pay on delivery: ${CONFIG.CURRENCY} ${amounts.codDue}</span></div>`;
     const qr = typeof details.qr === "string" && /^https?:\/\//i.test(details.qr)
       ? `<img class="payment-qr" src="${escapeHTML(details.qr)}" alt="${escapeHTML(method)} QR or barcode" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="payment-qr-fallback" hidden>QR image unavailable</span>` : "";
     container.innerHTML = method === "Bank Transfer"
-      ? `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Bank</span><span>${escapeHTML(details.bank || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div><div class="payment-detail"><span>Account number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>IBAN</span><span class="mono">${escapeHTML(details.iban || "Not configured")}</span></div>${qr}</div>`
-      : `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div>${qr}</div>`;
+       ? `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Bank</span><span>${escapeHTML(details.bank || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div><div class="payment-detail"><span>Account number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>IBAN</span><span class="mono">${escapeHTML(details.iban || "Not configured")}</span></div>${payable}${qr}</div>`
+       : `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div>${payable}${qr}</div>`;
   },
 
   // "Rs.320 more for FREE delivery" — only meaningful while paying 100%
