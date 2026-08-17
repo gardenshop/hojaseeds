@@ -2,7 +2,7 @@
   "name": "hoja-seeds",
   "private": true,
   "scripts": {
-    "test": "node tests/order-submission.test.js && node tests/tooling.test.mjs",
+    "test": "node tests/order-submission.test.js && node tests/payment-preview.test.js && node tests/tooling.test.mjs",
     "sheets:verify": "node scripts/sheets-verify.mjs",
     "sheets:migrate": "node scripts/sheets-migrate.mjs",
     "products:migrate": "node scripts/products-migrate.mjs",

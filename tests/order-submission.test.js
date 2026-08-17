@@ -65,6 +65,7 @@ function products() {
     { id: "flower-300", name: "Flower 300", cat: "flowers", unit: "packet", icon: "", price: 300, type: "regular", active: true, stock_quantity: 20 },
     { id: "regular-333", name: "Regular 333 (odd price, for split-rounding tests)", cat: "vegetables", unit: "packet", icon: "", price: 333, type: "regular", active: true, stock_quantity: 20 },
     { id: "mixpack-500", name: "Mix Pack 8", cat: "mix", unit: "kit", icon: "", price: 500, type: "standard-collection", active: true, stock_quantity: 20 },
+    { id: "mix-01", name: "Mix Pack 999", cat: "mix", unit: "kit", icon: "", price: 999, type: "standard-collection", active: true, stock_quantity: 20 },
     { id: "fert-500", name: "Fertilizer 500", cat: "fertilizer", unit: "bag", icon: "", price: 500, type: "regular", active: true, stock_quantity: 20 },
     { id: "custom-2000", name: "Custom Collection", cat: "mix", unit: "kit", icon: "", price: 2000, type: "customized-collection", active: true, stock_quantity: 20 }
   ];

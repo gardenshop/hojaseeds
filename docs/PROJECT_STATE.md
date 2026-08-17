@@ -25,7 +25,7 @@ without an explicit "unfreeze <item>" instruction.*
 | Item | Frozen on | What's locked |
 |---|---|---|
 | Checkout flow structure | this session | 4-step flow: Summary (grouped by category) → Delivery (gated) → Payment → Confirmation. Step order, gating logic, and the sticky-bottom-bar-as-primary-CTA pattern are locked. |
-| Commercial rules engine | this session | `computeDeliveryFee()`, product `type` system (regular/premium/standard-collection/customized-collection), and the customized-order COD-block logic in `js/app.js`. |
+| Commercial rules engine | this session | `paymentPreview()` (client single source of truth for delivery fee/order total/payNow/codDue, mirrors `apps-script/Code.gs`'s `computeOrderTotals` order — supersedes the old `computeDeliveryFee()`/`splitAmounts()` pair as of HS-20260817-11), product `type` system (regular/premium/standard-collection/customized-collection), and the customized-order COD-block logic in `js/app.js`. |
 | Visual design tokens | this session | Colour palette, type system (Fraunces/Inter/IBM Plex Mono), and component styles in `css/styles.css` `:root`. |
 | Data schema | this session | `Products`/`Orders`/`Contact`/`Settings` Sheet tabs and their column order (`apps-script/Code.gs`). Changing this breaks existing Sheet setups. |
 | Authoritative order submission | 2026-08-15 | Server current pricing/delivery calculation, customized advance enforcement, server order IDs, locked idempotency, readable success/failure JSON, cart clear only after confirmed success, and purchase analytics only after confirmed success. |
@@ -539,3 +539,59 @@ replace it.*
   Bank-only detail rendering, custom-cart draft conversion, and restore. No
   product, price, cart math, checkout sequence, delivery values, or security
   rules changed. Authorized GIS admin mutation/restore remains pending.
+- 2026-08-17 (HS-20260817-11): **`b8eb5ce`'s admin-grid Products layout
+  (`.admin-products-grid`/`.admin-product-rows`/`.admin-product-row` card
+  grid, one card per product with repeated Default/Current/Type labels) is
+  superseded/rejected.** Restored the pre-`b8eb5ce` compact table renderer
+  from parent `382e2d3` in `Admin.renderTables()` (`js/admin.js`) — one row
+  per product across Product/Default price/Current price/Type — and removed
+  the now-unused grid CSS plus the `.admin-table{display:table}`/
+  `thead{display:none}` override `b8eb5ce` had added on top of it (that
+  override was hiding the restored header row). `admin.html`'s existing
+  inline `.admin-table` rules (`table-layout:fixed`, explicit 44/16/17/23%
+  columns, `box-sizing:border-box` inputs/selects, `.admin-data-card{
+  overflow-x:auto}` container) were untouched by `b8eb5ce` and already
+  satisfy the responsive-containment requirement; screenshot-verified via
+  local Playwright (`.tools/browser-runner`) at 1024/1280/1366/1440/1600/
+  1920 — all 4 columns visible, `Type` column right edge inside the
+  viewport, no page-level horizontal overflow at any width.
+
+  Also fixed a live production crash in the Payment page: the prior commit
+  (`20e12f3`) had deleted the `codPreview`/`advancePreview`/`splitPreview`
+  declarations while the template still referenced them, and called the
+  local `paymentPreview` before its own `const` declaration (TDZ
+  `ReferenceError`) — the Payment step was throwing on every render.
+  Replaced with a single module-level `paymentPreview(method, subtotal)` in
+  `js/app.js` (mirrors `apps-script/Code.gs`'s `computeOrderTotals` order:
+  subtotal → method-specific delivery fee → order total → payNow/codDue,
+  split rounds `codDue` to the nearest Rs.100 with `payNow` absorbing the
+  remainder) that the payment cards, the selected JazzCash/EasyPaisa/Bank
+  channel panel, Order Summary, and the CTA all read from — replacing the
+  previous duplicate, delivery-blind `splitAmounts()`/`computeDeliveryFee()`
+  path that produced the reported Rs.898/897 (unrounded, pre-delivery) split
+  numbers instead of the correct Rs.895/900. Each payment card now shows its
+  own Delivery line. Removed the old
+  "Split uses the standard delivery fee and isn't eligible for the Advance
+  free-delivery benefit" technical note in favour of a live-fee "Delivery
+  Rs.X is included in your order total." line.
+
+  Added `tests/payment-preview.test.js`: exact CASE A-D matrix (Advance
+  1545→free delivery/1545, Split 1545→250/1795/895/900, Advance
+  999→100/1099, COD 999→250/1249) plus client/server equality against
+  `apps-script/Code.gs`'s `submitOrder`. Also fixed two pre-existing,
+  unrelated `tests/order-submission.test.js` bugs that were silently
+  failing `npm test` before this session (a nonexistent `mix-01` product ID
+  referenced by the PAY-K test, uncaught and killing the run) — both
+  predate this ticket's regression. Full suite (`order-submission`,
+  `payment-preview`, `tooling`) passes. End-to-end verified with local
+  Playwright against `index.html` (Tomato ×9, Rs.1620 subtotal): Advance
+  card/JazzCash panel/Summary/CTA all agree at Rs.1620 free delivery; Split
+  card/JazzCash panel/Summary/CTA all agree at delivery Rs.250, order total
+  Rs.1870, pay now Rs.970, doorstep Rs.900 — no mismatch anywhere.
+  No Chrome DevTools MCP was exposed in this runtime; used the repo's
+  existing local Playwright/Chromium install under `.tools/` (no live
+  production browser session or authorized admin Google sign-in was
+  available, so live production admin mutation/restore and the production
+  Cloudflare/Apps Script deploy were not performed — code changes are
+  committed to `main` but not yet deployed to `hojaseeds.pk` or the Apps
+  Script production endpoint).
