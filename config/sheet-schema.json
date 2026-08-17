@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "spreadsheet_title": "Hoja Seeds",
   "sheets": {
     "Products": [
@@ -12,7 +12,7 @@
     "Orders": [
       "timestamp", "orderId", "name", "phone", "address", "city", "postal", "notes",
       "paymentMethod", "advanceMethod", "transactionRef", "items", "subtotal",
-      "deliveryFee", "total"
+      "deliveryFee", "total", "payNow", "codDue"
     ],
     "OrderItems": [
       "orderId", "productId", "productNameSnapshot", "packSizeSnapshot",

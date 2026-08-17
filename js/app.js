@@ -64,13 +64,47 @@ function payableLabelText(method) {
 
 // Delivery fee follows the commercial rules: Advance orders (including
 // every customized-collection order, which is always advance-only) get
-// free delivery at the threshold; COD is a flat normal-courier charge.
+// free delivery at the threshold; 50/50 Split does NOT get that benefit and
+// uses the approved COD fee (no separate SPLIT_DELIVERY_FEE approved for
+// launch); COD is a flat normal-courier charge. Presentation only — the
+// server recomputes this authoritatively from Settings/Products.
 function computeDeliveryFee(paymentMethod, subtotal, forceAdvance) {
   const r = Settings.get();
   if (paymentMethod === "Advance Payment" || forceAdvance) {
     return subtotal >= r.FREE_DELIVERY_THRESHOLD ? 0 : r.ADVANCE_DELIVERY_FEE;
   }
   return r.COD_DELIVERY_FEE;
+}
+
+// Cart-based payment-policy matrix (HS-20260817-04), mirrored client-side
+// for presentation only — apps-script/Code.gs re-derives and enforces this
+// authoritatively from the same cat/type Products fields, never trusting
+// the client. Exact mapping (see Code.gs productPaymentPolicy for the
+// documented rationale):
+//   cat mix + type customized-collection -> "advance_only"
+//   cat mix + type standard-collection   -> "cod"
+//   cat vegetables or flowers            -> "advance_or_split"
+//   anything else (Fertilizer, etc.)     -> "existing" (current COD_ALLOWED behavior)
+function productPaymentPolicy(p) {
+  const cat = String(p.cat || "");
+  const type = String(p.type || "regular");
+  if (cat === "mix" && type === "customized-collection") return "advance_only";
+  if (cat === "mix" && type === "standard-collection") return "cod";
+  if (cat === "vegetables" || cat === "flowers") return "advance_or_split";
+  return "existing";
+}
+function cartPaymentPolicy(lines) {
+  const policies = lines.map(l => productPaymentPolicy(l.p));
+  if (policies.includes("advance_only")) return "advance_only";
+  if (policies.includes("advance_or_split")) return "advance_or_split";
+  return "cod";
+}
+
+// Deterministic 50/50 split, mirrored client-side for display only — the
+// server computes and returns the authoritative payNow/codDue.
+function splitAmounts(total) {
+  const payNow = Math.ceil(total / 2);
+  return { payNow, codDue: total - payNow };
 }
 
 // Category product-card status and total presentation. Cart state remains
@@ -463,7 +497,7 @@ const Views = {
           <p class="tagline">${meta.tagline}</p>
         </div>
         <div class="commerce-info-bar" aria-label="Delivery and payment information">
-          ${r.COD_ALLOWED ? `<div class="trust-chip"><span class="ic">💵</span>COD Available</div>` : ""}
+          ${r.COD_ALLOWED && cat !== "vegetables" && cat !== "flowers" ? `<div class="trust-chip"><span class="ic">💵</span>COD Available</div>` : ""}
           <div class="trust-chip"><span class="ic">🚚</span>Advance Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE}</div>
           <div class="trust-chip"><span class="ic">🌱</span>Free Delivery ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}+</div>
         </div>
@@ -695,7 +729,14 @@ const Views = {
     }
     const r = Settings.get();
     const hasCustomized = lines.some(l => l.p.type === "customized-collection");
-    const codAllowed = r.COD_ALLOWED && !hasCustomized;
+    // Cart-based payment-policy matrix: "cod" carts (fixed Mix Packs and/or
+    // Fertilizer — nothing individually-selected) may use Cash on Delivery;
+    // "advance_or_split"/"advance_only" carts (any individually selected
+    // vegetable/flower packet, or a customized-collection kit) may not.
+    const cartPolicy = cartPaymentPolicy(lines);
+    const codAllowed = cartPolicy === "cod" && r.COD_ALLOWED;
+    const splitAllowed = cartPolicy === "advance_or_split";
+    const containsMixPack = lines.some(l => productPaymentPolicy(l.p) === "cod" && l.p.cat === "mix");
     const subtotal = lines.reduce((s, l) => s + l.line, 0);
     const defaultMethod = codAllowed ? "Cash on Delivery" : "Advance Payment";
     const defaultFee = computeDeliveryFee(defaultMethod, subtotal, !codAllowed);
@@ -703,6 +744,7 @@ const Views = {
     this._order.deliveryFee = defaultFee;
     this._order.total = subtotal + defaultFee;
     this._order.codAllowed = codAllowed;
+    this._order.splitAllowed = splitAllowed;
     const paymentSettings = Settings.get();
     const advanceMethods = [
       { id: "JazzCash", label: "JazzCash", enabled: paymentSettings.JAZZCASH_ENABLED },
@@ -713,11 +755,16 @@ const Views = {
       ? this._order.advanceMethod : advanceMethods[0]?.id || "";
     this._order.advanceMethod = selectedAdvanceMethod;
 
+    // Restricted note: customized-collection keeps its existing strict
+    // advance-only copy; a custom-selection cart (vegetables/flowers) gets
+    // the new explanatory copy instead of the old generic COD-unavailable line.
     const restrictedNote = !codAllowed
       ? `<div class="payment-restricted-note">${hasCustomized
           ? "Customized orders are prepared specially for you and require 100% advance payment."
-          : "Cash on Delivery isn't available right now — this order requires advance payment."}</div>`
-      : "";
+          : "This order contains your personally selected seed packets — these are prepared to order and require Advance or a 50/50 Split, not Cash on Delivery."}</div>`
+      : (containsMixPack ? `<div class="pay-cod-banner"><span class="pay-cod-banner-icon" aria-hidden="true">✓</span><div><strong>100% Cash on Delivery Available</strong><p>These ready-made Mix Packs can be paid completely at your doorstep.</p></div></div>` : "");
+
+    const codMixUpsell = !codAllowed ? this.codMixPackUpsellHTML() : "";
 
     app.innerHTML = `
       <section class="page narrow">
@@ -733,17 +780,24 @@ const Views = {
               <div class="pay-options">
                 ${codAllowed ? `
                 <label class="pay-option" id="payCOD">
-                  <input type="radio" name="pay" value="Cash on Delivery" checked onchange="Views.selectPay('payCOD','payAdvance')">
+                  <input type="radio" name="pay" value="Cash on Delivery" checked onchange="Views.selectPay('payCOD','payAdvance,paySplit')">
                   <span class="pay-option-icon" aria-hidden="true">💵</span><div class="pay-option-copy"><div class="pay-option-title">Cash on Delivery</div>
                   <div class="pay-option-sub">Pay when it arrives · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
                   </div>
                 </label>` : ""}
                 <label class="pay-option ${codAllowed ? "" : "selected"}" id="payAdvance">
-                  <input type="radio" name="pay" value="Advance Payment" ${codAllowed ? "" : "checked"} onchange="Views.selectPay('payAdvance','payCOD')">
-                  <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Advance Payment <span class="payment-benefit">FREE DELIVERY BENEFIT</span></div>
-                  <div class="pay-option-sub">JazzCash · EasyPaisa · Bank Transfer · Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE} (free at ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}+)</div>
+                  <input type="radio" name="pay" value="Advance Payment" ${codAllowed ? "" : "checked"} onchange="Views.selectPay('payAdvance','payCOD,paySplit')">
+                  <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Pay 100% in Advance <span class="payment-benefit">FREE DELIVERY BENEFIT</span></div>
+                  <div class="pay-option-sub">Best value · JazzCash · EasyPaisa · Bank Transfer · Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE} (free at ${CONFIG.CURRENCY} ${r.FREE_DELIVERY_THRESHOLD}+)</div>
                   </div>
                 </label>
+                ${splitAllowed ? `
+                <label class="pay-option" id="paySplit">
+                  <input type="radio" name="pay" value="Split Payment" onchange="Views.selectPay('paySplit','payCOD,payAdvance')">
+                  <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay 50% Now + 50% on Delivery</div>
+                  <div class="pay-option-sub">Lower advance, remaining amount at your doorstep · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
+                  </div>
+                </label>` : ""}
               </div>
 
               <div class="free-delivery-progress" id="freeDeliveryProgress"></div>
@@ -757,6 +811,7 @@ const Views = {
                 <div class="field"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
                 <p class="advance-note">We'll confirm your payment and dispatch your order once received.</p>
               </div>
+              ${codMixUpsell}
             </div>
             <div class="summary-card">
               <h3>Order Summary</h3>
@@ -764,8 +819,11 @@ const Views = {
               <div class="summary-line"><span>Items subtotal</span><span class="mono">${CONFIG.CURRENCY} ${subtotal}</span></div>
               <div class="summary-line"><span>Delivery</span><span class="mono" id="summaryDeliveryFee">${CONFIG.CURRENCY} ${defaultFee}</span></div>
               <div class="summary-line"><span>Payment method</span><span id="summaryPaymentMethod">${defaultMethod}</span></div>
-              <div class="summary-line total"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span id="summaryTotal">${CONFIG.CURRENCY} ${subtotal + defaultFee}</span></div>
-              <button class="inline-submit" type="submit" id="submitBtn">Confirm & Place Order — ${CONFIG.CURRENCY} ${subtotal + defaultFee}</button>
+              <div class="summary-line total"><span>Order total</span><span class="mono" id="summaryTotal">${CONFIG.CURRENCY} ${subtotal + defaultFee}</span></div>
+              <div class="summary-line" id="summaryPayNowRow"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span class="mono" id="summaryPayNow"></span></div>
+              <div class="summary-line" id="summaryCodDueRow"><span>Pay on delivery</span><span class="mono" id="summaryCodDue"></span></div>
+              <button class="inline-submit" type="submit" id="submitBtn"></button>
+              <p class="admin-muted" id="splitSubnote" style="text-align:center;margin-top:8px"></p>
               <div id="orderStatus"></div>
             </div>
           </div>
@@ -779,7 +837,25 @@ const Views = {
     if (codAllowed) document.getElementById("payCOD").classList.add("selected");
     this.renderAdvanceMethod(selectedAdvanceMethod);
     this.renderFreeDeliveryProgress(defaultMethod, subtotal, hasCustomized);
+    this.updateDeliveryFee();
     Analytics.addPaymentInfo(lines, subtotal, defaultMethod);
+  },
+
+  // Section 7: for a custom-selection order (COD unavailable), show the
+  // actual current fixed Mix Pack products (standard-collection, cat mix)
+  // as a COD-eligible alternative. Real names/prices only; navigating to
+  // Mix Seeds never mutates or replaces the customer's existing cart.
+  codMixPackUpsellHTML() {
+    const mixPacks = Prices.get().filter(p => p.cat === "mix" && p.type === "standard-collection").slice(0, 3);
+    if (!mixPacks.length) return "";
+    return `
+      <div class="cod-mixpack-upsell">
+        <p class="cod-mixpack-question"><strong>Want to pay 100% Cash on Delivery?</strong><br>Choose one of our ready-made Mix Packs instead.</p>
+        <button type="button" class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('mix')">View COD Mix Packs</button>
+        <div class="cod-mixpack-grid">
+          ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card" onclick="Router.go('mix')"><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span></button>`).join("")}
+        </div>
+      </div>`;
   },
 
   paymentDisplaySettings() {
@@ -815,12 +891,17 @@ const Views = {
       : `<div class="selected-payment-card"><strong>${escapeHTML(method)}</strong><div class="payment-detail"><span>Number</span><span class="mono">${escapeHTML(details.number || "Not configured")}</span></div><div class="payment-detail"><span>Account title</span><span>${escapeHTML(details.title || "Not configured")}</span></div>${qr}</div>`;
   },
 
-  // "Rs.320 more for FREE delivery" — only meaningful while paying in
-  // advance (COD's fee doesn't move with subtotal).
+  // "Rs.320 more for FREE delivery" — only meaningful while paying 100%
+  // advance (COD and Split's fees don't move with subtotal; Split never
+  // qualifies for the advance free-delivery benefit).
   renderFreeDeliveryProgress(method, subtotal, hasCustomized) {
     const el = document.getElementById("freeDeliveryProgress");
     if (!el) return;
     const r = Settings.get();
+    if (method === "Split Payment") {
+      el.innerHTML = `<p class="admin-muted">50/50 Split uses the standard delivery fee and isn't eligible for the Advance free-delivery benefit.</p>`;
+      return;
+    }
     if (method !== "Advance Payment" && !hasCustomized) { el.innerHTML = ""; return; }
     const pct = Math.min(100, Math.round((subtotal / r.FREE_DELIVERY_THRESHOLD) * 100));
     if (subtotal >= r.FREE_DELIVERY_THRESHOLD) {
@@ -833,14 +914,18 @@ const Views = {
       <div class="fdp-track"><div class="fdp-fill" style="width:${pct}%"></div></div>`;
   },
 
-  selectPay(onId, offId) {
+  selectPay(onId, offIds) {
     document.getElementById(onId).classList.add("selected");
-    document.getElementById(offId)?.classList.remove("selected");
+    String(offIds || "").split(",").filter(Boolean).forEach(id => document.getElementById(id)?.classList.remove("selected"));
     this.updateDeliveryFee();
-    if (onId === "payAdvance") this.renderAdvanceMethod(this._order.advanceMethod);
+    if (onId === "payAdvance" || onId === "paySplit") this.renderAdvanceMethod(this._order.advanceMethod);
     refreshStickyBar();
   },
 
+  // Renders the Section 8/10 money breakdown (Order total / Pay now / Pay on
+  // delivery) and the Section 10 confirm-button copy for whichever payment
+  // method is selected. Split's payNow/codDue are computed client-side only
+  // for display — the server recomputes and enforces the real amounts.
   updateDeliveryFee() {
     const method = document.querySelector('input[name="pay"]:checked').value;
     const hasCustomized = Cart.flatLines().some(l => l.p.type === "customized-collection");
@@ -849,12 +934,42 @@ const Views = {
     const total = subtotal + fee;
     document.getElementById("summaryDeliveryFee").textContent = `${CONFIG.CURRENCY} ${fee}`;
     document.getElementById("summaryPaymentMethod").textContent = method;
-    document.getElementById("payableLabel").textContent = payableLabelText(method);
     document.getElementById("summaryTotal").textContent = `${CONFIG.CURRENCY} ${total}`;
-    document.getElementById("submitBtn").textContent = `Confirm & Place Order — ${CONFIG.CURRENCY} ${total}`;
-    document.getElementById("advanceDetails").style.display = method === "Advance Payment" ? "block" : "none";
+    document.getElementById("advanceDetails").style.display = method === "Cash on Delivery" ? "none" : "block";
     this._order.deliveryFee = fee;
     this._order.total = total;
+
+    const payNowRow = document.getElementById("summaryPayNowRow");
+    const codDueRow = document.getElementById("summaryCodDueRow");
+    const payableLabel = document.getElementById("payableLabel");
+    const payNowEl = document.getElementById("summaryPayNow");
+    const codDueEl = document.getElementById("summaryCodDue");
+    const submitBtn = document.getElementById("submitBtn");
+    const splitSubnote = document.getElementById("splitSubnote");
+    if (method === "Cash on Delivery") {
+      payNowRow.style.display = "none";
+      codDueRow.style.display = "flex";
+      codDueEl.textContent = `${CONFIG.CURRENCY} ${total}`;
+      submitBtn.textContent = `Place COD Order — ${CONFIG.CURRENCY} ${total} due at delivery`;
+      splitSubnote.textContent = "";
+    } else if (method === "Advance Payment") {
+      payNowRow.style.display = "flex";
+      codDueRow.style.display = "none";
+      payableLabel.textContent = payableLabelText(method);
+      payNowEl.textContent = `${CONFIG.CURRENCY} ${total}`;
+      submitBtn.textContent = `Confirm Advance Order — Pay ${CONFIG.CURRENCY} ${total} now`;
+      splitSubnote.textContent = "";
+    } else { // Split Payment
+      const { payNow, codDue } = splitAmounts(total);
+      payNowRow.style.display = "flex";
+      codDueRow.style.display = "flex";
+      payableLabel.textContent = "Pay now";
+      payNowEl.textContent = `${CONFIG.CURRENCY} ${payNow}`;
+      codDueEl.textContent = `${CONFIG.CURRENCY} ${codDue}`;
+      submitBtn.textContent = `Confirm Order — Pay ${CONFIG.CURRENCY} ${payNow} now`;
+      splitSubnote.textContent = `${CONFIG.CURRENCY} ${codDue} will be payable on delivery.`;
+    }
+
     this.renderFreeDeliveryProgress(method, subtotal, hasCustomized);
     Analytics.addPaymentInfo(Cart.flatLines(), subtotal, method);
   },
@@ -863,10 +978,15 @@ const Views = {
     e.preventDefault();
     const status = document.getElementById("orderStatus");
     let paymentMethod = document.querySelector('input[name="pay"]:checked').value;
-    if (this._order && this._order.codAllowed === false) paymentMethod = "Advance Payment";
+    // Defensive safety net only — COD/Split radios simply aren't rendered
+    // when this._order.codAllowed/splitAllowed are false, so this should
+    // never actually trigger in normal use.
+    if (paymentMethod === "Cash on Delivery" && this._order && this._order.codAllowed === false) paymentMethod = "Advance Payment";
+    if (paymentMethod === "Split Payment" && this._order && this._order.splitAllowed === false) paymentMethod = "Advance Payment";
 
-    const transactionReference = paymentMethod === "Advance Payment" ? document.getElementById("o-txn-ref").value.trim() : "";
-    if (paymentMethod === "Advance Payment" && transactionReference.length < 3) {
+    const requiresAdvanceChannel = paymentMethod === "Advance Payment" || paymentMethod === "Split Payment";
+    const transactionReference = requiresAdvanceChannel ? document.getElementById("o-txn-ref").value.trim() : "";
+    if (requiresAdvanceChannel && transactionReference.length < 3) {
       this.showOrderError(status, "Please add a valid transaction ID so we can verify the payment.");
       return;
     }
@@ -899,7 +1019,7 @@ const Views = {
       },
       payment: {
         method: paymentMethod,
-        advanceMethod: paymentMethod === "Advance Payment" ? document.getElementById("o-advance-method").value : "",
+        advanceMethod: requiresAdvanceChannel ? document.getElementById("o-advance-method").value : "",
         transactionReference
       },
       items: lines.map(line => ({ productId: line.p.id, quantity: line.qty }))
@@ -932,7 +1052,7 @@ const Views = {
     } else {
       this.showOrderError(status, result.error?.message || "Couldn't place the order. Please try again shortly.");
       inlineBtn.disabled = false;
-      inlineBtn.textContent = `Confirm & Place Order — ${CONFIG.CURRENCY} ${this._order.total}`;
+      this.updateDeliveryFee(); // restores the method-specific submit-button copy
       if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.textContent = "Confirm & Place Order"; }
     }
   },
@@ -961,8 +1081,21 @@ const Views = {
     document.querySelectorAll(".nav-tab").forEach(b => b.classList.remove("active"));
     window.scrollTo({ top: 0, behavior: "smooth" });
     const isCOD = payload.paymentMethod === "Cash on Delivery";
+    const isSplit = payload.paymentMethod === "Split Payment";
     const customer = payload.customer || {};
     const itemSummary = payload.items.map(item => `${item.name} x${item.quantity}`).join(", ");
+    // Section 11: COD shows one "Pay on delivery" amount; full Advance shows
+    // one "Advance payment submitted" amount (never "paid" — pending
+    // verification); Split shows both amounts prominently, side by side.
+    const amountBlockHTML = isSplit
+      ? `<div class="ps-amount-split">
+           <div class="ps-amount advance"><span class="ps-amount-label">Advance submitted</span><span class="ps-amount-value">${CONFIG.CURRENCY} ${payload.payNow}</span></div>
+           <div class="ps-amount cod"><span class="ps-amount-label">Pay on delivery</span><span class="ps-amount-value">${CONFIG.CURRENCY} ${payload.codDue}</span></div>
+         </div>`
+      : `<div class="ps-amount ${isCOD ? "cod" : "advance"}">
+           <span class="ps-amount-label">${isCOD ? "Pay on delivery" : "Advance payment submitted"}</span>
+           <span class="ps-amount-value">${CONFIG.CURRENCY} ${payload.total}</span>
+         </div>`;
     document.getElementById("app").innerHTML = `
       <section class="page narrow">
         ${journeyBarHTML(4)}
@@ -974,14 +1107,13 @@ const Views = {
         </div>
         <div class="payment-summary-card">
           <div class="ps-row"><span>Order ID</span><span class="mono">${escapeHTML(payload.orderId)}</span></div>
-          <div class="ps-amount ${isCOD ? "cod" : "advance"}">
-            <span class="ps-amount-label">${isCOD ? "Pay on delivery" : "Advance payment submitted"}</span>
-            <span class="ps-amount-value">${CONFIG.CURRENCY} ${payload.total}</span>
-          </div>
+          ${amountBlockHTML}
           <div class="ps-row"><span>Payment method</span><span>${escapeHTML(payload.paymentMethod)}${payload.advanceMethod ? " — " + escapeHTML(payload.advanceMethod) : ""}</span></div>
           <p class="advance-note">${isCOD
             ? "Have this amount ready in cash when your order arrives."
-            : "Your payment is awaiting verification. We'll dispatch after it is verified."}</p>
+            : isSplit
+              ? "Your advance is awaiting verification; the remaining amount is payable in cash when your order arrives."
+              : "Your payment is awaiting verification. We'll dispatch after it is verified."}</p>
         </div>
         <details class="order-details-card">
           <summary>Order details</summary>

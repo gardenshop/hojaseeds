@@ -5,7 +5,9 @@
  * and header rows — see README.md Step 1):
  *
  *   Products  | id | name | cat | unit | icon | price | type
- *   Orders    | timestamp | orderId | name | phone | address | city | postal | notes | paymentMethod | advanceMethod | transactionRef | items | subtotal | deliveryFee | total
+ *   Orders    | timestamp | orderId | name | phone | address | city | postal | notes | paymentMethod | advanceMethod | transactionRef | items | subtotal | deliveryFee | total | payNow | codDue
+ *     (paymentMethod is one of "Cash on Delivery" / "Advance Payment" /
+ *      "Split Payment" — see the cart payment-policy matrix below)
  *   Contact   | timestamp | name | phone | message
  *   Settings  | key | value
  *     (rows: FREE_DELIVERY_THRESHOLD, ADVANCE_DELIVERY_FEE, COD_DELIVERY_FEE,
@@ -115,8 +117,38 @@ const ORDER_DEFAULT_RULES = {
   COD_DELIVERY_FEE: 250,
   COD_ALLOWED: true
 };
-const ORDER_PAYMENT_METHODS = ["Cash on Delivery", "Advance Payment"];
+const ORDER_PAYMENT_METHODS = ["Cash on Delivery", "Advance Payment", "Split Payment"];
 const ORDER_ADVANCE_METHODS = ["JazzCash", "EasyPaisa", "Bank Transfer"];
+
+// Cart-based payment-policy matrix (HS-20260817-04). Derived purely from the
+// existing Products `cat`/`type` columns — no new Sheet column — so it stays
+// server-authoritative and requires no product migration. Exact mapping:
+//   cat === "mix" && type === "customized-collection" -> "advance_only"
+//     (unchanged existing rule: advance only, no COD, no split)
+//   cat === "mix" && type === "standard-collection"   -> "cod"
+//     (approved fixed Mix Packs: 100% COD allowed, plus Advance if desired)
+//   cat === "vegetables" || cat === "flowers"          -> "advance_or_split"
+//     (individually selected packets: COD blocked; Advance or 50/50 Split)
+//   anything else (Fertilizer, any other/ambiguous product) -> "existing"
+//     (preserve current storewide COD_ALLOWED behavior, unchanged)
+function productPaymentPolicy(product) {
+  const cat = String(product.cat || product.category || "");
+  const type = String(product.type || "regular");
+  if (cat === "mix" && type === "customized-collection") return "advance_only";
+  if (cat === "mix" && type === "standard-collection") return "cod";
+  if (cat === "vegetables" || cat === "flowers") return "advance_or_split";
+  return "existing";
+}
+
+// Cart-level policy is the single most restrictive item policy present.
+// Precedence: advance_only > advance_or_split > cod/existing (both of which
+// permit COD, subject to settings.COD_ALLOWED, and Advance).
+function cartPaymentPolicy(orderItems) {
+  const policies = orderItems.map(item => productPaymentPolicy(item));
+  if (policies.indexOf("advance_only") !== -1) return "advance_only";
+  if (policies.indexOf("advance_or_split") !== -1) return "advance_or_split";
+  return "cod";
+}
 const PAYMENT_DISPLAY_DEFAULTS = {
   JAZZCASH_ENABLED: true,
   JAZZCASH_NUMBER: "0300-XXXXXXX",
@@ -222,17 +254,28 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
   });
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const hasCustomized = orderItems.some(item => item.type === "customized-collection");
-  if (paymentMethod === "Cash on Delivery" && (!settings.COD_ALLOWED || hasCustomized)) {
-    throw new OrderError(
-      hasCustomized ? "CUSTOMIZED_REQUIRES_ADVANCE" : "COD_UNAVAILABLE",
-      hasCustomized ? "Customized collections require advance payment." : "Cash on Delivery is not available."
-    );
+  const cartPolicy = cartPaymentPolicy(orderItems);
+
+  if (cartPolicy === "advance_only" && paymentMethod !== "Advance Payment") {
+    throw new OrderError("CUSTOMIZED_REQUIRES_ADVANCE", "Customized collections require advance payment.");
+  }
+  if (cartPolicy === "advance_or_split") {
+    if (paymentMethod === "Cash on Delivery") {
+      throw new OrderError("CUSTOM_SELECTION_REQUIRES_ADVANCE", "Individually selected seed packets require advance payment or a 50/50 split — Cash on Delivery is only available on ready-made Mix Packs.");
+    }
+  }
+  if (cartPolicy === "cod") {
+    if (paymentMethod === "Cash on Delivery" && !settings.COD_ALLOWED) {
+      throw new OrderError("COD_UNAVAILABLE", "Cash on Delivery is not available.");
+    }
+    if (paymentMethod === "Split Payment") {
+      throw new OrderError("SPLIT_NOT_APPLICABLE", "Split payment is not offered for this cart.");
+    }
   }
 
   let advanceMethod = "";
   let transactionReference = "";
-  if (paymentMethod === "Advance Payment") {
+  if (paymentMethod === "Advance Payment" || paymentMethod === "Split Payment") {
     advanceMethod = requiredText(paymentInput.advanceMethod, "Advance payment method", 3, 40);
     if (ORDER_ADVANCE_METHODS.indexOf(advanceMethod) === -1) {
       throw new OrderError("INVALID_ADVANCE_METHOD", "Choose a supported advance payment method.");
@@ -242,9 +285,23 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
     transactionReference = requiredText(paymentInput.transactionReference, "Transaction reference", 3, 100);
   }
 
+  // Delivery fee: Advance keeps the existing free-delivery-threshold benefit.
+  // Split does NOT qualify for that benefit — it uses the approved COD fee
+  // (no separate SPLIT_DELIVERY_FEE has been approved for launch). COD (Mix
+  // Pack) keeps the existing COD fee.
   const deliveryFee = paymentMethod === "Advance Payment"
     ? (subtotal >= settings.FREE_DELIVERY_THRESHOLD ? 0 : settings.ADVANCE_DELIVERY_FEE)
     : settings.COD_DELIVERY_FEE;
+  const total = subtotal + deliveryFee;
+
+  // Split is calculated server-side only, on the final total, with
+  // deterministic rounding: pay-now rounds up, COD-due absorbs the
+  // remainder — so payNow + codDue always equals total exactly.
+  let payNow, codDue;
+  if (paymentMethod === "Advance Payment") { payNow = total; codDue = 0; }
+  else if (paymentMethod === "Cash on Delivery") { payNow = 0; codDue = total; }
+  else { payNow = Math.ceil(total / 2); codDue = total - payNow; }
+
   return {
     ok: true,
     orderId: orderId || generateOrderId(payload.idempotencyKey),
@@ -253,11 +310,13 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
     paymentMethod: paymentMethod,
     advanceMethod: advanceMethod,
     transactionReference: transactionReference,
-    paymentStatus: paymentMethod === "Advance Payment" ? "Payment Verification" : "COD Due",
+    paymentStatus: paymentMethod === "Cash on Delivery" ? "COD Due" : "Payment Verification",
     items: orderItems,
     subtotal: subtotal,
     deliveryFee: deliveryFee,
-    total: subtotal + deliveryFee
+    total: total,
+    payNow: payNow,
+    codDue: codDue
   };
 }
 
@@ -464,7 +523,7 @@ function readAdminOrders(limit) {
       order.items = Array.isArray(snapshot) ? snapshot : snapshot.items || [];
     } catch (error) { order.items = []; }
     delete order.idempotencyFingerprint;
-    order.paymentStatus = order.paymentStatus || (order.paymentMethod === "Advance Payment" ? "Payment Verification" : "COD Due");
+    order.paymentStatus = order.paymentStatus || (order.paymentMethod === "Cash on Delivery" ? "COD Due" : "Payment Verification");
     order.orderStatus = order.orderStatus || "New";
     return order;
   });
@@ -505,7 +564,8 @@ function logOrder(o) {
     safeSheetText(o.customer.address), safeSheetText(o.customer.city),
     safeSheetText(o.customer.postal), safeSheetText(o.customer.notes),
     o.paymentMethod, o.advanceMethod, safeSheetText(o.transactionReference),
-    JSON.stringify({ fingerprint: o.idempotencyFingerprint, items: o.items }), o.subtotal, o.deliveryFee, o.total
+    JSON.stringify({ fingerprint: o.idempotencyFingerprint, items: o.items }), o.subtotal, o.deliveryFee, o.total,
+    o.payNow, o.codDue
   ]);
 }
 
@@ -546,6 +606,18 @@ function restoreOrder(headers, row) {
   const fingerprint = Array.isArray(snapshot) ? "" : String(snapshot.fingerprint || "");
   if (!Array.isArray(items)) throw new OrderError("INVALID_ORDER_RECORD", "The original order items are invalid.");
   const paymentMethod = String(value("paymentMethod"));
+  const total = Number(value("total"));
+  // payNow/codDue are additive columns; older rows written before the
+  // schema migration derive the same values from paymentMethod + total so
+  // idempotent replay of a pre-migration order still returns a consistent
+  // amount breakdown.
+  const hasPayNowColumn = headers.indexOf("payNow") !== -1;
+  const payNow = hasPayNowColumn && value("payNow") !== "" && value("payNow") != null
+    ? Number(value("payNow"))
+    : (paymentMethod === "Cash on Delivery" ? 0 : total);
+  const codDue = hasPayNowColumn && value("codDue") !== "" && value("codDue") != null
+    ? Number(value("codDue"))
+    : (paymentMethod === "Cash on Delivery" ? total : 0);
   return {
     ok: true,
     orderId: String(value("orderId")),
@@ -561,12 +633,14 @@ function restoreOrder(headers, row) {
     paymentMethod: paymentMethod,
     advanceMethod: String(value("advanceMethod") || ""),
     transactionReference: restoreSheetText(value("transactionRef")),
-    paymentStatus: paymentMethod === "Advance Payment" ? "Payment Verification" : "COD Due",
+    paymentStatus: paymentMethod === "Cash on Delivery" ? "COD Due" : "Payment Verification",
     idempotencyFingerprint: fingerprint,
     items: items,
     subtotal: Number(value("subtotal")),
     deliveryFee: Number(value("deliveryFee")),
-    total: Number(value("total"))
+    total: total,
+    payNow: payNow,
+    codDue: codDue
   };
 }
 

@@ -10,7 +10,7 @@ function createBackend(products, settings, auth = {}) {
   const rows = {
     Products: [Object.keys(products[0]), ...products.map(Object.values)],
     Settings: [["key", "value"], ...Object.entries(settings)],
-    Orders: [["timestamp", "orderId", "name", "phone", "address", "city", "postal", "notes", "paymentMethod", "advanceMethod", "transactionRef", "items", "subtotal", "deliveryFee", "total"]],
+    Orders: [["timestamp", "orderId", "name", "phone", "address", "city", "postal", "notes", "paymentMethod", "advanceMethod", "transactionRef", "items", "subtotal", "deliveryFee", "total", "payNow", "codDue"]],
     Contact: [["timestamp", "name", "phone", "message"]]
   };
   const properties = new Map();
@@ -62,6 +62,10 @@ function products() {
     { id: "regular-500", name: "Regular 500", cat: "vegetables", unit: "packet", icon: "", price: 500, type: "regular", active: true, stock_quantity: 20 },
     { id: "regular-1000", name: "Regular 1000", cat: "vegetables", unit: "packet", icon: "", price: 1000, type: "regular", active: true, stock_quantity: 20 },
     { id: "regular-1500", name: "Regular 1500", cat: "vegetables", unit: "packet", icon: "", price: 1500, type: "regular", active: true, stock_quantity: 20 },
+    { id: "flower-300", name: "Flower 300", cat: "flowers", unit: "packet", icon: "", price: 300, type: "regular", active: true, stock_quantity: 20 },
+    { id: "regular-333", name: "Regular 333 (odd price, for split-rounding tests)", cat: "vegetables", unit: "packet", icon: "", price: 333, type: "regular", active: true, stock_quantity: 20 },
+    { id: "mixpack-500", name: "Mix Pack 8", cat: "mix", unit: "kit", icon: "", price: 500, type: "standard-collection", active: true, stock_quantity: 20 },
+    { id: "fert-500", name: "Fertilizer 500", cat: "fertilizer", unit: "bag", icon: "", price: 500, type: "regular", active: true, stock_quantity: 20 },
     { id: "custom-2000", name: "Custom Collection", cat: "mix", unit: "kit", icon: "", price: 2000, type: "customized-collection", active: true, stock_quantity: 20 }
   ];
 }
@@ -88,7 +92,12 @@ function order(overrides = {}) {
       notes: ""
     },
     payment: { method: "Cash on Delivery", advanceMethod: "", transactionReference: "" },
-    items: [{ productId: "regular-500", quantity: 1 }]
+    // Default item is a Fertilizer product (payment_policy "existing" —
+    // preserves the pre-HS-04 storewide COD behavior) so every pre-existing
+    // generic assertion below keeps its original meaning unchanged; the new
+    // cart-payment-policy tests below use "regular-500"/"flower-300"/
+    // "mixpack-500"/"custom-2000" explicitly.
+    items: [{ productId: "fert-500", quantity: 1 }]
   };
   return Object.assign(base, overrides);
 }
@@ -96,6 +105,13 @@ function order(overrides = {}) {
 function advance(productId, quantity = 1) {
   return order({
     payment: { method: "Advance Payment", advanceMethod: "JazzCash", transactionReference: "TXN123456" },
+    items: [{ productId, quantity }]
+  });
+}
+
+function split(productId, quantity = 1) {
+  return order({
+    payment: { method: "Split Payment", advanceMethod: "JazzCash", transactionReference: "TXN123456" },
     items: [{ productId, quantity }]
   });
 }
@@ -153,7 +169,7 @@ async function backendTests() {
   }
   {
     const { api } = createBackend(products(), rules);
-    const tampered = order({ subtotal: 1, deliveryFee: 0, total: 1, items: [{ productId: "regular-500", quantity: 1, price: 1 }] });
+    const tampered = order({ subtotal: 1, deliveryFee: 0, total: 1, items: [{ productId: "fert-500", quantity: 1, price: 1 }] });
     const result = api.submitOrder(tampered);
     assert.equal(result.subtotal, 500, "F: tampered price ignored");
     assert.equal(result.deliveryFee, 250, "G: tampered delivery ignored");
@@ -205,6 +221,127 @@ async function backendTests() {
     assert.equal(result.ok, true, "reliable response: doPost returns readable success JSON");
     const rejected = backend.api.doPost({ postData: { contents: JSON.stringify(order({ items: [{ productId: "missing", quantity: 1 }] })) } });
     assert.equal(JSON.parse(rejected.text).ok, false, "reliable response: doPost returns readable rejection JSON");
+  }
+
+  // ── Cart-based payment-policy matrix (HS-20260817-04) ──────────────────
+  {
+    // PAY-A: Mix Pack only -> 100% COD allowed
+    const { api } = createBackend(products(), rules);
+    const result = api.submitOrder(order({ items: [{ productId: "mixpack-500", quantity: 1 }] }));
+    assert.equal(result.paymentMethod, "Cash on Delivery", "PAY-A: Mix Pack COD accepted");
+    assert.equal(result.payNow, 0, "PAY-A: pay now is 0 for COD");
+    assert.equal(result.codDue, result.total, "PAY-A: full total due on delivery");
+  }
+  {
+    // PAY-B: custom vegetable only -> full COD rejected; Advance/Split allowed
+    const { api } = createBackend(products(), rules);
+    assert.throws(
+      () => api.submitOrder(order({ items: [{ productId: "regular-500", quantity: 1 }] })),
+      error => error.code === "CUSTOM_SELECTION_REQUIRES_ADVANCE",
+      "PAY-B: custom vegetable COD rejected"
+    );
+    assert.equal(api.submitOrder(advance("regular-500")).paymentMethod, "Advance Payment", "PAY-B: advance accepted");
+    assert.equal(api.submitOrder(split("regular-500")).paymentMethod, "Split Payment", "PAY-B: split accepted");
+  }
+  {
+    // PAY-C: flower custom selection -> same rule as vegetables
+    const { api } = createBackend(products(), rules);
+    assert.throws(
+      () => api.submitOrder(order({ items: [{ productId: "flower-300", quantity: 1 }] })),
+      error => error.code === "CUSTOM_SELECTION_REQUIRES_ADVANCE",
+      "PAY-C: custom flower COD rejected"
+    );
+    assert.equal(api.submitOrder(advance("flower-300")).paymentMethod, "Advance Payment", "PAY-C: advance accepted");
+  }
+  {
+    // PAY-D: Mix Pack + vegetable (mixed cart) -> no full COD; Advance/Split allowed
+    const { api } = createBackend(products(), rules);
+    const mixedItems = [{ productId: "mixpack-500", quantity: 1 }, { productId: "regular-500", quantity: 1 }];
+    assert.throws(
+      () => api.submitOrder(order({ items: mixedItems })),
+      error => error.code === "CUSTOM_SELECTION_REQUIRES_ADVANCE",
+      "PAY-D: mixed cart COD rejected (custom-selection rule wins)"
+    );
+    const splitResult = api.submitOrder(order({
+      payment: { method: "Split Payment", advanceMethod: "JazzCash", transactionReference: "TXN123456" },
+      items: mixedItems
+    }));
+    assert.equal(splitResult.paymentMethod, "Split Payment", "PAY-D: split accepted for mixed cart");
+    assert.equal(splitResult.subtotal, 1000, "PAY-D: mixed cart subtotal (Mix Pack 500 + vegetable 500)");
+  }
+  {
+    // PAY-E: tampered custom-cart COD POST -> server reject via the public doPost entrypoint
+    const backend = createBackend(products(), rules);
+    const response = backend.api.doPost({ postData: { contents: JSON.stringify(order({ items: [{ productId: "regular-500", quantity: 1 }] })) } });
+    const result = JSON.parse(response.text);
+    assert.equal(result.ok, false, "PAY-E: tampered custom+COD rejected at doPost");
+    assert.equal(result.error.code, "CUSTOM_SELECTION_REQUIRES_ADVANCE", "PAY-E: rejection reason surfaced");
+  }
+  {
+    // PAY-F: split calculation, even total (subtotal 1000 + advance-tier COD fee 250 = 1250 total... use exact even case)
+    const { api } = createBackend(products(), rules);
+    const result = api.submitOrder(split("regular-1000")); // 1000 + COD_DELIVERY_FEE(250) = 1250 total (even)
+    assert.equal(result.total, 1250, "PAY-F: even total computed");
+    assert.equal(result.payNow, 625, "PAY-F: even split pay-now");
+    assert.equal(result.codDue, 625, "PAY-F: even split cod-due");
+    assert.equal(result.payNow + result.codDue, result.total, "PAY-F: split halves reconstitute total exactly");
+  }
+  {
+    // PAY-G: split calculation, odd total — pay-now rounds up, cod-due absorbs remainder
+    const { api } = createBackend(products(), rules);
+    const result = api.submitOrder(split("regular-333")); // 333 + COD_DELIVERY_FEE(250) = 583 (odd)
+    assert.equal(result.total, 583, "PAY-G: odd total computed");
+    assert.equal(result.payNow, 292, "PAY-G: odd split pay-now rounds up (ceil 583/2)");
+    assert.equal(result.codDue, 291, "PAY-G: odd split cod-due absorbs the remainder");
+    assert.equal(result.payNow + result.codDue, result.total, "PAY-G: split halves reconstitute total exactly");
+    assert.ok(result.payNow >= result.codDue, "PAY-G: pay-now never less than cod-due");
+  }
+  {
+    // PAY-H: full-advance delivery threshold below/at/above (existing free-delivery rule, unaffected by this change)
+    const { api } = createBackend(products(), rules);
+    assert.equal(api.submitOrder(advance("regular-1000")).deliveryFee, 100, "PAY-H: below threshold advance fee");
+    assert.equal(api.submitOrder(advance("regular-1500")).deliveryFee, 0, "PAY-H: at threshold free delivery");
+    assert.equal(api.submitOrder(advance("regular-1000", 2)).deliveryFee, 0, "PAY-H: above threshold free delivery");
+  }
+  {
+    // PAY-I: Mix Pack COD uses the approved COD delivery fee
+    const { api } = createBackend(products(), rules);
+    const result = api.submitOrder(order({ items: [{ productId: "mixpack-500", quantity: 1 }] }));
+    assert.equal(result.deliveryFee, rules.COD_DELIVERY_FEE, "PAY-I: Mix Pack COD uses COD delivery fee");
+  }
+  {
+    // PAY-J: Split uses the approved COD delivery fee (no separate SPLIT_DELIVERY_FEE approved for launch)
+    // and never receives the Advance free-delivery threshold benefit, even above threshold.
+    const { api } = createBackend(products(), rules);
+    const aboveThreshold = api.submitOrder(split("regular-1500")); // subtotal 1500 == FREE_DELIVERY_THRESHOLD
+    assert.equal(aboveThreshold.deliveryFee, rules.COD_DELIVERY_FEE, "PAY-J: split uses COD delivery fee even at/above the advance free-delivery threshold");
+  }
+  {
+    // Split payment requires an enabled advance channel + transaction reference, same as full Advance.
+    const { api } = createBackend(products(), rules);
+    assert.throws(
+      () => api.submitOrder(order({ payment: { method: "Split Payment", advanceMethod: "", transactionReference: "" }, items: [{ productId: "regular-500", quantity: 1 }] })),
+      error => error.code === "INVALID_FIELD",
+      "PAY: split without a channel is rejected"
+    );
+  }
+  {
+    // Split is not offered for a pure COD-eligible (Mix Pack) cart.
+    const { api } = createBackend(products(), rules);
+    assert.throws(
+      () => api.submitOrder(split("mixpack-500")),
+      error => error.code === "SPLIT_NOT_APPLICABLE",
+      "PAY: split rejected for Mix-Pack-only cart"
+    );
+  }
+  {
+    // Existing customized-collection rule is unchanged: advance only, no COD, no split.
+    const { api } = createBackend(products(), rules);
+    assert.throws(
+      () => api.submitOrder(split("custom-2000")),
+      error => error.code === "CUSTOMIZED_REQUIRES_ADVANCE",
+      "PAY: customized-collection still rejects split, not just COD"
+    );
   }
 }
 

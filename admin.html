@@ -6,7 +6,7 @@
 <title>Super Admin — Hoja Seeds</title>
 <link rel="stylesheet" href="css/styles.css">
 <style>
-  .admin-shell{width:min(1400px, calc(100vw - 32px));max-width:1400px;min-width:0;margin:0 auto;padding:20px 0 64px;box-sizing:border-box;}
+  .admin-shell{width:min(96vw, 1540px);max-width:100vw;min-width:0;margin-inline:auto;padding:20px 0 64px;box-sizing:border-box;}
   .site-header .logo{position:static;transform:none;max-width:calc(100vw - 20px);font-size:1rem;overflow:hidden;text-overflow:ellipsis;}
   .login-card{max-width:380px;margin:80px auto;background:var(--kraft);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;}
   /* table-layout:fixed with explicit percentage columns at every width — the
@@ -16,17 +16,17 @@
   .admin-table{width:100%;max-width:100%;table-layout:fixed;border-collapse:collapse;background:var(--kraft);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);box-sizing:border-box;}
   .admin-table th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:#5b5142;padding:12px 14px;background:var(--kraft-dark);overflow-wrap:anywhere;box-sizing:border-box;}
   .admin-table td{padding:10px 14px;border-bottom:1px solid rgba(228,212,180,.7);overflow-wrap:anywhere;box-sizing:border-box;}
-  .admin-table th:nth-child(1),.admin-table td:nth-child(1){width:44%;}
+  .admin-table th:nth-child(1),.admin-table td:nth-child(1){width:40%;}
   .admin-table th:nth-child(2),.admin-table td:nth-child(2){width:17%;}
-  .admin-table th:nth-child(3),.admin-table td:nth-child(3){width:18%;}
-  .admin-table th:nth-child(4),.admin-table td:nth-child(4){width:21%;}
+  .admin-table th:nth-child(3),.admin-table td:nth-child(3){width:17%;}
+  .admin-table th:nth-child(4),.admin-table td:nth-child(4){width:26%;}
   .admin-table input{width:100%;max-width:100%;padding:7px 10px;border:1px solid var(--kraft-dark);border-radius:6px;font-family:'IBM Plex Mono',monospace;background:var(--paper);box-sizing:border-box;}
   .admin-table select{width:100%;max-width:100%;padding:7px 8px;border:1px solid var(--kraft-dark);border-radius:6px;background:var(--paper);font-family:'Inter',sans-serif;font-size:.82rem;box-sizing:border-box;}
   .cat-group{font-family:'Fraunces',serif;font-weight:700;font-size:1.1rem;margin:26px 0 10px;}
   .save-bar{position:sticky;bottom:0;background:var(--paper);padding:14px 0;margin-top:10px;display:flex;gap:12px;align-items:center;}
   .save-note{font-size:.85rem;color:#5b5142;}
   .settings-card{background:var(--kraft);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;border:1px solid var(--kraft-dark);margin-bottom:30px;}
-  .admin-layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:18px;align-items:start;min-width:0;}
+  .admin-layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:24px;align-items:start;min-width:0;}
   .admin-sidebar{position:sticky;top:80px;min-width:0;background:var(--soil);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:3px;}
   .admin-tab{border:0;background:transparent;color:var(--kraft);text-align:left;border-radius:8px;padding:10px 11px;font-weight:600;font-size:.82rem;cursor:pointer;}
   .admin-tab:hover,.admin-tab.active{background:var(--leaf);color:#fff;}

@@ -316,6 +316,23 @@ button{font-family:inherit;cursor:pointer;}
 
 .payment-restricted-note{background:#f4ddd8;border:1px solid #e5b8ae;color:#7c2e25;border-radius:10px;padding:12px 14px;font-size:.85rem;margin-bottom:16px;line-height:1.4;}
 
+/* Cart-based payment-policy matrix (HS-20260817-04) */
+.pay-cod-banner{display:flex;align-items:flex-start;gap:10px;background:#e2eedd;border:1px solid #bfdcb2;border-radius:10px;padding:12px 14px;margin-bottom:16px;}
+.pay-cod-banner-icon{flex:none;width:26px;height:26px;border-radius:50%;background:var(--leaf);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;}
+.pay-cod-banner strong{display:block;color:var(--leaf-dark);font-size:.94rem;}
+.pay-cod-banner p{margin:2px 0 0;font-size:.82rem;color:#4d5a45;}
+.cod-mixpack-upsell{margin-top:18px;padding:14px;border:1px dashed var(--kraft-dark);border-radius:12px;background:var(--paper);}
+.cod-mixpack-question{margin:0 0 10px;font-size:.88rem;line-height:1.4;}
+.cod-mixpack-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:12px;}
+.cod-mixpack-card{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 8px;border:1px solid var(--kraft-dark);border-radius:10px;background:var(--kraft);text-align:center;}
+.cod-mixpack-card:hover{border-color:var(--leaf);}
+.cod-mixpack-icon{font-size:1.4rem;}
+.cod-mixpack-name{font-size:.74rem;font-weight:600;line-height:1.25;}
+.cod-mixpack-price{font-size:.78rem;color:var(--leaf-dark);font-weight:700;}
+.ps-amount-split{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;}
+.ps-amount-split .ps-amount{margin:0;}
+@media (max-width:420px){.ps-amount-split{grid-template-columns:1fr;}}
+
 /* Bottom secondary/tertiary navigation on Delivery & Payment — the primary
    action stays the in-form submit button (inline-submit); these never
    trigger a form submit themselves (type="button"). */
