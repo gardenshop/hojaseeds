@@ -176,6 +176,32 @@ without verifying target identity and explicit operator authorization.
   Total-to-footer gaps are 39px mobile and 60px desktop, and required
   Total/footer, stepper/footer, badge/name, and Remove/status intersections are
   zero. No arbitrary card height or commerce logic was changed.
+- **SUPERSEDED 2026-08-17 (HS-20260817-02).** The three-row body/footer
+  geometry from the two contracts immediately above produced ~270-300px
+  cards with a large empty middle/footer zone — rejected against a supplied
+  visual target. Replaced with a single-body-zone grid (`visual | details |
+  stepper | total` in one row) where the in-cart status and Cart's `Remove`
+  are the last line inside the details column, never a separate full-width
+  row. `commerceProductCardHTML()` is unchanged in responsibility (still the
+  one shared category/Cart renderer feeding `Cart.setQty`/`changeQty`/
+  `cartChangeQty`), only its markup/CSS shape changed; the old `.product-card`/
+  `.pc-*`, `.cart-line`/`.cl-*`, and a stale duplicate `.commerce-product-card`
+  CSS block (which was silently re-widening cards back to the old geometry via
+  cascade order) were deleted. Verified live against production: card height
+  ~156-231px on mobile and a flat ~164px on tablet/desktop for qty0/qty1/qty5,
+  zero horizontal overflow, zero console/page errors, across a 10-viewport
+  (320-1920) x 12-route-state regression sweep. Deployed in commit `ef7b0d9` /
+  Cloudflare Pages deployment `f0317ff5`.
+- Super Admin Products-table overflow (HS-20260817-02): investigated a report
+  of the Type column being cut off in production. Direct measurement against
+  `https://www.hojaseeds.pk/admin` (real DOM, `.admin-shell`/`.admin-layout`/
+  `.admin-content`/`.admin-data-card`/`.admin-table` rects) at 1024/1440/1920
+  found zero horizontal overflow and all four columns (Product, Default Price,
+  Current Price, Type) fully contained at every width — the shipped
+  `.admin-data-card{overflow-x:auto;max-width:100%;min-width:0}` containment
+  already works. The reported cut-off screenshot was not reproducible against
+  live production and is attributed to a stale/cached asset in that browser
+  tab, not a code defect; no admin CSS/HTML was changed.
 - Full-site forensic baseline (verified 2026-08-16 against production): Home,
   all four categories, Contact, Cart, Delivery, Payment, Confirmation, and
   the Super Admin shell were exercised at 320/360/390/412/430/768/1024/1280/

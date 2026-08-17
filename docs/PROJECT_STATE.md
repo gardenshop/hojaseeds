@@ -67,14 +67,19 @@ replace it.*
 
 ## Readiness
 
-- Production readiness: **98%** (up from 96%)
-- Remaining: **2%**
-- Expanded operations scope readiness: **94%**. The responsive admin shell,
+- Production readiness: **96%** (corrected to 95% at the start of
+  HS-20260817-02 per rejected-geometry screenshot evidence, then the card
+  regression was repaired and deployed; up to 96%)
+- Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test,
+  and live analytics vendor delivery (GA4/Meta IDs still placeholders)
+- Expanded operations scope readiness: **92%** (corrected to 91% at the start
+  of HS-20260817-02, then the confirmed-not-reproducible admin overflow audit
+  closed one open question; up to 92%). The responsive admin shell,
   authenticated bounded reads, derived dashboard/customers views, delivery/
   analytics status panels, and additive AuditLog foundation are implemented.
-- Expanded scope readiness remains **94%**: full product CRUD, order status
-  mutations, customer status actions, trusted IP relay, and browser-authorized
-  admin mutation/restore are not claimed complete.
+- Expanded scope readiness remains capped at 92%: full product CRUD, order
+  status mutations, customer status actions, trusted IP relay, and
+  browser-authorized admin mutation/restore are not claimed complete.
 - Verified locally: COD and advance totals, free-delivery boundary,
   customized COD rejection, tamper resistance, invalid items/quantities,
   server order IDs, locked duplicate replay, readable JSON contract,
@@ -378,3 +383,40 @@ replace it.*
   Payment at 320–1920 found 0px overflow, zero console errors, zero failed
   first-party requests, and zero required geometry intersections. No product,
   cart, checkout, payment, admin, or business logic changed.
+- 2026-08-17 (HS-20260817-02): The 2026-08-17 geometry above was rejected
+  against a supplied visual target — it still produced ~270-300px cards via a
+  three-row (title/body/footer) grid with a large empty middle zone. Rebuilt
+  `commerceProductCardHTML()`'s markup and CSS to one single-row body grid
+  (`visual | details | stepper | total`), with in-cart status/Remove as the
+  last line inside details instead of a separate footer row. Deleted the dead
+  legacy `.product-card`/`.pc-*` and `.cart-line`/`.cl-*` CSS and a stale
+  duplicate `.commerce-product-card` block that was overriding the intended
+  geometry via cascade order — that duplicate, not any JS logic, was the root
+  cause of the regression. `Cart.setQty`, `changeQty`, `cartChangeQty`,
+  `Cart.totalAmount`, and all order/checkout logic are byte-for-byte
+  unchanged; only the DOM those handlers render into moved. Verified with the
+  project's D-drive Playwright (`.tools/browser-runner`, DevTools MCP not
+  exposed to this session) against a local static server and then directly
+  against `www.hojaseeds.pk`: card height 156–231px mobile / flat 164px
+  desktop-tablet for qty0/qty1/qty5, 0px overflow, 0 console/page errors, 0
+  failed first-party requests across 10 viewports (320–1920) × 12 route
+  states (Home, 4 categories, Cart, Delivery, Payment, Contact, each with and
+  without cart items). `npm test` and a JS syntax check both pass. Separately
+  investigated a reported Super Admin Products-table column cut-off: directly
+  measured `.admin-shell/.admin-layout/.admin-content/.admin-data-card/
+  .admin-table` rects against live production at 1024/1440/1920 and found
+  zero overflow with all four columns (including Type) fully visible and
+  contained — not reproducible, so no admin CSS/HTML was changed; the
+  reported screenshot is attributed to a stale/cached browser tab. Deployed
+  via `wrangler pages deploy` (clean `index.html`/`admin.html`/`robots.txt`/
+  `sitemap.xml`/`css`/`js`/`assets` artifact) against the existing `hojaseeds`
+  project under the verified `gisupp@gmail.com` account, `--branch=main`,
+  `--commit-hash=ef7b0d9`; deployment `f0317ff5` confirmed live at
+  `www.hojaseeds.pk/js/app.js` (contains `commerce-status`, no
+  `commerce-footer`). Not done this session: the authorized GIS admin
+  sign-in + Tomato price/payment-setting mutation-and-restore test (requires
+  a human or interactive OAuth), and per-route screenshot capture at every
+  one of the 10 requested viewports (the regression sweep covered all 10
+  numerically for overflow/console/network; screenshots were captured for
+  the specific card/admin states shown in this task's images, not the full
+  matrix).
