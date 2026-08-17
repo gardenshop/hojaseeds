@@ -26,7 +26,7 @@ if (!clasp.scriptId || clasp.scriptId !== expectedScriptId) throw new Error("Ref
 const sheetId = process.env.HOJA_SHEET_ID || target.sheet_id;
 if (!sheetId) throw new Error("The protected Hoja Seeds Sheet ID is missing.");
 await verifyScriptTarget(clasp.scriptId);
-await run(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "sheets:verify"]);
+await run(process.execPath, ["scripts/sheets-verify.mjs"]);
 
 if (push) {
   await run(process.execPath, ["scripts/sheets-migrate.mjs", "--apply"]);
@@ -40,8 +40,11 @@ if (release) {
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
-    const executable = process.platform === "win32" && command === "clasp" ? "npx.cmd" : command;
-    const commandArgs = process.platform === "win32" && command === "clasp" ? ["clasp", ...args] : args;
+    const isWindows = process.platform === "win32";
+    const executable = isWindows && command === "clasp" ? process.execPath : command;
+    const commandArgs = isWindows && command === "clasp"
+      ? [path.join(root, "node_modules", "@google", "clasp", "build", "src", "index.js"), ...args]
+      : args;
     const child = spawn(executable, commandArgs, { cwd: root, stdio: "inherit" });
     child.on("exit", code => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code}.`)));
     child.on("error", reject);

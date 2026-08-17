@@ -181,6 +181,7 @@ const Admin = {
         <div class="field"><label for="r-cod-fee">COD delivery fee</label><input type="number" min="0" id="r-cod-fee" value="${r.COD_DELIVERY_FEE}" class="mono"></div>
         <div class="field"><label for="r-adv-fee">Advance delivery fee</label><input type="number" min="0" id="r-adv-fee" value="${r.ADVANCE_DELIVERY_FEE}" class="mono"></div>
       </div>
+      <div class="field"><label for="r-split-percent">Split payment: advance percentage (1–99)</label><input type="number" min="1" max="99" id="r-split-percent" value="${r.SPLIT_ADVANCE_PERCENT ?? 50}" class="mono"><small class="admin-muted">Customers pay this percentage now; the remainder is due on delivery.</small></div>
       <div class="field-row">
         <div class="field"><label for="r-threshold">Free delivery threshold</label><input type="number" min="0" id="r-threshold" value="${r.FREE_DELIVERY_THRESHOLD}" class="mono"></div>
         <div class="field"><label>&nbsp;</label>
@@ -222,6 +223,7 @@ const Admin = {
       ADVANCE_DELIVERY_FEE: parseInt(document.getElementById("r-adv-fee").value, 10) || 0,
       FREE_DELIVERY_THRESHOLD: parseInt(document.getElementById("r-threshold").value, 10) || 0,
       COD_ALLOWED: document.getElementById("r-cod-allowed").checked,
+      SPLIT_ADVANCE_PERCENT: Math.min(99, Math.max(1, parseInt(document.getElementById("r-split-percent").value, 10) || 50)),
       CUSTOMIZED_REQUIRES_FULL_ADVANCE: true,
     };
     const note = document.getElementById("rulesSaveNote");

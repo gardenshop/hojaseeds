@@ -23,6 +23,7 @@ const CONFIG = {
     ADVANCE_DELIVERY_FEE: 100,     // Advance orders below the threshold
     COD_DELIVERY_FEE: 250,         // Normal courier charge for Cash on Delivery — set to your courier's real rate
     COD_ALLOWED: true,             // Global switch — turn off to require advance payment storewide
+    SPLIT_ADVANCE_PERCENT: 50,     // Customer pays this percentage now; remainder is COD
     CUSTOMIZED_REQUIRES_FULL_ADVANCE: true, // Customized-collection items always force 100% advance, no COD
   },
 

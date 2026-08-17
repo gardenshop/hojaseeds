@@ -437,10 +437,10 @@ button{font-family:inherit;cursor:pointer;}
   padding:14px;color:#fff;text-align:left;box-shadow:var(--shadow-sm);background-size:cover;background-position:center;
 }
 .explore-card::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg, rgba(20,15,8,.8) 0%, rgba(20,15,8,.15) 60%, transparent 100%);}
-.explore-card[data-cat="vegetables"]{background-image:linear-gradient(150deg,#3F6B3F,#274526);}
-.explore-card[data-cat="flowers"]{background-image:linear-gradient(150deg,#D68C2E,#9C5D18);}
-.explore-card[data-cat="mix"]{background-image:linear-gradient(150deg,#B84A3E,#7C2E25);}
-.explore-card[data-cat="fertilizer"]{background-image:linear-gradient(150deg,#6B4A2A,#432D19);}
+.explore-card[data-cat="vegetables"]{background-image:url('https://images.hojaseeds.pk/categories/vegetable-seeds.webp'),linear-gradient(150deg,#3F6B3F,#274526);}
+.explore-card[data-cat="flowers"]{background-image:url('https://images.hojaseeds.pk/categories/flower-seeds.webp'),linear-gradient(150deg,#D68C2E,#9C5D18);}
+.explore-card[data-cat="mix"]{background-image:url('https://images.hojaseeds.pk/categories/mix-seeds.webp'),linear-gradient(150deg,#B84A3E,#7C2E25);}
+.explore-card[data-cat="fertilizer"]{background-image:url('https://images.hojaseeds.pk/categories/fertilizer.webp'),linear-gradient(150deg,#6B4A2A,#432D19);}
 .explore-card-label{position:relative;z-index:1;font-size:.66rem;font-weight:600;letter-spacing:.02em;opacity:.85;overflow-wrap:anywhere;}
 .explore-card-name{position:relative;z-index:1;display:flex;align-items:center;gap:6px;font-family:'Fraunces',serif;font-weight:600;font-size:1rem;}
 .explore-card-arrow{font-family:'Inter',sans-serif;font-weight:700;font-size:1rem;}
@@ -449,4 +449,3 @@ button{font-family:inherit;cursor:pointer;}
 /* ══════════════ Toast ══════════════ */
 .toast{position:fixed;bottom:calc(var(--sticky-h) + 14px);left:50%;transform:translateX(-50%) translateY(20px);background:var(--soil);color:var(--kraft);padding:11px 18px;border-radius:8px;font-size:.86rem;opacity:0;pointer-events:none;transition:all .25s ease;z-index:80;box-shadow:var(--shadow);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-

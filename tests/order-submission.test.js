@@ -75,6 +75,7 @@ const rules = {
   ADVANCE_DELIVERY_FEE: 100,
   COD_DELIVERY_FEE: 250,
   COD_ALLOWED: true,
+  SPLIT_ADVANCE_PERCENT: 50,
   CUSTOMIZED_REQUIRES_FULL_ADVANCE: true
 };
 
@@ -117,6 +118,13 @@ function split(productId, quantity = 1) {
 }
 
 async function backendTests() {
+  {
+    const customRules = { ...rules, SPLIT_ADVANCE_PERCENT: 30 };
+    const { api } = createBackend(products(), customRules);
+    const result = api.submitOrder(split("regular-1000"));
+    assert.equal(result.payNow, 375, "PAY-F2: configured 30% split rounds up on final total");
+    assert.equal(result.codDue, 875, "PAY-F2: configured 70% remainder is due at delivery");
+  }
   {
     const anonymous = createBackend(products(), rules);
     const priceUpdate = anonymous.api.doPost({ postData: { contents: JSON.stringify({ type: "priceUpdate", updates: [] }) } });

@@ -100,10 +100,11 @@ function cartPaymentPolicy(lines) {
   return "cod";
 }
 
-// Deterministic 50/50 split, mirrored client-side for display only — the
+// Deterministic configured split, mirrored client-side for display only — the
 // server computes and returns the authoritative payNow/codDue.
 function splitAmounts(total) {
-  const payNow = Math.ceil(total / 2);
+  const percent = Math.min(99, Math.max(1, Number(Settings.get().SPLIT_ADVANCE_PERCENT) || 50));
+  const payNow = Math.ceil(total * percent / 100);
   return { payNow, codDue: total - payNow };
 }
 
@@ -163,6 +164,17 @@ const Cart = {
   },
   qtyOf(id) { return this.items()[id] || 0; },
   clear() { this.save({}); },
+  saveCustomDraft() { localStorage.setItem("hoja_custom_cart_draft", JSON.stringify(this.items())); },
+  restoreCustomDraft() {
+    try {
+      const draft = JSON.parse(localStorage.getItem("hoja_custom_cart_draft"));
+      if (!draft || typeof draft !== "object" || !Object.keys(draft).length) return false;
+      this.save(draft);
+      localStorage.removeItem("hoja_custom_cart_draft");
+      return true;
+    } catch { return false; }
+  },
+  hasCustomDraft() { return Boolean(localStorage.getItem("hoja_custom_cart_draft")); },
   clearSubmitted(submittedItems) {
     const items = this.items();
     submittedItems.forEach(item => {
@@ -605,7 +617,7 @@ const Views = {
     app.innerHTML = `
       <section class="page narrow">
         ${journeyBarHTML(1)}
-        <div class="page-head"><h2>Your Cart</h2>${cats.length ? `<p class="tagline">Review your seeds before delivery</p>` : ""}</div>
+        <div class="page-head"><h2>Your Cart</h2>${cats.length ? `<p class="tagline">Review your seeds before delivery</p>` : ""}${Cart.hasCustomDraft() ? `<button type="button" class="btn-text-secondary" onclick="Views.restoreCustomOrder()">Restore Custom Order</button>` : ""}</div>
         ${cats.length ? `
           <div id="cartLines">${groupsHTML}</div>
           <div class="cart-summary-card">
@@ -756,12 +768,12 @@ const Views = {
     this._order.advanceMethod = selectedAdvanceMethod;
 
     // Restricted note: customized-collection keeps its existing strict
-    // advance-only copy; a custom-selection cart (vegetables/flowers) gets
+     // advance-only copy; a custom-selection cart (vegetables/flowers) gets
     // the new explanatory copy instead of the old generic COD-unavailable line.
     const restrictedNote = !codAllowed
       ? `<div class="payment-restricted-note">${hasCustomized
           ? "Customized orders are prepared specially for you and require 100% advance payment."
-          : "This order contains your personally selected seed packets — these are prepared to order and require Advance or a 50/50 Split, not Cash on Delivery."}</div>`
+          : "This order contains your personally selected seed packets — these are prepared to order and require Advance or the configured Split, not Cash on Delivery."}</div>`
       : (containsMixPack ? `<div class="pay-cod-banner"><span class="pay-cod-banner-icon" aria-hidden="true">✓</span><div><strong>100% Cash on Delivery Available</strong><p>These ready-made Mix Packs can be paid completely at your doorstep.</p></div></div>` : "");
 
     const codMixUpsell = !codAllowed ? this.codMixPackUpsellHTML() : "";
@@ -794,8 +806,8 @@ const Views = {
                 ${splitAllowed ? `
                 <label class="pay-option" id="paySplit">
                   <input type="radio" name="pay" value="Split Payment" onchange="Views.selectPay('paySplit','payCOD,payAdvance')">
-                  <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay 50% Now + 50% on Delivery</div>
-                  <div class="pay-option-sub">Lower advance, remaining amount at your doorstep · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
+                   <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay ${r.SPLIT_ADVANCE_PERCENT}% Now + ${100 - r.SPLIT_ADVANCE_PERCENT}% on Delivery</div>
+                   <div class="pay-option-sub">Pay ${r.SPLIT_ADVANCE_PERCENT}% now + ${100 - r.SPLIT_ADVANCE_PERCENT}% on delivery · Delivery ${CONFIG.CURRENCY} ${r.COD_DELIVERY_FEE}</div>
                   </div>
                 </label>` : ""}
               </div>
@@ -848,14 +860,30 @@ const Views = {
   codMixPackUpsellHTML() {
     const mixPacks = Prices.get().filter(p => p.cat === "mix" && p.type === "standard-collection").slice(0, 3);
     if (!mixPacks.length) return "";
+    const restoreDraft = Cart.hasCustomDraft() ? `<button type="button" class="btn-text-secondary" onclick="Views.restoreCustomOrder()">Restore Custom Order</button>` : "";
     return `
       <div class="cod-mixpack-upsell">
-        <p class="cod-mixpack-question"><strong>Want to pay 100% Cash on Delivery?</strong><br>Choose one of our ready-made Mix Packs instead.</p>
-        <button type="button" class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('mix')">View COD Mix Packs</button>
+        <p class="cod-mixpack-question"><strong>Want Cash on Delivery?</strong><br>Choose a ready-made Mix Pack instead.</p>
+        <button type="button" class="btn btn-secondary" style="background:var(--kraft);color:var(--ink);border:1px solid var(--kraft-dark)" onclick="Router.go('mix')">Choose a Mix Pack</button>
+        <button type="button" class="btn-text-tertiary" onclick="Router.go('mix')">Keep Custom Order</button>${restoreDraft}
         <div class="cod-mixpack-grid">
-          ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card" onclick="Router.go('mix')"><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span></button>`).join("")}
+           ${mixPacks.map(p => `<button type="button" class="cod-mixpack-card" onclick="Views.convertToCodMixPack('${p.id}')"><span class="cod-mixpack-icon" aria-hidden="true">${p.icon || "🧺"}</span><span class="cod-mixpack-name">${escapeHTML(p.name)}</span><span class="cod-mixpack-price mono">${CONFIG.CURRENCY} ${p.price}</span></button>`).join("")}
         </div>
       </div>`;
+  },
+
+  convertToCodMixPack(productId) {
+    Cart.saveCustomDraft();
+    Cart.save({ [productId]: 1 });
+    Router.go("cart");
+    Toast.show("Your custom order is saved. You can restore it anytime.");
+  },
+
+  restoreCustomOrder() {
+    if (Cart.restoreCustomDraft()) {
+      Toast.show("Your saved custom order was restored.");
+      Router.go("cart");
+    }
   },
 
   paymentDisplaySettings() {
@@ -899,7 +927,7 @@ const Views = {
     if (!el) return;
     const r = Settings.get();
     if (method === "Split Payment") {
-      el.innerHTML = `<p class="admin-muted">50/50 Split uses the standard delivery fee and isn't eligible for the Advance free-delivery benefit.</p>`;
+       el.innerHTML = `<p class="admin-muted">${r.SPLIT_ADVANCE_PERCENT}%/${100 - r.SPLIT_ADVANCE_PERCENT}% Split uses the standard delivery fee and isn't eligible for the Advance free-delivery benefit.</p>`;
       return;
     }
     if (method !== "Advance Payment" && !hasCustomized) { el.innerHTML = ""; return; }
@@ -967,7 +995,7 @@ const Views = {
       payNowEl.textContent = `${CONFIG.CURRENCY} ${payNow}`;
       codDueEl.textContent = `${CONFIG.CURRENCY} ${codDue}`;
       submitBtn.textContent = `Confirm Order — Pay ${CONFIG.CURRENCY} ${payNow} now`;
-      splitSubnote.textContent = `${CONFIG.CURRENCY} ${codDue} will be payable on delivery.`;
+       splitSubnote.textContent = `${CONFIG.CURRENCY} ${codDue} will be payable on delivery (${Settings.get().SPLIT_ADVANCE_PERCENT}%/${100 - Settings.get().SPLIT_ADVANCE_PERCENT}% split).`;
     }
 
     this.renderFreeDeliveryProgress(method, subtotal, hasCustomized);
