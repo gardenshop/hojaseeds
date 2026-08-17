@@ -37,24 +37,17 @@ without an explicit "unfreeze <item>" instruction.*
 new request isn't this, either finish/freeze this first or explicitly
 replace it.*
 
-- **URGENT, blocks real Split Payment orders:** the cart-based payment-policy
-  matrix (HS-20260817-04) is deployed to the frontend (`www.hojaseeds.pk`)
-  but NOT yet deployed to the Apps Script backend — `clasp push` is blocked
-  by stale/broken local credentials (`clasp login --status` returns "logged
-  in as an unknown user"; `clasp push` fails with `Cannot read properties of
-  undefined (reading 'access_token')`). Confirmed live: the Payment page
-  correctly offers "Split Payment" for custom-selection carts, but a real
-  Split submission is rejected by the still-old server with a readable
-  `INVALID_PAYMENT_METHOD` error (fails safely — no crash, no data loss, cart
-  retained, customer can pick Advance instead) since old Code.gs doesn't
-  recognize the new method yet. Advance Payment (the default-selected option)
-  is unaffected and works normally. **Next action: a human runs `clasp
-  login` interactively to refresh credentials, then `node
-  scripts/deploy-hoja.mjs --push --remote` (already verified working once
-  auth is fixed) to ship the new `apps-script/Code.gs`.** Until that push
-  happens, Split Payment doesn't actually work for customers, and the new
-  server-side COD restriction for custom-selection carts (vegetables/
-  flowers) is not yet enforced against a direct API bypass of the frontend.
+- **HS-20260817-07 production synchronization completed:** the stale clasp
+  credential was repaired by completing OAuth on the approved Hoja account and
+  normalizing the legacy credential wrapper for clasp 3.2.0. The protected
+  Apps Script source was pushed and the existing deployment updated in place
+  at version 12. Live marked API tests confirm Mix COD acceptance, custom and
+  mixed Split acceptance at 50/50, and server-side custom COD rejection. The
+  existing `hojaseeds` Pages project was manually deployed from descendant
+  commit `ab8eaf0`; browser QA confirms R2 hero/category/Explore More images,
+  selected-payment payable amounts, and custom-cart draft/restore behavior.
+  Authorized admin mutation/restore remains the only launch-specific browser
+  verification gap.
 
 ## Not yet done (known gaps, not currently active)
 - Real product photography (placeholders documented in `assets/images/README.md`)
@@ -83,14 +76,11 @@ replace it.*
 
 ## Readiness
 
-- Production readiness: **93%** (down from 96% entering HS-20260817-04 — the
-  new Split Payment method is live on the frontend but not yet enforceable
-  server-side, a real functional gap for real customers, not a cosmetic one;
-  restore to 96%+ once the Apps Script push completes and is verified live)
-- Remaining: **7%** — deploy the new `apps-script/Code.gs` (blocked on
-  interactive `clasp login`), authorized GIS admin sign-in + mutation/restore
-  test (still requires a human or DevTools-MCP-capable session), and live
-  analytics vendor delivery (GA4/Meta IDs still placeholders)
+- Production readiness: **96%** — payment-policy backend/frontend
+  synchronization and requested payment/image UX are live and verified.
+- Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test
+  (still requires a human or DevTools-MCP-capable session), plus live analytics
+  vendor delivery (GA4/Meta IDs still placeholders)
 - Expanded operations scope readiness: **92%** (unchanged this session — the
   admin width repair and payment-policy matrix land without moving this
   number since neither closes an expanded-scope gap). The responsive admin
@@ -532,6 +522,20 @@ replace it.*
   submission is rejected by the still-old server with a readable
   `INVALID_PAYMENT_METHOD` error (fails safely, cart retained, no crash) —
   see the Active section above for the required next step. Authorized GIS
-  admin sign-in + Tomato/payment-setting mutation-and-restore test was also
-  not completed this session for the same reason (no interactive browser
-  access).
+   admin sign-in + Tomato/payment-setting mutation-and-restore test was also
+   not completed this session for the same reason (no interactive browser
+   access).
+- 2026-08-17 (HS-20260817-07): repaired clasp OAuth for clasp 3.2.0 by
+  completing the approved-account callback and normalizing the legacy global
+  credential wrapper. Pushed `apps-script/Code.gs` and updated the existing
+  production deployment in place to version 12. Live marked tests passed for
+  Mix-only COD, custom Split (50/50), mixed-cart Split, and custom-selection
+  COD rejection. Published the frontend to the existing `hojaseeds` Pages
+  project from `ab8eaf0` after fixing two production-observed UX gaps: Mix
+  conversion cards now show `100% COD` and the explicit conversion action;
+  selected advance-method details now show exact `Pay now with …` and `Pay on
+  delivery` amounts. Production browser QA passed the six required viewports,
+  R2 hero/category/Explore More image visibility, selected JazzCash/EasyPaisa/
+  Bank-only detail rendering, custom-cart draft conversion, and restore. No
+  product, price, cart math, checkout sequence, delivery values, or security
+  rules changed. Authorized GIS admin mutation/restore remains pending.

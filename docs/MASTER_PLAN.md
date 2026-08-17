@@ -391,6 +391,19 @@ without verifying target identity and explicit operator authorization.
   & Payments. The reported clipping remains unreproduced against live
   production across every configuration tested in HS-03 and HS-04.
 
+- Production synchronization and payment UX (HS-20260817-07): Apps Script
+  source is pushed to the protected Script and redeployed in place at version
+  12. Live production accepts Mix-Pack COD, configured custom/mixed Split, and
+  rejects custom-selection COD. `SPLIT_ADVANCE_PERCENT` is an additive Settings
+  key with default 50 and is applied server-side with ceil rounding. Selected
+  JazzCash, EasyPaisa, and Bank Transfer details are mutually exclusive and
+  show exact Pay-now/Pay-on-delivery amounts. Custom-cart Mix conversion saves
+  a recoverable draft before replacing the active cart and restores it
+  explicitly. Explore More cards use the same R2 category images as the
+  homepage. Browser QA passed at 320/390/768/1366/1440/1920 with no first-party
+  errors or horizontal overflow. Frontend is deployed from descendant commit
+  `ab8eaf0` to the existing `hojaseeds` Pages project.
+
 ## Launch Acceptance Gates
 
 - [x] Google OAuth Web client ID configured for the approved admin origins.
