@@ -685,3 +685,22 @@ replace it.*
   after live Apps Script reads settle, preventing an empty `#app` when a
   remote read is slow. Category/Cart cards retain one renderer, with selected
   state separate below Total and an accessible Cart trash control.
+
+### 2026-08-18 (HS-20260818-04) direct Chrome tab forensics
+
+- Direct app-server DevTools inspection of the authenticated production Admin
+  tab at 100% zoom measured the Type control fully inside the Products table:
+  at 1366px its right edge was x=1332 within table right x=1346; at 1440px
+  x=1405.6 within x=1419.6; at 1920px x=1707.6 within x=1721.6. No traced
+  ancestor had `scrollWidth > clientWidth`, and screenshots showed Product,
+  Default Price, Current Price, and Type completely visible. No Admin CSS
+  change was justified.
+- The production homepage blank state was reproduced only in the stale
+  existing page instance: its old runtime left `#app` empty while Apps Script
+  reads remained pending. A cache-busted reload executed the deployed
+  fallback-first runtime and rendered the hero/categories immediately. This
+  is a stale-tab/cache state, not a current CSS clipping rule.
+- Refreshed production direct interaction confirmed qty 0→1 immediately
+  updates the card quantity, Total, `In Cart` status, packet count, and cart
+  badge. Production payment preview confirmed the Rs.250 floor for Rs.400
+  total (`250/150`) and the full-payment floor behavior for Rs.200 (`200/0`).
