@@ -406,6 +406,19 @@ without verifying target identity and explicit operator authorization.
 
 ## Launch Acceptance Gates
 
+- Production release gate (HS-20260817-12): commit `40e3fdf` is deployed to
+  the existing `hojaseeds` Pages project and the protected Apps Script
+  deployment was updated in place to version 14. Production `app.js` contains
+  the module-level payment preview fix; production `admin.js` contains the
+  restored compact Products table renderer and no rejected grid/card markers.
+  Delivery → Payment opens without ReferenceError. Live Mix COD returns
+  Rs.1249; Advance/JazzCash returns Rs.1099; a Rs.1545 custom Split preview
+  shows Rs.1795 total, Rs.895 pay-now, and Rs.900 doorstep. The live backend
+  was also retested after deployment and returned rounded Split amounts with
+  total preservation. Marked Mix COD, custom Advance, and custom Split orders
+  were accepted with order IDs. Admin Products visual acceptance remains
+  auth-gated because no authenticated GIS browser session was available.
+
 - [x] Google OAuth Web client ID configured for the approved admin origins.
 - [ ] Protected Sheet target verified: `hoja-seeds-2026` /
       `1XKU3Q2r1dLxZVL0-OWOButHHp2MrFPIFA2V9ozhp6WY`.

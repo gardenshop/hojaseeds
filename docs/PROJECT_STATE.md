@@ -76,6 +76,18 @@ replace it.*
 
 ## Readiness
 
+- HS-20260817-12 release gate: `40e3fdf` is live on the existing Pages project
+  and Apps Script deployment version 14. Production asset signatures match the
+  intended release: `app.js` contains `paymentPreview`; `admin.js` contains
+  `admin-table` and no `admin-product-row`, `admin-products-grid`, or rejected
+  card markers. Delivery → Payment has zero first-party runtime errors in the
+  live browser. Live payment checks passed: Mix COD `1249/0/1249`, Mix Advance
+  `1099/1099/0`, and custom Split subtotal 1545 with total 1795 and
+  `895/900`; the backend retest after deployment confirmed rounded Split
+  output and exact total preservation. Marked live E2E orders returned order
+  IDs for Mix COD, custom Advance, and custom Split. Admin visual Products
+  screenshots and authorized mutation/restore remain pending GIS sign-in.
+
 - Production readiness: **96%** — payment-policy backend/frontend
   synchronization and requested payment/image UX are live and verified.
 - Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test
