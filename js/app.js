@@ -767,45 +767,53 @@ const Views = {
       ? this._order.advanceMethod : advanceMethods[0]?.id || "";
     this._order.advanceMethod = selectedAdvanceMethod;
 
-    // Restricted note: customized-collection keeps its existing strict
-     // advance-only copy; a custom-selection cart (vegetables/flowers) gets
-    // the new explanatory copy instead of the old generic COD-unavailable line.
-const restrictedNote = !codAllowed
+// Restricted note: customized-collection keeps its existing strict
+  // advance-only copy; a custom-selection cart (vegetables/flowers) gets
+  // the new explanatory copy instead of the old generic COD-unavailable line.
+  const restrictedNote = !codAllowed
       ? `<div class="payment-restricted-note">${hasCustomized
-          ? "Customized orders are prepared specially for you and require 100% advance payment."
-          : "This order contains your personally selected seed packets — these are prepared to order and require Advance or the configured Split, not Cash on Delivery."}</div>`
+          ? "Your selected seed packets are packed specially for your order. Choose Full Advance or Partial Advance below."
+          : "Your selected seed packets are packed specially for your order. Choose Full Advance or Partial Advance below."}</div>`
       : (containsMixPack ? `<div class="pay-cod-banner premium-cod-card"><span class="pay-cod-badge premium-cod-badge">✓</span><div><strong>100% Cash on Delivery Available</strong><p>Pay nothing now · Pay ${CONFIG.CURRENCY} ${this._order.total} at your doorstep.</p></div></div>` : "");
 
     const codMixUpsell = !codAllowed ? this.codMixPackUpsellHTML() : "";
 
+    // Single source of truth for payment preview - used by all UI elements
+    let currentPreview = paymentPreview(defaultMethod);
+
     // Per-method preview calculation — each payment option shows its own totals
-    const paymentPreview = (method) => {
+    const paymentPreview = (method, subtotalLocal) => {
+      const calcSubtotal = subtotalLocal !== undefined ? subtotalLocal : subtotal;
       switch (method) {
-        case "Cash on Delivery":
-          return { delivery: r.COD_DELIVERY_FEE, total: subtotal + r.COD_DELIVERY_FEE, payNow: 0, codDue: subtotal + r.COD_DELIVERY_FEE, qualifiesFreeDelivery: false };
+        case "Cash on Delivery": {
+          const delivery = r.COD_DELIVERY_FEE;
+          const total = calcSubtotal + delivery;
+          return { delivery, total, payNow: 0, codDue: total, qualifiesFreeDelivery: false, label: "Cash on Delivery" };
+        }
         case "Advance Payment": {
-          const fee = subtotal >= r.FREE_DELIVERY_THRESHOLD ? 0 : r.ADVANCE_DELIVERY_FEE;
-          const total = subtotal + fee;
-          return { delivery: fee, total, payNow: total, codDue: 0, qualifiesFreeDelivery: fee === 0 };
+          const fee = calcSubtotal >= r.FREE_DELIVERY_THRESHOLD ? 0 : r.ADVANCE_DELIVERY_FEE;
+          const total = calcSubtotal + fee;
+          return { delivery: fee, total, payNow: total, codDue: 0, qualifiesFreeDelivery: fee === 0, label: "Advance Payment" };
         }
         case "Split Payment": {
-          const fee = computeDeliveryFee("Split Payment", subtotal, !codAllowed);
-          const total = subtotal + fee;
+          const delivery = r.COD_DELIVERY_FEE;
+          const total = calcSubtotal + delivery;
           const percent = Math.min(99, Math.max(1, Number(r.SPLIT_ADVANCE_PERCENT) || 50));
-          const payNow = Math.ceil(total * percent / 100);
-          const rawCodDue = total - payNow;
+          if (percent === 50) {
+            const payNow = Math.ceil(total / 2);
+            const codDue = total - payNow;
+            return { delivery, total, payNow, codDue, qualifiesFreeDelivery: false, label: "Split Payment" };
+          }
+          const rawPayNow = Math.ceil(total * percent / 100);
+          const rawCodDue = total - rawPayNow;
           const codDue = Math.round(rawCodDue / 100) * 100;
-          const adjustedPayNow = total - codDue;
-          return { delivery: fee, total, payNow: adjustedPayNow, codDue, qualifiesFreeDelivery: false };
+          const adjPayNow = total - codDue;
+          return { delivery, total, payNow: adjPayNow, codDue, qualifiesFreeDelivery: false, label: "Split Payment" };
         }
         default:
-          return { delivery: 0, total: subtotal, payNow: subtotal, codDue: 0, qualifiesFreeDelivery: false };
+          return { delivery: 0, total: calcSubtotal, payNow: calcSubtotal, codDue: 0, qualifiesFreeDelivery: false, label: method };
       }
     };
-
-    const codPreview = paymentPreview("Cash on Delivery");
-    const advancePreview = paymentPreview("Advance Payment");
-    const splitPreview = paymentPreview("Split Payment");
 
     app.innerHTML = `
       <section class="page narrow">
