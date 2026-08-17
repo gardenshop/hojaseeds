@@ -777,7 +777,35 @@ const restrictedNote = !codAllowed
       : (containsMixPack ? `<div class="pay-cod-banner premium-cod-card"><span class="pay-cod-badge premium-cod-badge">✓</span><div><strong>100% Cash on Delivery Available</strong><p>Pay nothing now · Pay ${CONFIG.CURRENCY} ${this._order.total} at your doorstep.</p></div></div>` : "");
 
     const codMixUpsell = !codAllowed ? this.codMixPackUpsellHTML() : "";
-    const orderTotal = this._order.total || subtotal + computeDeliveryFee(defaultMethod, subtotal, !codAllowed);
+
+    // Per-method preview calculation — each payment option shows its own totals
+    const paymentPreview = (method) => {
+      switch (method) {
+        case "Cash on Delivery":
+          return { delivery: r.COD_DELIVERY_FEE, total: subtotal + r.COD_DELIVERY_FEE, payNow: 0, codDue: subtotal + r.COD_DELIVERY_FEE, qualifiesFreeDelivery: false };
+        case "Advance Payment": {
+          const fee = subtotal >= r.FREE_DELIVERY_THRESHOLD ? 0 : r.ADVANCE_DELIVERY_FEE;
+          const total = subtotal + fee;
+          return { delivery: fee, total, payNow: total, codDue: 0, qualifiesFreeDelivery: fee === 0 };
+        }
+        case "Split Payment": {
+          const fee = computeDeliveryFee("Split Payment", subtotal, !codAllowed);
+          const total = subtotal + fee;
+          const percent = Math.min(99, Math.max(1, Number(r.SPLIT_ADVANCE_PERCENT) || 50));
+          const payNow = Math.ceil(total * percent / 100);
+          const rawCodDue = total - payNow;
+          const codDue = Math.round(rawCodDue / 100) * 100;
+          const adjustedPayNow = total - codDue;
+          return { delivery: fee, total, payNow: adjustedPayNow, codDue, qualifiesFreeDelivery: false };
+        }
+        default:
+          return { delivery: 0, total: subtotal, payNow: subtotal, codDue: 0, qualifiesFreeDelivery: false };
+      }
+    };
+
+    const codPreview = paymentPreview("Cash on Delivery");
+    const advancePreview = paymentPreview("Advance Payment");
+    const splitPreview = paymentPreview("Split Payment");
 
     app.innerHTML = `
       <section class="page narrow">
@@ -796,21 +824,22 @@ const restrictedNote = !codAllowed
                   <input type="radio" name="pay" value="Cash on Delivery" ${defaultMethod === "Cash on Delivery" ? "checked" : ""} onchange="Views.selectPay('payCOD','payAdvance,paySplit')">
                   <span class="pay-option-icon" aria-hidden="true">💵</span><div class="pay-option-copy"><div class="pay-option-title">Cash on Delivery</div>
                   <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} 0</div>
-                  <div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} ${orderTotal}</div>
+                  <div class="payment-payable-due">Pay at doorstep: ${CONFIG.CURRENCY} ${codPreview.total}</div>
                   </div>
                 </label>` : ""}
                 <label class="pay-option ${codAllowed ? "" : "selected"}" id="payAdvance">
                   <input type="radio" name="pay" value="Advance Payment" ${codAllowed ? "" : "checked"} onchange="Views.selectPay('payAdvance','payCOD,paySplit')">
-                  <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Pay 100% in Advance <span class="payment-benefit">FREE DELIVERY BENEFIT</span></div>
-                  ${hasCustomized ? `<div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${orderTotal}</div><div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} 0</div>` : `<div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${orderTotal}</div><div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} 0<br>(Delivery ${CONFIG.CURRENCY} ${r.ADVANCE_DELIVERY_FEE}${orderTotal >= r.FREE_DELIVERY_THRESHOLD ? " (FREE)" : ""})</div>`}
+                  <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Pay 100% in Advance ${advancePreview.qualifiesFreeDelivery ? '<span class="payment-benefit">FREE DELIVERY</span>' : ''}</div>
+                  <div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${advancePreview.total}</div>
+                  <div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} 0${!advancePreview.qualifiesFreeDelivery ? '<br>Delivery ' + CONFIG.CURRENCY + ' ' + advancePreview.delivery : ''}</div>
                   </div>
                 </label>
                 ${splitAllowed ? `
                 <label class="pay-option" id="paySplit">
                   <input type="radio" name="pay" value="Split Payment" onchange="Views.selectPay('paySplit','payCOD,payAdvance')">
                    <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay ${r.SPLIT_ADVANCE_PERCENT}% Now + ${100 - r.SPLIT_ADVANCE_PERCENT}% on Delivery</div>
-                   <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} ${Math.ceil(orderTotal * r.SPLIT_ADVANCE_PERCENT / 100)}</div>
-                   <div class="payment-paydable-due">Pay on delivery: ${CONFIG.CURRENCY} ${Math.ceil((orderTotal - Math.ceil(orderTotal * r.SPLIT_ADVANCE_PERCENT / 100)) / 100) * 100}</div>
+                   <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} ${splitPreview.payNow}</div>
+                   <div class="payment-payable-due">Pay on delivery: ${CONFIG.CURRENCY} ${splitPreview.codDue}</div>
                    </div>
                 </label>` : ""}
               </div>
@@ -832,9 +861,9 @@ const restrictedNote = !codAllowed
               <h3>Order Summary</h3>
               ${lines.map(l => `<div class="summary-line"><span>${l.p.name} × ${l.qty}</span><span class="mono">${CONFIG.CURRENCY} ${l.line}</span></div>`).join("")}
               <div class="summary-line"><span>Items subtotal</span><span class="mono">${CONFIG.CURRENCY} ${subtotal}</span></div>
-              <div class="summary-line"><span>Delivery</span><span class="mono" id="summaryDeliveryFee">${CONFIG.CURRENCY} ${defaultFee}</span></div>
+              <div class="summary-line"><span>Delivery</span><span class="mono" id="summaryDeliveryFee">${CONFIG.CURRENCY} ${advancePreview.delivery}</span></div>
               <div class="summary-line"><span>Payment method</span><span id="summaryPaymentMethod">${defaultMethod}</span></div>
-              <div class="summary-line total"><span>Order total</span><span class="mono" id="summaryTotal">${CONFIG.CURRENCY} ${subtotal + defaultFee}</span></div>
+              <div class="summary-line total"><span>Order total</span><span class="mono" id="summaryTotal">${CONFIG.CURRENCY} ${advancePreview.total}</span></div>
               <div class="summary-line" id="summaryPayNowRow"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span class="mono" id="summaryPayNow"></span></div>
               <div class="summary-line" id="summaryCodDueRow"><span>Pay on delivery</span><span class="mono" id="summaryCodDue"></span></div>
               <button class="inline-submit" type="submit" id="submitBtn"></button>

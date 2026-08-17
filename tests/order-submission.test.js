@@ -346,6 +346,22 @@ async function backendTests() {
     );
   }
   {
+    // PAY-K: payment display shows correct per-method totals
+    // Mix Pack Rs.999, COD fee 250, Advance fee 100
+    // COD total = 999 + 250 = 1249
+    // Advance total = 999 + 100 = 1099
+    // Frontend must show these values correctly, not leak the default method's total
+    const { api } = createBackend(products(), rules);
+    const mixResult = api.submitOrder(order({ items: [{ productId: "mix-01", quantity: 1 }], payment: { method: "Cash on Delivery" } }));
+    assert.equal(mixResult.total, 1249, "PAY-K: COD total is 1249");
+    assert.equal(mixResult.codDue, 1249, "PAY-K: COD card shows correct codDue");
+    assert.equal(mixResult.payNow, 0, "PAY-K: COD payNow is 0");
+    const advResult = api.submitOrder(order({ items: [{ productId: "mix-01", quantity: 1 }], payment: { method: "Advance Payment", advanceMethod: "JazzCash", transactionReference: "TXN1" } }));
+    assert.equal(advResult.total, 1099, "PAY-K: Advance total is 1099, not leaked 1249");
+    assert.equal(advResult.payNow, 1099, "PAY-K: Advance payNow matches total");
+    assert.equal(advResult.codDue, 0, "PAY-K: Advance codDue is 0");
+  }
+  {
     // Existing customized-collection rule is unchanged: advance only, no COD, no split.
     const { api } = createBackend(products(), rules);
     assert.throws(
