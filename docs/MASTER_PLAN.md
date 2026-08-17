@@ -356,6 +356,41 @@ without verifying target identity and explicit operator authorization.
   `Cart.setQty()`, `cartChangeQty()`, `Cart.totalAmount()`, localStorage
   shape, and the Cart→Delivery route are unchanged.
 
+- Cart-based payment-policy matrix (HS-20260817-04), **partially protected —
+  frontend/schema only, server enforcement not yet deployed**: category and
+  Cart geometry are unchanged (only the Payment page and its handlers were
+  touched). The documented policy mapping (derived from existing Products
+  `cat`/`type`, no new Sheet column) is: mix+customized-collection ->
+  advance_only (unchanged); mix+standard-collection -> cod (fixed Mix Packs
+  may use 100% COD); vegetables/flowers -> advance_or_split (individually
+  selected packets may not use COD, only Advance or a 50/50 Split);
+  everything else -> existing/unchanged. Cart-level policy is the single
+  most restrictive item present. Split Payment requires an enabled advance
+  channel + transaction reference like full Advance; its delivery fee is the
+  approved COD fee (no separate SPLIT_DELIVERY_FEE approved) and it never
+  receives the Advance free-delivery-threshold benefit; amounts are
+  server-computed only (`payNow = ceil(total/2)`, `codDue = total -
+  payNow`). The Orders sheet's additive `payNow`/`codDue` columns
+  (schema_version 3) are live and verified against the real Sheet. **The
+  `apps-script/Code.gs` code implementing this matrix is written, tested
+  (`npm test` passes, full PAY-A..J matrix), and committed, but has NOT been
+  pushed to the live Apps Script project** — local `clasp` credentials are
+  stale and require an interactive `clasp login` before `node
+  scripts/deploy-hoja.mjs --push --remote` can ship it. Until that push, the
+  live server still runs the pre-HS-04 rules (Split Payment is rejected with
+  a readable `INVALID_PAYMENT_METHOD` error; the new custom-selection COD
+  restriction is not enforced against a direct API bypass of the frontend).
+  Treat this matrix as NOT fully protected until the Apps Script push is
+  confirmed live and re-verified against production.
+- Super Admin width repair (HS-20260817-04): `.admin-shell` uses
+  `width:min(96vw,1540px)` (widened from the HS-03 `min(1400px,calc(100vw -
+  32px))`), `.admin-layout` gap 24px, Products columns 40/17/17/26%.
+  Verified live: 0px overflow and all four columns visible at
+  1024/1280/1366/1440/1600/1920 and at both `.admin-table` and full-page
+  screenshot level, on Products, Dashboard, Orders, Customers, and Delivery
+  & Payments. The reported clipping remains unreproduced against live
+  production across every configuration tested in HS-03 and HS-04.
+
 ## Launch Acceptance Gates
 
 - [x] Google OAuth Web client ID configured for the approved admin origins.

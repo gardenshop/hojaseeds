@@ -37,8 +37,24 @@ without an explicit "unfreeze <item>" instruction.*
 new request isn't this, either finish/freeze this first or explicitly
 replace it.*
 
-- Nothing in progress right now. Last completed: server-authoritative,
-  idempotent, reliable order submission.
+- **URGENT, blocks real Split Payment orders:** the cart-based payment-policy
+  matrix (HS-20260817-04) is deployed to the frontend (`www.hojaseeds.pk`)
+  but NOT yet deployed to the Apps Script backend — `clasp push` is blocked
+  by stale/broken local credentials (`clasp login --status` returns "logged
+  in as an unknown user"; `clasp push` fails with `Cannot read properties of
+  undefined (reading 'access_token')`). Confirmed live: the Payment page
+  correctly offers "Split Payment" for custom-selection carts, but a real
+  Split submission is rejected by the still-old server with a readable
+  `INVALID_PAYMENT_METHOD` error (fails safely — no crash, no data loss, cart
+  retained, customer can pick Advance instead) since old Code.gs doesn't
+  recognize the new method yet. Advance Payment (the default-selected option)
+  is unaffected and works normally. **Next action: a human runs `clasp
+  login` interactively to refresh credentials, then `node
+  scripts/deploy-hoja.mjs --push --remote` (already verified working once
+  auth is fixed) to ship the new `apps-script/Code.gs`.** Until that push
+  happens, Split Payment doesn't actually work for customers, and the new
+  server-side COD restriction for custom-selection carts (vegetables/
+  flowers) is not yet enforced against a direct API bypass of the frontend.
 
 ## Not yet done (known gaps, not currently active)
 - Real product photography (placeholders documented in `assets/images/README.md`)
@@ -67,16 +83,18 @@ replace it.*
 
 ## Readiness
 
-- Production readiness: **96%** (held at 95% at the start of HS-20260817-03
-  since the admin report was still open; the table hardened deterministically
-  and real R2-backed hero/category imagery shipped; up to 96%)
-- Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test
-  (still requires a human or DevTools-MCP-capable session), and live
+- Production readiness: **93%** (down from 96% entering HS-20260817-04 — the
+  new Split Payment method is live on the frontend but not yet enforceable
+  server-side, a real functional gap for real customers, not a cosmetic one;
+  restore to 96%+ once the Apps Script push completes and is verified live)
+- Remaining: **7%** — deploy the new `apps-script/Code.gs` (blocked on
+  interactive `clasp login`), authorized GIS admin sign-in + mutation/restore
+  test (still requires a human or DevTools-MCP-capable session), and live
   analytics vendor delivery (GA4/Meta IDs still placeholders)
-- Expanded operations scope readiness: **92%** (held at 92% entering
-  HS-20260817-03; admin table hardening and real R2 imagery landed without
-  moving this number since neither closes an expanded-scope gap). The
-  responsive admin shell,
+- Expanded operations scope readiness: **92%** (unchanged this session — the
+  admin width repair and payment-policy matrix land without moving this
+  number since neither closes an expanded-scope gap). The responsive admin
+  shell,
   authenticated bounded reads, derived dashboard/customers views, delivery/
   analytics status panels, and additive AuditLog foundation are implemented.
 - Expanded scope readiness remains capped at 92%: full product CRUD, order
@@ -462,3 +480,58 @@ replace it.*
   setting mutation-and-restore test — no DevTools MCP was exposed to attach
   to the user's existing Chrome session, and headless Playwright cannot
   complete interactive Google OAuth, so this remains a human-required step.
+- 2026-08-17 (HS-20260817-04): Cart-based payment-policy matrix. Server
+  (`apps-script/Code.gs`): `productPaymentPolicy()`/`cartPaymentPolicy()`
+  derive eligibility from existing Products `cat`/`type` only — no new Sheet
+  column — per the documented mapping (mix+customized-collection ->
+  advance_only, unchanged; mix+standard-collection -> cod; vegetables/
+  flowers -> advance_or_split; everything else -> existing/unchanged). New
+  `Split Payment` order method: requires an enabled advance channel +
+  transaction reference like full Advance; delivery fee uses the approved
+  COD fee (no separate SPLIT_DELIVERY_FEE approved); amounts are
+  server-computed only, `payNow = ceil(total/2)`, `codDue = total - payNow`.
+  Orders sheet gained additive `payNow`/`codDue` columns, schema_version 3,
+  applied live against the real Sheet (`sheets:verify` confirms nothing
+  missing; a second `sheets-migrate.mjs` run is a confirmed NOOP).
+  `tests/order-submission.test.js` rewritten: the shared `order()` fixture's
+  default item moved from a vegetables product to a Fertilizer product
+  (preserving every pre-existing dollar-amount assertion unchanged) since
+  vegetables are no longer COD-eligible, plus the full PAY-A..J
+  policy-matrix coverage from the task's test plan (Mix-only COD, custom
+  vegetable/flower COD-block, mixed-cart stricter-rule, tamper rejection via
+  `doPost`, even/odd split rounding, delivery-fee-per-method, Mix-Pack-only
+  rejects Split, customized-collection still rejects Split not just COD).
+  `npm test` passes.
+
+  Frontend (`js/app.js`, presentation only): Payment page renders one of
+  three cases (Mix-Pack-only COD banner; custom-selection Advance/Split with
+  no COD and a "View COD Mix Packs" upsell showing real current Mix Pack
+  names/prices, navigating to Mix Seeds without mutating the cart;
+  customized-collection's existing strict advance-only note unchanged).
+  Order Summary always shows Order total/Pay now/Pay on delivery; submit
+  button and confirmation page copy match the spec's exact wording per
+  method. Category info-bar's "COD Available" chip no longer renders on
+  Vegetables/Flowers pages. Verified with local Playwright across all four
+  cart-composition cases (screenshots captured) and the existing 10-viewport
+  x 12-route regression sweep, 0px overflow / 0 errors throughout.
+
+  Admin (`admin.html`): `.admin-shell` widened to `width:min(96vw,1540px)`
+  (from a narrower centered max-width), `.admin-layout` gap 24px, Products
+  columns rebalanced to 40/17/17/26%. The reported clipping remained
+  unreproduced against live production (0px overflow, all 4 columns visible
+  at 1024-1920, both before and after this change, with screenshot proof) —
+  this uses substantially more available desktop width regardless.
+
+  Deployed: git commit `e16da12` pushed to `main`; Cloudflare Pages
+  deployment `37fbbd01` confirmed live (`css/styles.css`/`admin.html`
+  contain the new rules). **Apps Script push is NOT deployed** — local
+  `clasp` credentials are stale/broken (`clasp login --status` returns
+  "logged in as an unknown user"; `push` fails retrieving an access token).
+  Confirmed live against `www.hojaseeds.pk`: the Payment page correctly
+  offers Split Payment for custom-selection carts, but a real Split
+  submission is rejected by the still-old server with a readable
+  `INVALID_PAYMENT_METHOD` error (fails safely, cart retained, no crash) —
+  see the Active section above for the required next step. Authorized GIS
+  admin sign-in + Tomato/payment-setting mutation-and-restore test was also
+  not completed this session for the same reason (no interactive browser
+  access).
