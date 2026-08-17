@@ -93,8 +93,13 @@ function paymentPreview(method, subtotal) {
   const splitAdvancePercent = Math.min(99, Math.max(1, Number(r.SPLIT_ADVANCE_PERCENT) || 50));
   const rawPayNow = Math.ceil(orderTotal * splitAdvancePercent / 100);
   const rawCodDue = orderTotal - rawPayNow;
-  const codDue = Math.round(rawCodDue / 100) * 100;
-  const payNow = orderTotal - codDue;
+  const roundedCodDue = Math.round(rawCodDue / 100) * 100;
+  const normalPayNow = orderTotal - roundedCodDue;
+  const minimumAdvance = Math.min(orderTotal, Math.max(1, Number(r.MIN_PARTIAL_ADVANCE) || 250));
+  // The configured floor applies after the existing COD rounding. Do not
+  // round COD again, because that could reduce payNow below the minimum.
+  const payNow = Math.max(normalPayNow, minimumAdvance);
+  const codDue = orderTotal - payNow;
   return {
     method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow, codDue, freeDelivery: false, freeDeliveryQualified: false,
     advancePercent: splitAdvancePercent, deliveryPercent: 100 - splitAdvancePercent
@@ -141,16 +146,16 @@ function commerceProductCardHTML(p, qty, context = "category") {
   const identity = isCart ? `data-pid="${p.id}"` : `data-product-id="${p.id}"`;
   const statusId = isCart ? "" : ` id="sel-${p.id}"`;
   const badge = productBadgeHTML(p);
-  const removeBtn = isCart ? `<button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>` : "";
+  const removeBtn = isCart ? `<button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${escapeHTML(p.name)} from cart" title="Remove from cart">🗑</button>` : "";
   return `<article class="commerce-product-card${qty > 0 ? " in-cart" : ""}" ${identity}>
-    <div class="commerce-name-row"><span class="commerce-name">${p.name}</span>${badge ? `<span class="commerce-badge">${badge}</span>` : ""}</div>
+    <div class="commerce-name-row"><span class="commerce-name">${escapeHTML(p.name)}</span>${badge ? `<span class="commerce-badge">${badge}</span>` : ""}</div>
     <div class="commerce-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
     <div class="commerce-details">
       <div class="commerce-unit">per ${p.unit}</div>
       <div class="commerce-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
     </div>
     <div class="commerce-actions"><div class="stepper"><button onclick="Views.${isCart ? "cartChangeQty" : "changeQty"}('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button><span class="qty-display"${isCart ? "" : ` id="qty-${p.id}"`}>${qty}</span><button onclick="Views.${isCart ? "cartChangeQty" : "changeQty"}('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button></div></div>
-    <div class="commerce-total"${isCart ? "" : ` id="tot-${p.id}"`}>${selectedTotalHTML(total)}<div class="commerce-status"${statusId}${qty <= 0 ? ' style="display:none"' : ""}>${inCartStatusHTML(qty)}${removeBtn}</div></div>
+    <div class="commerce-utility"><div class="commerce-total"${isCart ? "" : ` id="tot-${p.id}"`}>${selectedTotalHTML(total)}</div><div class="commerce-status"${statusId}${qty <= 0 ? ' style="display:none"' : ""}>${inCartStatusHTML(qty)}${removeBtn}</div></div>
   </article>`;
 }
 
@@ -501,7 +506,7 @@ const Views = {
           </div>`).join("")}
       </div>
       <section class="page">
-        <h3 class="section-title">Why Hoja Seeds</h3>
+        <h2 class="section-title">Why Hoja Seeds</h2>
         <div class="why-grid">
           <div class="why-card"><span class="ic">🌱</span><h4>Fresh stock</h4><p>Seed packets sourced and packed for this season.</p></div>
           <div class="why-card"><span class="ic">💵</span><h4>Flexible payment</h4><p>COD, or pay in advance via JazzCash, EasyPaisa or bank transfer.</p></div>
@@ -692,16 +697,14 @@ const Views = {
         ${deliveryUpsellHTML(subtotal)}
         <div class="form-card">
           <form id="deliveryForm" onsubmit="Views.confirmDelivery(event)">
+            <div class="field"><label for="o-name">Full name</label><input id="o-name" value="${escapeHTML(d.name || "")}" autocomplete="name" required><div class="field-error" id="o-name-error"></div></div>
+            <div class="field"><label for="o-address">Delivery address</label><textarea id="o-address" rows="2" required>${escapeHTML(d.address || "")}</textarea><div class="field-error" id="o-address-error"></div></div>
             <div class="field-row">
-              <div class="field"><label for="o-name">Full name</label><input id="o-name" value="${d.name || ""}" required></div>
-              <div class="field"><label for="o-phone">Phone number</label><input id="o-phone" type="tel" value="${d.phone || ""}" required></div>
+              <div class="field"><label for="o-city">City</label><input id="o-city" value="${escapeHTML(d.city || "")}" autocomplete="address-level2" required><div class="field-error" id="o-city-error"></div></div>
+              <div class="field"><label for="o-postal">Postal code (optional)</label><input id="o-postal" value="${escapeHTML(d.postal || "")}" inputmode="numeric" autocomplete="postal-code" maxlength="5"><div class="field-error" id="o-postal-error"></div></div>
             </div>
-            <div class="field"><label for="o-address">Delivery address</label><textarea id="o-address" rows="2" required>${d.address || ""}</textarea></div>
-            <div class="field-row">
-              <div class="field"><label for="o-city">City</label><input id="o-city" value="${d.city || ""}" required></div>
-              <div class="field"><label for="o-postal">Postal code (optional)</label><input id="o-postal" value="${d.postal || ""}"></div>
-            </div>
-            <div class="field"><label for="o-notes">Order notes (optional)</label><textarea id="o-notes" rows="2">${d.notes || ""}</textarea></div>
+            <div class="field"><label for="o-phone">Phone number</label><input id="o-phone" type="tel" value="${escapeHTML(formatPakistanMobile(d.phone || ""))}" inputmode="numeric" autocomplete="tel" placeholder="0335-4299783" maxlength="12" oninput="formatPakistanMobileInput(this)" required><div class="field-error" id="o-phone-error"></div></div>
+            <div class="field"><label for="o-notes">Order notes (optional)</label><textarea id="o-notes" rows="2" maxlength="500">${escapeHTML(d.notes || "")}</textarea></div>
             <button class="inline-submit" type="submit" id="deliverySubmitBtn">Confirm Delivery</button>
             <div id="deliveryStatus"></div>
           </form>
@@ -721,18 +724,24 @@ const Views = {
 
   confirmDelivery(e) {
     e.preventDefault();
-    // HTML5 required attributes already block invalid submits; this is the
-    // explicit "not confirmed yet" gate the button represents.
     const delivery = {
       name: document.getElementById("o-name").value.trim(),
-      phone: document.getElementById("o-phone").value.trim(),
+      phone: formatPakistanMobile(document.getElementById("o-phone").value),
       address: document.getElementById("o-address").value.trim(),
       city: document.getElementById("o-city").value.trim(),
       postal: document.getElementById("o-postal").value.trim(),
       notes: document.getElementById("o-notes").value.trim(),
     };
-    if (!delivery.name || !delivery.phone || !delivery.address || !delivery.city) {
-      document.getElementById("deliveryStatus").innerHTML = `<div class="order-status err">Please fill in all required delivery details.</div>`;
+    const errors = validateDelivery(delivery);
+    document.querySelectorAll(".field-error").forEach(el => el.textContent = "");
+    const firstError = Object.keys(errors)[0];
+    if (firstError) {
+      Object.entries(errors).forEach(([field, message]) => {
+        const errorEl = document.getElementById(`o-${field}-error`);
+        if (errorEl) errorEl.textContent = message;
+      });
+      document.getElementById(`o-${firstError}`)?.focus();
+      document.getElementById("deliveryStatus").innerHTML = `<div class="order-status err">Please correct the highlighted delivery details.</div>`;
       return;
     }
     this._order = this._order || {};
@@ -1268,6 +1277,28 @@ function normalizePakistanMobile(value) {
   return normalized;
 }
 
+function formatPakistanMobile(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("92")) digits = `0${digits.slice(2)}`;
+  if (digits.startsWith("3")) digits = `0${digits}`;
+  digits = digits.slice(0, 11);
+  return digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits;
+}
+
+function formatPakistanMobileInput(input) {
+  input.value = formatPakistanMobile(input.value);
+}
+
+function validateDelivery(delivery) {
+  const errors = {};
+  if (delivery.name.length < 2 || delivery.name.length > 80) errors.name = "Enter your full name.";
+  if (delivery.address.length < 8 || delivery.address.length > 240) errors.address = "Enter a complete delivery address.";
+  if (delivery.city.length < 2 || delivery.city.length > 80) errors.city = "Enter your city.";
+  if (delivery.postal && !/^\d{5}$/.test(delivery.postal)) errors.postal = "Enter a 5-digit postal code.";
+  if (!/^03\d{2}-\d{7}$/.test(delivery.phone)) errors.phone = "Enter a valid Pakistan mobile number, e.g. 0335-4299783.";
+  return errors;
+}
+
 function createIdempotencyKey() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
   if (window.crypto?.getRandomValues) {
@@ -1294,7 +1325,11 @@ document.getElementById("navToggle").addEventListener("click", () => {
   document.getElementById("navToggle").setAttribute("aria-expanded", open);
 });
 (async () => {
-  await Promise.all([Prices.load(), Settings.load()]);
   Cart.renderCount();
   Router.go("home");
+  // Never leave the storefront blank while the Apps Script reads are slow.
+  // Fallback catalog/settings render immediately; settled live data refreshes
+  // the active view without changing the current route or cart state.
+  await Promise.allSettled([Prices.load(), Settings.load()]);
+  Router.go(Router.current || "home");
 })();

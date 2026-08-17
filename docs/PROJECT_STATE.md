@@ -671,4 +671,17 @@ replace it.*
   1366px was TTFB 604ms, FCP 1560ms, DOMContentLoaded 1554ms, and load
   2429ms; the slowest startup resources were Cloudflare Insights and the
   Google Fonts stylesheet. Authenticated Admin geometry and mutation/restore
-  remain pending because MCP was unavailable.
+   remain pending because MCP was unavailable.
+
+### 2026-08-18 (HS-20260818-03) minimum partial advance and fallback-first rendering
+
+- Split payment preserves its existing COD rounding first, then enforces the
+  additive `MIN_PARTIAL_ADVANCE` Settings value (default Rs.250). The floor
+  never exceeds the order total; `codDue` is always recomputed as
+  `total - payNow`, so no second rounding can reduce the minimum. Client
+  `paymentPreview()` and Apps Script `buildAuthoritativeOrder()` are covered
+  by equality tests.
+- The storefront renders fallback catalog/settings immediately, then refreshes
+  after live Apps Script reads settle, preventing an empty `#app` when a
+  remote read is slow. Category/Cart cards retain one renderer, with selected
+  state separate below Total and an accessible Cart trash control.

@@ -17,6 +17,7 @@ const rules = {
   COD_DELIVERY_FEE: 250,
   COD_ALLOWED: true,
   SPLIT_ADVANCE_PERCENT: 50,
+  MIN_PARTIAL_ADVANCE: 250,
   CUSTOMIZED_REQUIRES_FULL_ADVANCE: true
 };
 
@@ -161,6 +162,28 @@ function serverOrder(server, { subtotal, paymentMethod, advanceMethod }) {
     const s = serverOrder(server, { subtotal: 999, paymentMethod: "Advance Payment", advanceMethod: "JazzCash" });
     assert.equal(c.deliveryFee, s.deliveryFee, "CASE C: client/server deliveryFee match");
     assert.equal(c.orderTotal, s.total, "CASE C: client/server total match");
+  }
+
+  // Minimum partial advance is applied after the existing Split COD rounding.
+  // Subtotal 150 + Rs.250 delivery gives total Rs.400: normal 50/50 is
+  // below the floor, so Rs.250 is collected now and Rs.150 at delivery.
+  {
+    const c = paymentPreview("Split Payment", 150);
+    assert.equal(c.orderTotal, 400, "MIN A: total");
+    assert.equal(c.payNow, 250, "MIN A: floor applies at Rs.400 total");
+    assert.equal(c.codDue, 150, "MIN A: remainder is doorstep due");
+    const s = serverOrder(server, { subtotal: 150, paymentMethod: "Split Payment", advanceMethod: "JazzCash" });
+    assert.equal(c.payNow, s.payNow, "MIN A: client/server payNow match");
+    assert.equal(c.codDue, s.codDue, "MIN A: client/server codDue match");
+  }
+
+  // At and above the floor, the existing rounded Split result is preserved.
+  {
+    const c = paymentPreview("Split Payment", 650);
+    assert.equal(c.orderTotal, 900, "MIN B: total");
+    assert.equal(c.payNow, 400, "MIN B: existing rounding remains above floor");
+    assert.equal(c.codDue, 500, "MIN B: existing COD rounding remains");
+    assert.equal(c.payNow + c.codDue, c.orderTotal, "MIN B: amounts still equal total");
   }
 
   // CASE D: subtotal 999, COD -> delivery 250, total 1249

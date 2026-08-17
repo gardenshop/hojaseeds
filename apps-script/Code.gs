@@ -116,7 +116,8 @@ const ORDER_DEFAULT_RULES = {
   ADVANCE_DELIVERY_FEE: 100,
   COD_DELIVERY_FEE: 250,
   COD_ALLOWED: true,
-  SPLIT_ADVANCE_PERCENT: 50
+  SPLIT_ADVANCE_PERCENT: 50,
+  MIN_PARTIAL_ADVANCE: 250
 };
 const ORDER_PAYMENT_METHODS = ["Cash on Delivery", "Advance Payment", "Split Payment"];
 const ORDER_ADVANCE_METHODS = ["JazzCash", "EasyPaisa", "Bank Transfer"];
@@ -310,8 +311,12 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
     const rawCodDue = total - rawPayNow;
     const roundingUnit = Math.max(100, Number(settings.SPLIT_COD_ROUNDING_UNIT) || 100);
     const roundedCodDue = Math.round(rawCodDue / roundingUnit) * roundingUnit;
-    payNow = total - roundedCodDue;
-    codDue = roundedCodDue;
+    const normalPayNow = total - roundedCodDue;
+    // Apply the floor after normal Split COD rounding. Do not re-round COD,
+    // because that could put the advance back below the configured minimum.
+    const minimumAdvance = Math.min(total, settings.MIN_PARTIAL_ADVANCE);
+    payNow = Math.max(normalPayNow, minimumAdvance);
+    codDue = total - payNow;
   }
 
   return {
@@ -343,6 +348,10 @@ function getOrderSettings() {
   rules.SPLIT_ADVANCE_PERCENT = Number(rules.SPLIT_ADVANCE_PERCENT);
   if (!Number.isInteger(rules.SPLIT_ADVANCE_PERCENT) || rules.SPLIT_ADVANCE_PERCENT < 1 || rules.SPLIT_ADVANCE_PERCENT > 99) {
     throw new OrderError("INVALID_STORE_SETTINGS", "The split payment percentage is invalid.");
+  }
+  rules.MIN_PARTIAL_ADVANCE = Number(rules.MIN_PARTIAL_ADVANCE);
+  if (!Number.isInteger(rules.MIN_PARTIAL_ADVANCE) || rules.MIN_PARTIAL_ADVANCE < 1 || rules.MIN_PARTIAL_ADVANCE > 100000) {
+    throw new OrderError("INVALID_STORE_SETTINGS", "The minimum partial advance is invalid.");
   }
   rules.COD_ALLOWED = booleanValue(rules.COD_ALLOWED);
   return rules;
@@ -480,7 +489,7 @@ function getSettings() {
 
 function updateSettings(rules, adminEmail) {
   if (!rules || typeof rules !== "object" || Array.isArray(rules)) throw new OrderError("INVALID_ADMIN_UPDATE", "Store settings are invalid.");
-  const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE", "SPLIT_ADVANCE_PERCENT"].concat(PAYMENT_DISPLAY_KEYS);
+  const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE", "SPLIT_ADVANCE_PERCENT", "MIN_PARTIAL_ADVANCE"].concat(PAYMENT_DISPLAY_KEYS);
   Object.keys(rules).forEach(key => {
     if (allowedKeys.indexOf(key) === -1) throw new OrderError("INVALID_ADMIN_UPDATE", "A store setting is not allowed.");
   });
@@ -489,6 +498,10 @@ function updateSettings(rules, adminEmail) {
   if ("SPLIT_ADVANCE_PERCENT" in rules) {
     rules.SPLIT_ADVANCE_PERCENT = Number(rules.SPLIT_ADVANCE_PERCENT);
     if (!Number.isInteger(rules.SPLIT_ADVANCE_PERCENT) || rules.SPLIT_ADVANCE_PERCENT < 1 || rules.SPLIT_ADVANCE_PERCENT > 99) throw new OrderError("INVALID_ADMIN_UPDATE", "SPLIT_ADVANCE_PERCENT must be an integer from 1 to 99.");
+  }
+  if ("MIN_PARTIAL_ADVANCE" in rules) {
+    rules.MIN_PARTIAL_ADVANCE = Number(rules.MIN_PARTIAL_ADVANCE);
+    if (!Number.isInteger(rules.MIN_PARTIAL_ADVANCE) || rules.MIN_PARTIAL_ADVANCE < 1 || rules.MIN_PARTIAL_ADVANCE > 100000) throw new OrderError("INVALID_ADMIN_UPDATE", "MIN_PARTIAL_ADVANCE must be a whole number from 1 to 100000.");
   }
   PAYMENT_DISPLAY_KEYS.forEach(key => {
     if (!(key in rules)) return;
