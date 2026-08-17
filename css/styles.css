@@ -73,17 +73,21 @@ button{font-family:inherit;cursor:pointer;}
 /* ══════════════ HERO (premium, mobile-first) ══════════════ */
 .hero{
   position:relative;overflow:hidden;color:var(--kraft);
+  /* Real photo layer first (R2-hosted); if it 404s the browser simply
+     paints nothing for that layer and the radial/linear gradients below
+     still render — no broken-image icon, no layout break. */
   background-image:
+    url('https://images.hojaseeds.pk/hero/home-garden.webp'),
     radial-gradient(120% 90% at 15% 0%, rgba(214,140,46,.28), transparent 55%),
     radial-gradient(100% 80% at 90% 100%, rgba(63,107,63,.35), transparent 60%),
     linear-gradient(165deg,var(--soil) 0%,var(--soil-light) 100%);
-   background-size:auto, auto, auto;
-   background-position:center, center, center;
+   background-size:cover, auto, auto, auto;
+   background-position:center, center, center, center;
   padding:34px 18px 30px;
 }
 .hero::before{
   content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(180deg, rgba(20,15,8,.55) 0%, rgba(20,15,8,.78) 100%);
+  background:linear-gradient(180deg, rgba(20,15,8,.62) 0%, rgba(20,15,8,.84) 100%);
 }
 .hero-inner{position:relative;max-width:1180px;margin:0 auto;}
 .hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(241,230,208,.1);border:1px solid rgba(241,230,208,.25);color:var(--kraft);font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;padding:5px 12px;border-radius:999px;margin-bottom:14px;}
@@ -104,18 +108,23 @@ button{font-family:inherit;cursor:pointer;}
   .hero-inner{display:grid;grid-template-columns:1fr;max-width:720px;}
 }
 
-/* ══════════════ CATEGORY TILES (with real-asset slots) ══════════════ */
-/* Drop real photos into assets/images/ using these filenames — the tile
-   falls back to its gradient automatically if the file isn't there yet. */
+/* ══════════════ CATEGORY TILES (real R2-hosted photos) ══════════════ */
+/* Images are served from the dedicated Cloudflare R2 bucket
+   hoja-seeds-images via the images.hojaseeds.pk custom domain. Each rule
+   layers the real photo over the original brand gradient, so a failed/slow
+   R2 request degrades to the gradient, never a broken-image icon. */
 .cat-grid{max-width:1180px;margin:-20px auto 0;padding:0 14px;position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;}
 .cat-tile{
   border-radius:16px;overflow:hidden;position:relative;height:128px;box-shadow:var(--shadow);min-width:0;
   background-size:cover;background-position:center;
 }
-.cat-tile[data-cat="vegetables"]{background-image:linear-gradient(150deg,#3F6B3F,#274526);}
-.cat-tile[data-cat="flowers"]{background-image:linear-gradient(150deg,#D68C2E,#9C5D18);}
-.cat-tile[data-cat="mix"]{background-image:linear-gradient(150deg,#B84A3E,#7C2E25);}
-.cat-tile[data-cat="fertilizer"]{background-image:linear-gradient(150deg,#6B4A2A,#432D19);}
+/* Real photo layer first (R2-hosted); the matching gradient stays as the
+   second layer so a failed/slow image request never leaves a blank or
+   broken tile — the existing brand gradient shows through instead. */
+.cat-tile[data-cat="vegetables"]{background-image:url('https://images.hojaseeds.pk/categories/vegetable-seeds.webp'),linear-gradient(150deg,#3F6B3F,#274526);}
+.cat-tile[data-cat="flowers"]{background-image:url('https://images.hojaseeds.pk/categories/flower-seeds.webp'),linear-gradient(150deg,#D68C2E,#9C5D18);}
+.cat-tile[data-cat="mix"]{background-image:url('https://images.hojaseeds.pk/categories/mix-seeds.webp'),linear-gradient(150deg,#B84A3E,#7C2E25);}
+.cat-tile[data-cat="fertilizer"]{background-image:url('https://images.hojaseeds.pk/categories/fertilizer.webp'),linear-gradient(150deg,#6B4A2A,#432D19);}
 .cat-tile::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg, rgba(20,15,8,.78) 0%, rgba(20,15,8,.15) 55%, transparent 90%);}
 .cat-tile-content{position:absolute;left:0;right:0;bottom:0;padding:12px 14px;color:#fff;z-index:1;min-width:0;}
 .cat-tile-content .name{font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;display:block;min-width:0;overflow-wrap:anywhere;}

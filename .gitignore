@@ -1,5 +1,6 @@
 node_modules/
 .tools/
+.wrangler/
 .clasp.json
 .clasprc.json
 .env
