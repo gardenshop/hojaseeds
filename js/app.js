@@ -79,13 +79,13 @@ function paymentPreview(method, subtotal) {
   if (method === "Cash on Delivery") {
     const deliveryFee = r.COD_DELIVERY_FEE;
     const orderTotal = subtotal + deliveryFee;
-    return { method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow: 0, codDue: orderTotal, freeDeliveryQualified: false };
+    return { method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow: 0, codDue: orderTotal, freeDelivery: false, freeDeliveryQualified: false, advancePercent: 0, deliveryPercent: 100 };
   }
   if (method === "Advance Payment") {
     const freeDeliveryQualified = subtotal >= r.FREE_DELIVERY_THRESHOLD;
     const deliveryFee = freeDeliveryQualified ? 0 : r.ADVANCE_DELIVERY_FEE;
     const orderTotal = subtotal + deliveryFee;
-    return { method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow: orderTotal, codDue: 0, freeDeliveryQualified };
+    return { method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow: orderTotal, codDue: 0, freeDelivery: freeDeliveryQualified, freeDeliveryQualified, advancePercent: 100, deliveryPercent: 0 };
   }
   // Split Payment
   const deliveryFee = r.COD_DELIVERY_FEE;
@@ -96,8 +96,8 @@ function paymentPreview(method, subtotal) {
   const codDue = Math.round(rawCodDue / 100) * 100;
   const payNow = orderTotal - codDue;
   return {
-    method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow, codDue, freeDeliveryQualified: false,
-    splitAdvancePercent, splitCodPercent: 100 - splitAdvancePercent
+    method, itemsSubtotal: subtotal, deliveryFee, orderTotal, payNow, codDue, freeDelivery: false, freeDeliveryQualified: false,
+    advancePercent: splitAdvancePercent, deliveryPercent: 100 - splitAdvancePercent
   };
 }
 
@@ -143,15 +143,14 @@ function commerceProductCardHTML(p, qty, context = "category") {
   const badge = productBadgeHTML(p);
   const removeBtn = isCart ? `<button class="cart-remove-link" onclick="Views.cartChangeQty('${p.id}',${-qty})" aria-label="Remove ${p.name}">Remove</button>` : "";
   return `<article class="commerce-product-card${qty > 0 ? " in-cart" : ""}" ${identity}>
+    <div class="commerce-name-row"><span class="commerce-name">${p.name}</span>${badge ? `<span class="commerce-badge">${badge}</span>` : ""}</div>
     <div class="commerce-media">${p.image_url ? `<img src="${p.image_url}" alt="${p.name}" loading="lazy">` : p.icon}</div>
     <div class="commerce-details">
-      <div class="commerce-name-row"><span class="commerce-name">${p.name}</span>${badge ? `<span class="commerce-badge">${badge}</span>` : ""}</div>
       <div class="commerce-unit">per ${p.unit}</div>
       <div class="commerce-price">${CONFIG.CURRENCY} ${p.price} / ${p.unit}</div>
-      <div class="commerce-status"${statusId}${qty <= 0 ? ' style="display:none"' : ""}>${inCartStatusHTML(qty)}${removeBtn}</div>
     </div>
     <div class="commerce-actions"><div class="stepper"><button onclick="Views.${isCart ? "cartChangeQty" : "changeQty"}('${p.id}',1)" aria-label="Increase ${p.name} quantity">+</button><span class="qty-display"${isCart ? "" : ` id="qty-${p.id}"`}>${qty}</span><button onclick="Views.${isCart ? "cartChangeQty" : "changeQty"}('${p.id}',-1)" aria-label="Decrease ${p.name} quantity">−</button></div></div>
-    <div class="commerce-total"${isCart ? "" : ` id="tot-${p.id}"`}>${selectedTotalHTML(total)}</div>
+    <div class="commerce-total"${isCart ? "" : ` id="tot-${p.id}"`}>${selectedTotalHTML(total)}<div class="commerce-status"${statusId}${qty <= 0 ? ' style="display:none"' : ""}>${inCartStatusHTML(qty)}${removeBtn}</div></div>
   </article>`;
 }
 
@@ -445,6 +444,7 @@ const Router = {
   go(view) {
     this.current = view;
     document.querySelectorAll(".nav-tab").forEach(b => b.classList.toggle("active", b.dataset.cat === view));
+    document.querySelectorAll(".quick-category-btn").forEach(b => b.classList.toggle("active", b.dataset.cat === view));
     document.getElementById("navTabs").classList.remove("open");
     window.scrollTo({ top: 0, behavior: "smooth" });
     document.title = PAGE_TITLES[view] || "Hoja Seeds";
@@ -822,21 +822,23 @@ const Views = {
                   <div class="payment-payable-due">Pay at doorstep: ${CONFIG.CURRENCY} ${codPreview.orderTotal}</div>
                   </div>
                 </label>` : ""}
-                <label class="pay-option ${codAllowed ? "" : "selected"}" id="payAdvance">
+                 <label class="pay-option ${codAllowed ? "" : "selected"}" id="payAdvance">
                   <input type="radio" name="pay" value="Advance Payment" ${codAllowed ? "" : "checked"} onchange="Views.selectPay('payAdvance','payCOD,paySplit')">
-                  <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">Pay Full Amount Now ${advancePreview.freeDeliveryQualified ? '<span class="payment-benefit">FREE DELIVERY</span>' : ''}</div>
-                  <div class="payment-payable-delivery">Delivery: ${advancePreview.freeDeliveryQualified ? "FREE" : CONFIG.CURRENCY + " " + advancePreview.deliveryFee}</div>
-                  <div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${advancePreview.orderTotal}</div>
-                  </div>
-                </label>
+                   <span class="pay-option-icon" aria-hidden="true">🌱</span><div class="pay-option-copy"><div class="pay-option-title">PAY FULL AMOUNT NOW ${advancePreview.freeDeliveryQualified ? '<span class="payment-benefit">FREE DELIVERY</span>' : ''}</div>
+                   <div class="payment-payable-delivery">Delivery: ${advancePreview.freeDeliveryQualified ? "FREE" : CONFIG.CURRENCY + " " + advancePreview.deliveryFee}</div>
+                   <div class="payment-payable-total">Order total: ${CONFIG.CURRENCY} ${advancePreview.orderTotal}</div>
+                   <div class="payment-payable-paynow premium-advance-card">Pay now: ${CONFIG.CURRENCY} ${advancePreview.payNow}</div>
+                   </div>
+                 </label>
                 ${splitAllowed ? `
                 <label class="pay-option" id="paySplit">
                   <input type="radio" name="pay" value="Split Payment" onchange="Views.selectPay('paySplit','payCOD,payAdvance')">
-                   <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay Half Now, Half at Delivery</div>
-                   <div class="payment-payable-delivery">Delivery: ${CONFIG.CURRENCY} ${splitPreview.deliveryFee}</div>
-                   <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} ${splitPreview.payNow}</div>
-                   <div class="payment-payable-due">Pay at doorstep: ${CONFIG.CURRENCY} ${splitPreview.codDue}</div>
-                   <p class="admin-muted" style="margin:4px 0 0">Standard delivery is already included.</p>
+                   <span class="pay-option-icon" aria-hidden="true">🔀</span><div class="pay-option-copy"><div class="pay-option-title">Pay ${splitPreview.advancePercent}% Now, ${splitPreview.deliveryPercent}% at Delivery</div>
+                    <div class="payment-payable-delivery">Delivery: ${CONFIG.CURRENCY} ${splitPreview.deliveryFee}</div>
+                    <div class="payment-payable-total">Order total: ${CONFIG.CURRENCY} ${splitPreview.orderTotal}</div>
+                    <div class="payment-payable-paynow">Pay now: ${CONFIG.CURRENCY} ${splitPreview.payNow}</div>
+                    <div class="payment-payable-due">Pay at doorstep: ${CONFIG.CURRENCY} ${splitPreview.codDue}</div>
+                    <p class="payment-friendly-note">The standard delivery fee is already included in the order total.</p>
                    </div>
                 </label>` : ""}
               </div>
@@ -1138,6 +1140,7 @@ const Views = {
     Router.current = "confirmation";
     document.title = PAGE_TITLES.confirmation;
     document.querySelectorAll(".nav-tab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".quick-category-btn").forEach(b => b.classList.remove("active"));
     window.scrollTo({ top: 0, behavior: "smooth" });
     const isCOD = payload.paymentMethod === "Cash on Delivery";
     const isSplit = payload.paymentMethod === "Split Payment";

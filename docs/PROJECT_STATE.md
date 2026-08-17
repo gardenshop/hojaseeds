@@ -607,3 +607,62 @@ replace it.*
   Cloudflare/Apps Script deploy were not performed — code changes are
   committed to `main` but not yet deployed to `hojaseeds.pk` or the Apps
   Script production endpoint).
+
+### 2026-08-17 (HS-20260817-13) production forensic audit
+
+- MCP configuration was inspected independently: the effective Codex config is
+  `D:\\AI-TOOLS\\codex\\home\\config.toml`; the server is configured/enabled
+  with `--autoConnect` and no URL restriction. Chrome `151.0.7922.138` is
+  running with the Default profile and a Hoja tab. A fresh Codex runtime still
+  exposed no Chrome DevTools MCP tools, so `list_pages` could not be called and
+  MCP handshake/tool exposure remain unproven. The effective config was
+  repaired to remove the unsupported extra flag; a Codex runtime restart is
+  required to load the change.
+- Non-destructive public production fallback evidence was collected only after
+  the MCP failure: 390px cold load observed TTFB 4526ms/FCP 5728ms/load
+  6854ms; 1366px observed TTFB 589ms/FCP 1504ms/load 2357ms. The slow cold path
+  is intermittent and not attributable without DevTools waterfall or throttled
+  trace evidence. Public viewport sweep found zero console errors, failed
+  requests, horizontal overflow, or offscreen essential content across
+  320–1920px. Delivery → Payment reached live COD Rs.1249 and Advance Rs.1099
+  values without a runtime error.
+- Observed legitimate network origins are `www.hojaseeds.pk`, `hojaseeds.pk`,
+  `images.hojaseeds.pk`, `script.google.com`, `script.googleusercontent.com`,
+  `fonts.googleapis.com`, `fonts.gstatic.com`, `static.cloudflareinsights.com`,
+  and `cloudflareinsights.com`. R2 hero/category objects returned HTTP 200,
+  `image/webp`, immutable one-year caching, and Cloudflare HIT responses;
+  observed sizes were 180218, 83148, 84722, 78002, and 67158 bytes. HTML uses
+  `max-age=0,must-revalidate`; JS/CSS use four-hour revalidation.
+- Authenticated Super Admin, Performance trace/CPU throttling, true DevTools
+  Network waterfall, and mutation/restore remain unverified because MCP tools
+  were not exposed and fallback automation is not an authenticated acceptance
+  path. No source files, production data, Apps Script, Sheet, Cloudflare
+  project, or deployment were changed by HS-20260817-13.
+
+### 2026-08-18 (HS-20260818-01) unified commerce presentation
+
+- Chrome DevTools MCP remains configured and process-startable, but a fresh
+  Codex runtime exposed no `list_pages` tool. Per policy, the full DevTools
+  audit is not claimed complete; Playwright was used only as the documented
+  fallback for public/local regression.
+- Category and Cart now use one shared `commerceProductCardHTML()` structure
+  with a full-width title row, image/details/stepper/Total body, and selected
+  state below Total. Tomato Category/Cart cards measured identically at
+  189.28px locally; qty-zero/one/three/ten remain content-driven. Cart alone
+  adds Remove in the same utility area.
+- Added the compact horizontal quick category menu below the header. It has
+  internal mobile scrolling, active-route state, zero page overflow, and does
+  not alter desktop main navigation.
+- Payment option cards now expose one preview-derived set of values: delivery,
+  order total, pay-now, and doorstep amount. Full Advance uses prominent
+  `PAY FULL AMOUNT NOW`; Split derives its percentage title from Settings and
+  uses plain customer copy. Local equality checks passed for Advance and 50/50
+  Split; no payment rules or server calculations changed.
+- Category benefit chips now share a responsive grid row. Admin shell/table
+  geometry was tightened defensively while preserving the compact four-column
+  Products table and visible Type column. Authenticated production Admin
+  acceptance remains pending because MCP was unavailable.
+- Local browser matrix passed 320–1920px with zero page overflow, runtime
+  errors, or failed requests. `npm test`, `npm run sheets:verify`, and JS
+  syntax validation pass. Production deployment and authenticated mutation
+  verification are pending final release action.
