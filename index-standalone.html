@@ -7,6 +7,9 @@
 <meta name="description" content="Order fresh vegetable, flower and mix seed packets plus fertilizer online. Nationwide delivery across Pakistan — pay Cash on Delivery or by advance transfer.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://www.hojaseeds.pk/">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/logo/hoja-seeds-favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/logo/hoja-seeds-favicon-64.png">
+<link rel="apple-touch-icon" href="assets/logo/hoja-seeds-logo@256.png">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
@@ -72,7 +75,8 @@ button{font-family:inherit;cursor:pointer;}
 .site-header{background:var(--soil);color:var(--kraft);position:sticky;top:0;z-index:40;box-shadow:0 2px 10px rgba(0,0,0,.2);height:var(--header-h);}
 .header-inner{max-width:1180px;height:100%;margin:0 auto;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
 .logo{display:flex;align-items:center;gap:8px;font-family:'Fraunces',serif;font-weight:700;font-size:1.15rem;background:none;border:none;color:var(--kraft);padding:0;}
-.logo .seed-mark{width:24px;height:24px;flex:none;}
+.logo .logo-mark{height:34px;width:auto;object-fit:contain;flex:none;}
+@media (min-width:860px){.logo .logo-mark{height:40px;}}
 
 .mobile-nav-toggle{display:flex;flex-direction:column;justify-content:center;gap:4px;background:none;border:none;padding:8px;order:-1;}
 .mobile-nav-toggle span{width:20px;height:2px;background:var(--kraft);border-radius:2px;}
@@ -412,7 +416,7 @@ const CONFIG = {
       <span></span><span></span><span></span>
     </button>
     <button class="logo" onclick="Router.go('home')" aria-label="Hoja Seeds home">
-      <svg class="seed-mark" viewBox="0 0 32 32" fill="none"><ellipse cx="16" cy="18" rx="9" ry="12" fill="#D68C2E"/><path d="M16 6C16 6 20 9 20 13" stroke="#3F6B3F" stroke-width="2" stroke-linecap="round"/></svg>
+      <img class="logo-mark" src="assets/logo/hoja-seeds-logo.png" alt="Hoja Seeds" width="128" height="128">
       Hoja Seeds
     </button>
     <nav class="nav-tabs" id="navTabs">

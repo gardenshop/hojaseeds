@@ -34,7 +34,7 @@ button{font-family:inherit;cursor:pointer;}
 .site-header{background:linear-gradient(165deg,#234c31 0%,var(--leaf-dark) 48%,#182b20 140%);color:var(--kraft);position:sticky;top:0;z-index:40;box-shadow:0 3px 16px rgba(0,0,0,.24);height:var(--header-h);}
 .header-inner{max-width:1180px;height:100%;margin:0 auto;padding:0 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0;position:relative;}
 .logo{display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:'Fraunces',serif;font-weight:700;font-size:1.38rem;letter-spacing:.01em;background:none;border:none;color:var(--kraft);padding:0;position:absolute;left:50%;transform:translateX(-50%);z-index:1;}
-.logo .seed-mark{width:30px;height:30px;flex:none;}
+.logo .logo-mark{height:36px;width:auto;object-fit:contain;flex:none;}
 
 .mobile-nav-toggle{display:flex;flex-direction:column;justify-content:center;gap:5px;background:rgba(241,230,208,.08);border:1px solid rgba(241,230,208,.18);border-radius:10px;padding:10px;order:-1;z-index:2;}
 .mobile-nav-toggle span{width:20px;height:2px;background:var(--kraft);border-radius:2px;}
@@ -65,6 +65,7 @@ button{font-family:inherit;cursor:pointer;}
   .mobile-nav-toggle{display:none;}
   .quick-category-nav{display:none;}
   .logo{position:static;transform:none;order:-1;font-size:1.45rem;}
+  .logo .logo-mark{height:42px;}
   .nav-tabs{
     position:static;display:flex;flex-direction:row;background:none;padding:0;
     gap:2px;flex:1;justify-content:center;overflow:visible;
