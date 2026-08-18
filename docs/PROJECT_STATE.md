@@ -704,3 +704,21 @@ replace it.*
   updates the card quantity, Total, `In Cart` status, packet count, and cart
   badge. Production payment preview confirmed the Rs.250 floor for Rs.400
   total (`250/150`) and the full-payment floor behavior for Rs.200 (`200/0`).
+
+### 2026-08-18 (HS-20260818-05) static shell and progressive payment disclosure
+
+- Added a lightweight static homepage shell in `index.html` so the brand,
+  headline, CTA, and benefit chips are visible before startup JavaScript and
+  live Sheets reads complete. The existing fallback-first app render then
+  replaces the shell and continues its asynchronous Products/Settings refresh.
+- Moved advance-channel controls into the final Order Summary area. COD keeps
+  channel controls hidden; Full Advance and Partial Advance reveal the
+  JazzCash/EasyPaisa/Bank controls and transaction reference beside the final
+  action. Payment calculations, server authority, and reference validation are
+  unchanged.
+- Direct production verification after deployment `030a3fcd` confirmed the
+  static-shell/fallback markers, mobile hero/categories, zero console errors,
+  and advance controls inside `.summary-card`. One post-deploy trace observed
+  mobile LCP 2709ms (TTFB 55ms, render delay 2425ms, CLS 0.00) and desktop LCP
+  1192ms (TTFB 52ms, render delay 668ms, CLS 0.02); three-run medians and
+  throttled EDGE runs remain pending.
