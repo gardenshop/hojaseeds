@@ -44,17 +44,30 @@ function payload(sequence) {
     payment: { method, advanceMethod: method === "Cash on Delivery" ? "" : "JazzCash", transactionReference: method === "Cash on Delivery" ? "" : `LOADTEST-${String(sequence).padStart(6, "0")}` }
   };
 }
+const RETRYABLE_CODES = new Set(["ORDER_BUSY"]);
+const MAX_ATTEMPTS = 3;
+
 async function one(sequence) {
   const started = performance.now();
   const body = payload(sequence);
-  try {
-    const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
-    const data = await response.json().catch(() => ({}));
-    const latencyMs = Math.round(performance.now() - started);
-    return { sequence, idempotencyKey: body.idempotencyKey, paymentMode: body.payment.method, httpStatus: response.status, latencyMs, ok: Boolean(data.ok), orderId: data.orderId || null, errorCode: data.error?.code || data.code || null };
-  } catch (error) {
-    return { sequence, idempotencyKey: body.idempotencyKey, paymentMode: body.payment.method, latencyMs: Math.round(performance.now() - started), ok: false, errorCode: error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK_ERROR", error: error.message };
+  let attempts = 0;
+  let last;
+  while (attempts < MAX_ATTEMPTS) {
+    attempts++;
+    try {
+      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(75000) });
+      const data = await response.json().catch(() => ({}));
+      const latencyMs = Math.round(performance.now() - started);
+      const errorCode = data.error?.code || data.code || null;
+      last = { sequence, idempotencyKey: body.idempotencyKey, paymentMode: body.payment.method, httpStatus: response.status, latencyMs, ok: Boolean(data.ok), orderId: data.orderId || null, errorCode, attempts };
+      if (last.ok || !RETRYABLE_CODES.has(errorCode) || attempts >= MAX_ATTEMPTS) return last;
+      await new Promise(resolve => setTimeout(resolve, 250 * attempts));
+    } catch (error) {
+      last = { sequence, idempotencyKey: body.idempotencyKey, paymentMode: body.payment.method, latencyMs: Math.round(performance.now() - started), ok: false, errorCode: error.name === "TimeoutError" ? "TIMEOUT" : "NETWORK_ERROR", error: error.message, attempts };
+      return last;
+    }
   }
+  return last;
 }
 const startedAt = new Date().toISOString();
 const results = [];

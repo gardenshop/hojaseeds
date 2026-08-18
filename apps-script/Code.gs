@@ -197,7 +197,7 @@ function submitOrder(payload) {
 
   const fingerprint = requestFingerprint(payload);
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
+  if (!lock.tryLock(60000)) {
     throw new OrderError("ORDER_BUSY", "The order service is busy. Please retry with the same order request.");
   }
 
