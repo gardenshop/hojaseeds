@@ -11,7 +11,25 @@ into each request.
 - **Launch date:** 2026-08-18
 - **Code readiness:** 99% | **Production E2E:** 99% | **Launch readiness:** 99%
 - **Remaining:** 1% — GA4/Meta Pixel activation, non-blocking, post-launch only
-- **Commit:** `896d0a6` (docs) on top of `e43d623` (admin auth fix), `main`, `gardenshop/hojaseeds`
+- **Commit:** `401aef6` (HS-20260818-29 logo) on top of `896d0a6`/`e43d623`, `main`, `gardenshop/hojaseeds`
+- **Branding baseline (HS-20260818-29, approved post-freeze branding-only
+  exception — checkout/payment/Admin business logic, Apps Script, and
+  Cloudflare project/domain untouched):** production logo source is
+  `logo/logo Hoja Seeds.png` (tracked, untouched master — note the actual
+  filename has a `logo ` prefix, not `Hoja Seeds.png` as sometimes assumed).
+  Web-safe transparent variants live in `assets/logo/`:
+  `hoja-seeds-logo.png` (128×128, canonical header mark, used identically
+  in `index.html`/`index-standalone.html`/`admin.html` via `.logo-mark`),
+  `hoja-seeds-logo@256.png` (apple-touch-icon), `hoja-seeds-favicon-{32,64}.png`
+  (new — no favicon existed before this), and `hoja-seeds-logo-master.png`
+  (cropped/transparent, unreferenced reusable source for future resizes).
+  Background removal used a soft-alpha matte with color decontamination to
+  avoid a white fringe on the site's dark header. Header sizing contract:
+  `.logo-mark{height:...;width:auto;object-fit:contain}` — 34px mobile /
+  40-42px desktop per shell's existing `--header-h`; the "Hoja Seeds" text
+  label stays next to the mark since the badge's internal wordmark is
+  illegible at header scale. This logo is now the protected branding
+  baseline — don't swap it without a new approved task.
 - **Apps Script deployment:** version 23, deployment ID
   `AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0`
   (unchanged this session), owner/deployer `gisupp@gmail.com` ONLY. After
