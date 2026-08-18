@@ -3,8 +3,11 @@
   "sheet_title": "hoja-seeds-2026",
   "apps_script_id": "1svMHPDCBwZTfrEwcWXVtW6cwOS2E-zjXJP2lc9t7tWRh0XPxKnLPdXnZ",
   "apps_script_title": "Hoja Seeds",
-  "deployment_id": "AKfycbzYM49XQ8xQmeuZN6N4rytg_BNnU8kXOTK-Q31y5jga8KzcxFH6mUuXSTwGJZJTDqIv",
-  "web_app_url": "https://script.google.com/macros/s/AKfycbzYM49XQ8xQmeuZN6N4rytg_BNnU8kXOTK-Q31y5jga8KzcxFH6mUuXSTwGJZJTDqIv/exec",
+  "deployment_id": "AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0",
+  "web_app_url": "https://script.google.com/macros/s/AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0/exec",
   "deployment_access_verified": true,
-  "retired_deployment_ids": ["AKfycbx0a_AnLQ-YHAsiczDDhhIVU4e2GFH6Obff9JVKS8-CJ4vc1FRJf1yPsMUHXxsIhVAA"]
+  "retired_deployment_ids": [
+    "AKfycbx0a_AnLQ-YHAsiczDDhhIVU4e2GFH6Obff9JVKS8-CJ4vc1FRJf1yPsMUHXxsIhVAA",
+    "AKfycbxpCvI7p-lasCDfNud7NN8eCKd6abWwQVAqDi5vIvoHsermpBxig1KwvlTtqYzAw1vC"
+  ]
 }

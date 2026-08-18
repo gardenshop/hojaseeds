@@ -213,7 +213,11 @@ function submitOrder(payload) {
       order.sequence = Number(payload.sequence) || 0;
       order.idempotencyKey = idempotencyKey;
       order.processingMs = Date.now() - startTime;
-      logLoadTestOrder(order);
+      try {
+        logLoadTestOrder(order);
+      } catch (error) {
+        throw new OrderError("LOAD_TEST_WRITE_FAILED", String(error && error.message || error).slice(0, 180));
+      }
     } else {
       logOrder(order);
     }

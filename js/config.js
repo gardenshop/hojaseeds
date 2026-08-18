@@ -5,7 +5,7 @@
 // browser's localStorage so you can test everything end-to-end.
 
 const CONFIG = {
-  SHEET_WEBHOOK_URL: "https://script.google.com/macros/s/AKfycbzYM49XQ8xQmeuZN6N4rytg_BNnU8kXOTK-Q31y5jga8KzcxFH6mUuXSTwGJZJTDqIv/exec",
+  SHEET_WEBHOOK_URL: "https://script.google.com/macros/s/AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0/exec",
   STORE_NAME: "Hoja Seeds",
   WHATSAPP_NUMBER: "", // e.g. "923001234567" (no + or leading 0) for the WhatsApp fallback link
   CURRENCY: "Rs.",
