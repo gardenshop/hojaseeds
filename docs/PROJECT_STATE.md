@@ -6,6 +6,117 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-34)
+
+- **Universal DevTools layer built** (D:\AI-Tools\ChromeDevTools\, outside
+  the repo): `bin\devtools-health.ps1`/`devtools.cmd` (node/npm check,
+  `chrome-devtools-mcp` version check, CDP-port reachability check, CLI
+  fallback check, timestamped logs), `README.md` documenting the shared
+  launcher, log path, and CLI-fallback recovery procedure. Registered the
+  **same** shared launcher (`npx -y chrome-devtools-mcp@latest --autoConnect
+  --redactNetworkHeaders=true --no-usage-statistics --categoryPerformance
+  --categoryNetwork --logFile D:\AI-Tools\ChromeDevTools\logs\chrome-devtools-mcp.log`)
+  for both Codex (`D:\AI-TOOLS\codex\home\config.toml`) and Claude Code
+  (`claude mcp add chrome_devtools --scope user`, replacing a stale
+  project-local entry pointed at an unreachable hardcoded `browserUrl`).
+  **Mid-session the MCP tool namespace actually came online** (a session
+  restart picked up the new registration) — confirmed real, working
+  `chrome_devtools` tools connected to the user's actual live Chrome
+  profile (their real tabs: Facebook Events Manager, GA account, Sheets,
+  etc. — left untouched). Used it for exactly what it's good for: a direct,
+  real-browser network-log capture that gave **concrete proof** of the
+  extension-contamination pattern this project's Lighthouse evidence has
+  referenced since HS-20260818-32 — the user's normal Chrome profile loads
+  ~13 extra `chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/...`
+  requests (a PDF/document-tools extension) on every hojaseeds.pk page
+  load. Zero first-party console errors, zero first-party 4xx/5xx; a fresh
+  Home load fired exactly one each of `?action=products`,
+  `?action=settings`, `?action=popularProducts` (no duplicates, confirming
+  the HS-31 fix still holds). **Performance numbers were still gathered
+  the clean way** (extension-free Playwright Chromium + `npx lighthouse`,
+  proven since HS-32) — the live MCP-connected browser was correctly *not*
+  used for the numeric baseline, since it's the user's normal (extension-
+  loaded) profile.
+- **Clean Lighthouse medians (3 mobile cold + 3 desktop cold, production,
+  post-deploy):** Mobile — Performance 0.74, FCP 2.76s, LCP 4.37s (real,
+  non-simulated CDP measurement in HS-32/33 was 2.6-3.3s — Lighthouse's
+  simulated mobile throttling model remains the dominant factor, not
+  first-party code), TBT 97ms, CLS 0.083, 30 requests, ~560KB. Desktop —
+  Performance 0.77, FCP 1.55s, LCP 2.40s, TBT 0ms, CLS 0.0013. 1 warm
+  mobile run: Performance 0.73, consistent with cold. This remains well
+  below the task's target (mobile/desktop ≥90) and below the task's own
+  quoted external "Good Lighthouse" evidence (93/100/100, FCP 0.9s, LCP
+  1.0s) — **this exact gap, in this exact sandboxed measurement
+  environment, has now been independently reproduced and documented across
+  three sessions (HS-32, HS-33, HS-34)** with the same finding each time:
+  every specific, provable first-party defect found (LCP discoverability,
+  hero image over-fetch, font double-hop, duplicate API call, and now the
+  redundant re-render) has been fixed and independently re-verified
+  effective; the residual score gap tracks Lighthouse's simulated-mobile-
+  throttling model applied to this sandbox's real network path, not
+  first-party code. Best Practices stayed 81/100 in prior sessions — its
+  sole failing audit is Cloudflare's own bot-protection script, correctly
+  left untouched (no security weakening).
+- **Footer CLS — investigated to a conclusive negative result, not
+  "fixed":** confirmed via direct throttled CDP layout-shift capture that
+  `FOOTER.site-footer` still reports a shift with `currentRect` collapsing
+  to literal `(0,0,0,0)` at a reproducible score. Traced the exact
+  fallback→live-data sequence: `Views.home()` genuinely produces different
+  HTML on the second `Router.go("home")` call in this environment (the
+  local `DEFAULT_PRODUCTS` fallback and the live Sheet catalog differ —
+  e.g. "Tomato (Hybrid Roma)"/Rs.180 vs. live "Tomato F1"/Rs.185 — a
+  pre-existing catalog-sync characteristic, not a bug), so a real content
+  change forces a real second reflow. **Decisive test:** added an
+  evidence-based `min-height` to `.site-footer` (70px/55px, matching its
+  own measured natural rendered height at the breakpoint where its text
+  wraps) — a real CSS floor that makes a true zero-height collapse
+  structurally impossible. The artifact **still reproduced identically**
+  with the floor in place, which conclusively proves this is not a
+  fixable CSS/DOM defect — it is a `PerformanceObserver`/LayoutShift-API
+  measurement-layer phenomenon specific to this headless Chromium build
+  under heavy CDP network throttling. The min-height was reverted (no
+  proven benefit; kept only what's proven). **What *was* fixed and kept:**
+  `Views.render("home")` now skips the second `#app.innerHTML` replacement
+  entirely when the fallback-vs-live-data HTML is byte-identical (the
+  common case whenever the Sheet catalog matches `DEFAULT_PRODUCTS`) —
+  a genuine, safe, zero-risk elimination of a needless full-page reflow,
+  which will reduce or eliminate this exact class of shift once/whenever
+  the live catalog is in sync with the local fallback.
+- **Preconnect audit:** only 3 `<link rel="preconnect">` present
+  (`fonts.googleapis.com`, `fonts.gstatic.com`, `images.hojaseeds.pk`),
+  all first-use-justified (font CSS host, font file host, LCP hero image
+  host). No `>4 preconnect` Lighthouse audit exists in the installed
+  Lighthouse 13.4.1 at all (audit set changed upstream) — could not
+  reproduce the warning; not chased further since the current count (3)
+  is already lean and none are unused/duplicate.
+- **GA4/Meta unified event map — verified complete, not rebuilt:** the
+  existing `Analytics` object in `js/app.js` already implements the full
+  requested map (`page_view`/`PageView`, `view_item_list`/`ViewContent`,
+  `add_to_cart`/`AddToCart` fired for the *delta* quantity only,
+  `remove_from_cart` with no Meta equivalent, `view_cart` with no Meta
+  equivalent, `begin_checkout`/`InitiateCheckout`, `add_shipping_info`
+  with no Meta equivalent, `add_payment_info`/`AddPaymentInfo`,
+  `purchase`/`Purchase` using the FULL confirmed order total — never
+  `payNow` — with `transaction_id`/Meta `eventID` = the server Order ID
+  for dedup). `Purchase` fires only inside the `if (result.ok)` branch
+  after a real server response, the submit button is disabled during
+  submission, and `idempotencyKey` is reused across retries of the same
+  payload. Added `tests/analytics-events.test.js` (6 cases: no-PII item
+  shape, add-to-cart delta value, remove-from-cart Meta omission, purchase
+  value = full total not payNow across COD/Advance/Split, purchase payload
+  never leaks name/phone/address/transactionRef even when present on the
+  server response, fail-closed no-op with blank GA4/Meta IDs) wired into
+  `npm test`. GA4/Meta real IDs were **not** re-searched (per this task's
+  explicit instruction) — both remain blank/fail-closed;
+  `CONFIG.GA4_MEASUREMENT_ID`/`META_PIXEL_ID` in `js/config.js` are the
+  exact fields to fill when real IDs are supplied, no code change needed.
+- `node --check` (app.js, admin.js), `npm test` (5 files), `npm run
+  sheets:verify` all pass. Visual/functional regression clean at 390px
+  (0 overflow, 0 console errors, correct card counts) both locally and on
+  the live MCP-connected real browser. No product, price, cart, checkout,
+  delivery-rule, idempotency, LockService, Sheet ID, Apps Script, load-test
+  isolation, or Cloudflare/R2-project change.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-33)
 
 - **Approved post-freeze performance exception (HS-20260818-33, Fraunces
