@@ -98,7 +98,15 @@
   <button class="quick-category-btn" data-cat="contact" onclick="Router.go('contact')">Contact</button>
 </nav>
 
-<main id="app"></main>
+<main id="app">
+  <section class="home-prerender-shell" aria-label="Hoja Seeds">
+    <p class="eyebrow">FRESH SEEDS · DELIVERED NATIONWIDE</p>
+    <h1>Good seeds, delivered to your door.</h1>
+    <p class="home-prerender-copy">Grow vegetables, flowers, mix packs and more with reliable seeds for every garden.</p>
+    <button class="btn btn-primary" type="button" onclick="if (typeof Router !== 'undefined') Router.go('vegetables')">Shop Vegetable Seeds</button>
+    <div class="home-prerender-benefits" aria-label="Store benefits"><span>🚚 Nationwide delivery</span><span>💵 Cash on Delivery</span><span>🌱 Fresh seed stock</span></div>
+  </section>
+</main>
 <div id="liveAnnouncement" class="sr-only" role="status" aria-live="polite"></div>
 
 <footer class="site-footer">

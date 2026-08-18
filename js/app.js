@@ -854,16 +854,7 @@ const Views = {
 
               <div class="free-delivery-progress" id="freeDeliveryProgress"></div>
 
-              <div class="advance-details" id="advanceDetails" style="display:${codAllowed ? "none" : "block"}">
-                <div class="advance-method-tabs" role="tablist" aria-label="Advance payment method">
-                  ${advanceMethods.map(method => `<button type="button" class="advance-method-tab${method.id === selectedAdvanceMethod ? " selected" : ""}" data-method="${method.id}" onclick="Views.selectAdvanceMethod('${method.id}')">${method.label}</button>`).join("") || `<p class="payment-restricted-note">No advance payment method is currently enabled. Please contact the store.</p>`}
-                </div>
-                <input type="hidden" id="o-advance-method" value="${selectedAdvanceMethod}">
-                <div id="advanceMethodDetails"></div>
-                <div class="field"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
-                <p class="advance-note">We'll confirm your payment and dispatch your order once received.</p>
-              </div>
-              ${codMixUpsell}
+               ${codMixUpsell}
             </div>
             <div class="summary-card">
               <h3>Order Summary</h3>
@@ -872,9 +863,19 @@ const Views = {
               <div class="summary-line"><span>Delivery</span><span class="mono" id="summaryDeliveryFee">${CONFIG.CURRENCY} ${defaultPreview.deliveryFee}</span></div>
               <div class="summary-line"><span>Payment method</span><span id="summaryPaymentMethod">${defaultMethod}</span></div>
               <div class="summary-line total"><span>Order total</span><span class="mono" id="summaryTotal">${CONFIG.CURRENCY} ${defaultPreview.orderTotal}</span></div>
-              <div class="summary-line" id="summaryPayNowRow"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span class="mono" id="summaryPayNow"></span></div>
-              <div class="summary-line" id="summaryCodDueRow"><span>Pay on delivery</span><span class="mono" id="summaryCodDue"></span></div>
-              <button class="inline-submit" type="submit" id="submitBtn"></button>
+               <div class="summary-line" id="summaryPayNowRow"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span class="mono" id="summaryPayNow"></span></div>
+               <div class="summary-line" id="summaryCodDueRow"><span>Pay on delivery</span><span class="mono" id="summaryCodDue"></span></div>
+               <div class="advance-details" id="advanceDetails" style="display:${codAllowed ? "none" : "block"}">
+                 <h4>Choose how to pay the advance</h4>
+                 <div class="advance-method-tabs" role="tablist" aria-label="Advance payment method">
+                   ${advanceMethods.map(method => `<button type="button" class="advance-method-tab${method.id === selectedAdvanceMethod ? " selected" : ""}" data-method="${method.id}" onclick="Views.selectAdvanceMethod('${method.id}')">${method.label}</button>`).join("") || `<p class="payment-restricted-note">No advance payment method is currently enabled. Please contact the store.</p>`}
+                 </div>
+                 <input type="hidden" id="o-advance-method" value="${selectedAdvanceMethod}">
+                 <div id="advanceMethodDetails"></div>
+                 <div class="field"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
+                 <p class="advance-note">We'll confirm your payment and dispatch your order once received.</p>
+               </div>
+               <button class="inline-submit" type="submit" id="submitBtn"></button>
               <p class="admin-muted" id="splitSubnote" style="text-align:center;margin-top:8px"></p>
               <div id="orderStatus"></div>
             </div>
