@@ -6,6 +6,64 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-33)
+
+- **Approved post-freeze performance exception (HS-20260818-33, Fraunces
+  CLS font-metric fix):** confirmed via `cls-culprits-insight` (Lighthouse,
+  clean extension-free profile) that `header.site-header > div.header-inner`
+  was still the dominant CLS source (0.0669 of 0.0673 desktop total),
+  cause "Web font" — unchanged from HS-20260818-32's diagnosis. Fixed with
+  a metric-matched local fallback: added `@font-face 'Fraunces
+  Fallback'{src:local('Georgia'),local('Times New Roman'),local('serif');
+  ascent-override/descent-override/line-gap-override/size-adjust}` in
+  `css/styles.css`, values computed (not guessed) with `fontkit` against
+  the real production Fraunces woff2 (unitsPerEm 2000, ascent 1956,
+  descent -510, lineGap 0, average glyph advance ~1146.68 units over the
+  site's actual brand strings) vs. local Georgia (unitsPerEm 2048, average
+  glyph advance ~994.2 units) → `ascent-override:97.8%`,
+  `descent-override:25.5%`, `line-gap-override:0%`, `size-adjust:118.1%`.
+  Applied as the fallback in every `'Fraunces'` font-family declaration
+  (h1/h2/h3/.display, `.logo`, hero slide label, category tile names,
+  section titles, explore cards, the static prerender shell). Fraunces
+  itself, its weights, and final rendered typography are byte-for-byte
+  unchanged — only the transient pre-swap fallback box geometry differs.
+  **Verified working:** re-ran `cls-culprits-insight` against the fix
+  (local server) — CLS **0.0673 → 0.0011**, and the header/logo/wordmark
+  no longer appears in the culprits list at all. Direct real-network CDP
+  captures against production (post-deploy) confirm the same: zero
+  layout-shift entries attribute to the header/logo/font swap any more:
+  only a tiny (~0.001) nav-tab micro-shift remains, down from the header
+  previously dominating every run. Visual parity confirmed at
+  320/390/430/768/1366/1920 (header/logo/nav/cart geometry, 0px overflow,
+  0 console errors) — Fraunces' final rendered appearance is unchanged, so
+  the fix was **kept, not reverted**.
+- **New finding, explicitly out of scope for this task (not fixed here):**
+  with the font-driven header shift eliminated, Lighthouse's overall CLS
+  score is still frequently elevated (~0.03 desktop / ~0.08 mobile in most
+  runs) — but the culprit is now unrelated to fonts. Direct, repeated CDP
+  layout-shift captures against production identify a **deterministic,
+  reproducible** shift: `FOOTER.site-footer` reports the exact same score
+  (`0.029881954612005854` at 1366px, every run it occurs) with its
+  `currentRect` collapsing to literally `(0,0,0,0)` around ~1.8s into
+  load — timed close to the SPA's second full `#app.innerHTML` replacement
+  (the intentional fallback-then-live-data re-render from
+  HS-20260818-03). This was first observed as possibly-noise in
+  HS-20260818-32 (direct rect-polling didn't catch a real collapse then);
+  it is now confirmed reproducible with an identical score across separate
+  runs, which rules out pure randomness. Root-causing and fixing this is
+  **explicitly out of this task's scope** ("do not turn this into another
+  general performance audit," "do not redo hero architecture") and was
+  deliberately not attempted here — flagged as the next concrete
+  performance follow-up target instead of the (already-fixed) font issue.
+- Best Practices remains 81/100, unchanged — its only failing audit
+  (`deprecations`) is 100% Cloudflare's own `cdn-cgi/challenge-platform`
+  bot-protection script; correctly left untouched (no security weakening).
+- `node --check` (app.js, admin.js), `npm test`, `npm run sheets:verify`
+  all pass — this was a single CSS-only change, no JS/business logic
+  touched. GA4/Meta search was not repeated (per this task's explicit
+  instruction) — both remain fail-closed/inactive; still the only
+  remaining pre-launch item.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-32)
 
 - **Approved post-freeze performance exception (HS-20260818-32, clean
