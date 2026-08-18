@@ -1,21 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
 :root{
-  --soil:#2B2118;
-  --soil-light:#3D3025;
-  --kraft:#F1E6D0;
-  --kraft-dark:#E4D4B4;
-  --leaf:#3F6B3F;
-  --leaf-dark:#2F5230;
-  --marigold:#D68C2E;
-  --marigold-dark:#B5731E;
-  --chili:#B84A3E;
-  --ink:#1F2A1C;
-  --paper:#FBF6EB;
-  --line:rgba(31,42,28,0.15);
+  /* Warm Premium Garden theme (HS-20260818-30): warm ivory canvas, deep
+     forest primary, pale sage surfaces, muted saffron/gold accent. Variable
+     names kept stable so every existing component recolors automatically. */
+  --soil:#1F3D2B;
+  --soil-light:#26492F;
+  --kraft:#F3EFE1;
+  --kraft-dark:#E3DCC4;
+  --leaf:#1F3D2B;
+  --leaf-dark:#16301F;
+  --marigold:#C99A3C;
+  --marigold-dark:#A97F2C;
+  --chili:#B0503F;
+  --ink:#20261F;
+  --ink-soft:#565f4f;
+  --paper:#FBF7EE;
+  --sage:#EDF1E4;
+  --line:rgba(31,42,28,0.12);
   --radius:14px;
-  --shadow:0 6px 20px rgba(43,33,24,0.14);
-  --shadow-sm:0 2px 8px rgba(43,33,24,0.10);
+  --shadow:0 10px 28px rgba(31,42,28,0.10);
+  --shadow-sm:0 3px 10px rgba(31,42,28,0.08);
   --header-h:72px;
   --sticky-h:84px;
   font-size:16px;
@@ -30,17 +35,18 @@ img,svg{max-width:100%;}
 button{font-family:inherit;cursor:pointer;}
 .visually-hidden,.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;}
 
-/* ══════════════ HEADER (mobile-first) ══════════════ */
-.site-header{background:linear-gradient(165deg,#234c31 0%,var(--leaf-dark) 48%,#182b20 140%);color:var(--kraft);position:sticky;top:0;z-index:40;box-shadow:0 3px 16px rgba(0,0,0,.24);height:var(--header-h);}
+/* ══════════════ HEADER (mobile-first, light warm-ivory — logo visible) ══════════════ */
+.site-header{background:var(--paper);color:var(--ink);position:sticky;top:0;z-index:40;box-shadow:0 1px 0 var(--kraft-dark),0 4px 14px rgba(31,42,28,.06);height:var(--header-h);}
 .header-inner{max-width:1180px;height:100%;margin:0 auto;padding:0 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0;position:relative;}
-.logo{display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:'Fraunces',serif;font-weight:700;font-size:1.38rem;letter-spacing:.01em;background:none;border:none;color:var(--kraft);padding:0;position:absolute;left:50%;transform:translateX(-50%);z-index:1;}
+.logo{display:flex;align-items:center;gap:10px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:'Fraunces',serif;font-weight:700;font-size:1.28rem;letter-spacing:.01em;background:none;border:none;color:var(--leaf-dark);padding:0;position:absolute;left:50%;transform:translateX(-50%);z-index:1;}
+.logo .logo-mark-wrap{flex:none;width:44px;height:44px;border-radius:50%;background:var(--sage);border:1.5px solid var(--marigold);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);}
 .logo .logo-mark{height:36px;width:auto;object-fit:contain;flex:none;}
 
-.mobile-nav-toggle{display:flex;flex-direction:column;justify-content:center;gap:5px;background:rgba(241,230,208,.08);border:1px solid rgba(241,230,208,.18);border-radius:10px;padding:10px;order:-1;z-index:2;}
-.mobile-nav-toggle span{width:20px;height:2px;background:var(--kraft);border-radius:2px;}
+.mobile-nav-toggle{display:flex;flex-direction:column;justify-content:center;gap:5px;background:var(--sage);border:1px solid var(--kraft-dark);border-radius:10px;padding:10px;order:-1;z-index:2;}
+.mobile-nav-toggle span{width:20px;height:2px;background:var(--leaf-dark);border-radius:2px;}
 
-.cart-icon-btn{background:#315f3b;color:#fff;border:1px solid rgba(241,230,208,.2);border-radius:12px;width:46px;height:46px;flex:none;font-size:1.18rem;position:relative;display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 3px 10px rgba(0,0,0,.16);}
-.cart-icon-btn .count{position:absolute;top:-6px;right:-6px;background:var(--marigold);color:#241705;border-radius:999px;min-width:18px;height:18px;font-family:'IBM Plex Mono',monospace;font-size:.68rem;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;}
+.cart-icon-btn{background:var(--leaf-dark);color:#fff;border:none;border-radius:12px;width:44px;height:44px;flex:none;font-size:1.1rem;position:relative;display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:var(--shadow-sm);}
+.cart-icon-btn .count{position:absolute;top:-6px;right:-6px;background:var(--marigold);color:#241705;border-radius:999px;min-width:18px;height:18px;font-family:'IBM Plex Mono',monospace;font-size:.68rem;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;box-shadow:0 0 0 2px var(--paper);}
 
 .nav-tabs{
   display:none;position:fixed;top:var(--header-h);left:0;right:0;bottom:0;
@@ -54,9 +60,9 @@ button{font-family:inherit;cursor:pointer;}
 }
 .nav-tab.active{color:var(--marigold);}
 
-.quick-category-nav{display:flex;gap:6px;max-width:1180px;margin:0 auto;padding:7px 14px;overflow-x:auto;overscroll-behavior-x:contain;background:var(--paper);scrollbar-width:none;}
+.quick-category-nav{display:flex;gap:6px;max-width:1180px;margin:0 auto;padding:6px 14px;overflow-x:auto;overscroll-behavior-x:contain;background:var(--paper);border-bottom:1px solid var(--kraft-dark);scrollbar-width:none;}
 .quick-category-nav::-webkit-scrollbar{display:none;}
-.quick-category-btn{flex:0 0 auto;min-height:40px;padding:8px 12px;border:1px solid var(--kraft-dark);border-radius:999px;background:var(--kraft);color:var(--ink);font-size:.76rem;font-weight:700;white-space:nowrap;}
+.quick-category-btn{flex:0 0 auto;min-height:36px;padding:7px 12px;border:1px solid transparent;border-radius:999px;background:var(--sage);color:var(--ink-soft);font-size:.74rem;font-weight:700;white-space:nowrap;}
 .quick-category-btn.active{background:var(--leaf);border-color:var(--leaf);color:#fff;}
 .quick-category-btn:focus-visible{outline:2px solid var(--marigold);outline-offset:2px;}
 
@@ -65,6 +71,7 @@ button{font-family:inherit;cursor:pointer;}
   .mobile-nav-toggle{display:none;}
   .quick-category-nav{display:none;}
   .logo{position:static;transform:none;order:-1;font-size:1.45rem;}
+  .logo .logo-mark-wrap{width:50px;height:50px;}
   .logo .logo-mark{height:42px;}
   .nav-tabs{
     position:static;display:flex;flex-direction:row;background:none;padding:0;
@@ -72,73 +79,82 @@ button{font-family:inherit;cursor:pointer;}
   }
   .nav-tab{
     padding:9px 14px;border-bottom:none;border-radius:6px;font-size:.92rem;position:relative;
+    color:var(--ink-soft);
   }
   .nav-tab::after{content:"";position:absolute;left:14px;right:14px;bottom:2px;height:2px;border-radius:2px;background:var(--marigold);opacity:0;transform:scaleX(.6);transition:opacity .15s ease, transform .15s ease;}
-  .nav-tab:hover{color:#fff;background:rgba(241,230,208,.08);}
+  .nav-tab:hover{color:var(--leaf-dark);background:var(--sage);}
+  .nav-tab.active{color:var(--leaf-dark);}
   .nav-tab.active::after{opacity:1;transform:scaleX(1);}
 }
 
-/* ══════════════ HERO (premium, mobile-first) ══════════════ */
-.hero{
-  position:relative;overflow:hidden;color:var(--kraft);
-  /* Real photo layer first (R2-hosted); if it 404s the browser simply
-     paints nothing for that layer and the radial/linear gradients below
-     still render — no broken-image icon, no layout break. */
-  background-image:
-    url('https://images.hojaseeds.pk/hero/home-garden.webp'),
-    radial-gradient(120% 90% at 15% 0%, rgba(214,140,46,.28), transparent 55%),
-    radial-gradient(100% 80% at 90% 100%, rgba(63,107,63,.35), transparent 60%),
-    linear-gradient(165deg,var(--soil) 0%,var(--soil-light) 100%);
-   background-size:cover, auto, auto, auto;
-   background-position:center, center, center, center;
-  padding:34px 18px 30px;
+/* ══════════════ HERO (premium, image-first, mobile-first) ══════════════
+   Mobile: one card — bright photo on top (~58%), solid ivory text panel
+   below. Desktop: split layout, text left / large photo right. No dark
+   overlay across the photo — the panel is a solid surface, not text over
+   the image. */
+.hero{background:var(--paper);}
+.hero-media{
+  height:58vw;min-height:220px;max-height:420px;
+  background-image:url('https://images.hojaseeds.pk/hero/home-garden.webp'),linear-gradient(150deg,var(--sage),var(--kraft));
+  background-size:cover;background-position:center;
 }
-.hero::before{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(180deg, rgba(20,15,8,.62) 0%, rgba(20,15,8,.84) 100%);
-}
-.hero-inner{position:relative;max-width:1180px;margin:0 auto;}
-.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(241,230,208,.1);border:1px solid rgba(241,230,208,.25);color:var(--kraft);font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;padding:5px 12px;border-radius:999px;margin-bottom:14px;}
-.hero h1{font-size:clamp(1.7rem,6vw,2.9rem);line-height:1.1;margin:0 0 12px;font-weight:600;max-width:16ch;}
-.hero p{font-size:.98rem;line-height:1.55;opacity:.85;max-width:42ch;margin:0 0 22px;}
+.hero-panel{padding:26px 20px 30px;}
+.hero-inner{max-width:1180px;margin:0 auto;}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;color:var(--marigold-dark);font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:700;margin:0 0 10px;}
+.hero h1{font-size:clamp(1.7rem,6vw,2.6rem);line-height:1.14;margin:0 0 10px;font-weight:600;color:var(--ink);max-width:14ch;}
+.hero p{font-size:.98rem;line-height:1.55;color:var(--ink-soft);max-width:42ch;margin:0 0 20px;}
 .hero .cta-row{display:flex;gap:10px;flex-wrap:wrap;}
 .btn{border:none;border-radius:10px;padding:13px 22px;font-weight:600;font-size:.94rem;display:inline-flex;align-items:center;gap:8px;}
-.btn-primary{background:var(--marigold);color:#241705;box-shadow:0 4px 14px rgba(214,140,46,.35);}
-.btn-primary:hover{background:var(--marigold-dark);}
-.btn-secondary{background:rgba(241,230,208,.08);color:var(--kraft);border:1px solid rgba(241,230,208,.35);}
+.btn-primary{background:var(--leaf-dark);color:#fff;box-shadow:var(--shadow-sm);}
+.btn-primary:hover{background:var(--soil);}
+.btn-secondary{background:transparent;color:var(--leaf-dark);border:1.5px solid var(--kraft-dark);}
+.btn-secondary:hover{border-color:var(--leaf-dark);}
 
-.trust-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;}
-.trust-chip{display:flex;align-items:center;gap:7px;background:rgba(251,246,234,.06);border:1px solid rgba(241,230,208,.15);border-radius:10px;padding:9px 12px;font-size:.78rem;color:rgba(241,230,208,.85);}
+.trust-row{display:flex;gap:8px;flex-wrap:wrap;max-width:1180px;margin:0 auto;padding:0 18px 22px;}
+.trust-chip{display:flex;align-items:center;gap:6px;background:var(--sage);border:1px solid var(--kraft-dark);border-radius:10px;padding:9px 12px;font-size:.78rem;font-weight:600;color:var(--ink-soft);}
 .trust-chip .ic{font-size:.95rem;}
 
 @media (min-width:860px){
-  .hero{padding:64px 20px 56px;}
-  .hero-inner{display:grid;grid-template-columns:1fr;max-width:720px;}
+  .hero{display:flex;flex-direction:row-reverse;align-items:stretch;max-width:1440px;margin:0 auto;}
+  .hero-media{flex:0 0 58%;height:auto;min-height:440px;max-height:560px;}
+  .hero-panel{flex:0 0 42%;display:flex;align-items:center;padding:0 48px;}
+  .hero-inner{max-width:480px;margin:0;}
+  .hero h1{max-width:12ch;}
+  .trust-row{max-width:1440px;padding:0 48px 26px;}
 }
 
-/* ══════════════ CATEGORY TILES (real R2-hosted photos) ══════════════ */
-/* Images are served from the dedicated Cloudflare R2 bucket
-   hoja-seeds-images via the images.hojaseeds.pk custom domain. Each rule
-   layers the real photo over the original brand gradient, so a failed/slow
-   R2 request degrades to the gradient, never a broken-image icon. */
-.cat-grid{max-width:1180px;margin:-20px auto 0;padding:0 14px;position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;}
+/* ══════════════ CATEGORY TILES (image-first, solid footer) ══════════════
+   Real photos are served from the dedicated Cloudflare R2 bucket
+   hoja-seeds-images via images.hojaseeds.pk. Photo fills ~70-75% of the
+   card as its own layer (gradient fallback if the photo is slow/missing);
+   the category name/count sit in a solid ivory footer below the image,
+   never as overlay text on top of the photo. */
+.cat-grid{max-width:1180px;margin:22px auto 0;padding:0 14px;position:relative;z-index:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
 .cat-tile{
-  border-radius:16px;overflow:hidden;position:relative;height:128px;box-shadow:var(--shadow);min-width:0;
-  background-size:cover;background-position:center;
+  border-radius:16px;overflow:hidden;position:relative;box-shadow:var(--shadow);min-width:0;
+  background:var(--kraft);border:1px solid var(--kraft-dark);display:flex;flex-direction:column;
 }
-/* Real photo layer first (R2-hosted); the matching gradient stays as the
-   second layer so a failed/slow image request never leaves a blank or
-   broken tile — the existing brand gradient shows through instead. */
-.cat-tile[data-cat="vegetables"]{background-image:url('https://images.hojaseeds.pk/categories/vegetable-seeds.webp'),linear-gradient(150deg,#3F6B3F,#274526);}
-.cat-tile[data-cat="flowers"]{background-image:url('https://images.hojaseeds.pk/categories/flower-seeds.webp'),linear-gradient(150deg,#D68C2E,#9C5D18);}
-.cat-tile[data-cat="mix"]{background-image:url('https://images.hojaseeds.pk/categories/mix-seeds.webp'),linear-gradient(150deg,#B84A3E,#7C2E25);}
-.cat-tile[data-cat="fertilizer"]{background-image:url('https://images.hojaseeds.pk/categories/fertilizer.webp'),linear-gradient(150deg,#6B4A2A,#432D19);}
-.cat-tile::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg, rgba(20,15,8,.78) 0%, rgba(20,15,8,.15) 55%, transparent 90%);}
-.cat-tile-content{position:absolute;left:0;right:0;bottom:0;padding:12px 14px;color:#fff;z-index:1;min-width:0;}
-.cat-tile-content .name{font-family:'Fraunces',serif;font-weight:600;font-size:1.05rem;display:block;min-width:0;overflow-wrap:anywhere;}
-.cat-tile-content .count{font-size:.72rem;opacity:.85;font-family:'IBM Plex Mono',monospace;}
+.cat-tile-photo{height:120px;background-size:cover;background-position:center;flex:none;}
+.cat-tile[data-cat="vegetables"] .cat-tile-photo{background-image:url('https://images.hojaseeds.pk/categories/vegetable-seeds.webp'),linear-gradient(150deg,#3F6B3F,#274526);}
+.cat-tile[data-cat="flowers"] .cat-tile-photo{background-image:url('https://images.hojaseeds.pk/categories/flower-seeds.webp'),linear-gradient(150deg,#D68C2E,#9C5D18);}
+.cat-tile[data-cat="mix"] .cat-tile-photo{background-image:url('https://images.hojaseeds.pk/categories/mix-seeds.webp'),linear-gradient(150deg,#B84A3E,#7C2E25);}
+.cat-tile[data-cat="fertilizer"] .cat-tile-photo{background-image:url('https://images.hojaseeds.pk/categories/fertilizer.webp'),linear-gradient(150deg,#6B4A2A,#432D19);}
+.cat-tile-content{padding:11px 12px 12px;min-width:0;background:var(--paper);}
+.cat-tile-content .name{font-family:'Fraunces',serif;font-weight:600;font-size:.98rem;display:block;min-width:0;overflow-wrap:anywhere;color:var(--ink);}
+.cat-tile-content .count{font-size:.72rem;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;}
 .cat-tile-btn{position:absolute;inset:0;background:none;border:none;width:100%;height:100%;z-index:2;}
-@media (min-width:640px){.cat-grid{grid-template-columns:repeat(4,minmax(0,1fr));}.cat-tile{height:160px;}}
+@media (min-width:640px){.cat-grid{grid-template-columns:repeat(4,minmax(0,1fr));}.cat-tile-photo{height:160px;}}
+
+/* ══════════════ Popular Seeds strip (home) ══════════════ */
+.popular-strip{max-width:1180px;margin:34px auto 0;padding:0 14px;}
+.popular-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.popular-card{background:var(--kraft);border:1px solid var(--kraft-dark);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px;min-width:0;}
+.popular-media{height:88px;border-radius:12px;background:radial-gradient(circle at 50% 35%,rgba(201,154,60,.18),transparent 55%),linear-gradient(145deg,var(--sage),var(--kraft));display:flex;align-items:center;justify-content:center;font-size:2.3rem;}
+.popular-name{font-weight:700;font-size:.88rem;line-height:1.25;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.popular-price{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.85rem;color:var(--leaf-dark);}
+.popular-add{align-self:flex-start;background:var(--leaf-dark);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-weight:600;font-size:.78rem;}
+@media (min-width:640px){.popular-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media (min-width:960px){.popular-grid{grid-template-columns:repeat(6,minmax(0,1fr));}}
 
 /* ══════════════ Page shell ══════════════ */
 .page{max-width:1180px;margin:0 auto;padding:26px 14px 40px;}
@@ -297,13 +313,13 @@ button{font-family:inherit;cursor:pointer;}
 .field input:focus, .field textarea:focus, .field select:focus{outline:2px solid var(--leaf);outline-offset:1px;}
 .field-error{min-height:0;margin-top:4px;color:var(--chili);font-size:.76rem;font-weight:600;line-height:1.3;}
 .field-error:not(:empty){min-height:1em;}
-.home-prerender-shell{max-width:1120px;margin:0 auto;padding:clamp(46px,9vw,110px) 20px 60px;background:linear-gradient(135deg,#27613b 0%,#164f35 55%,#123d2d 100%);color:#fff;border-radius:0 0 28px 28px;}
-.home-prerender-shell .eyebrow{margin:0 0 14px;color:#f2d48a;font:600 .72rem/1.2 "IBM Plex Mono",monospace;letter-spacing:.08em;}
-.home-prerender-shell h1{max-width:720px;margin:0;font:700 clamp(2.2rem,6vw,4.4rem)/1.02 Fraunces,Georgia,serif;}
-.home-prerender-copy{max-width:560px;margin:18px 0 24px;color:rgba(255,255,255,.86);font-size:1.05rem;line-height:1.6;}
-.home-prerender-benefits{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px;color:rgba(255,255,255,.9);font-size:.86rem;}
-.home-prerender-benefits span{padding:9px 12px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(255,255,255,.08);}
-@media(max-width:480px){.home-prerender-shell{padding:38px 18px 34px;border-radius:0 0 20px 20px}.home-prerender-benefits{display:grid;grid-template-columns:1fr 1fr}.home-prerender-benefits span{font-size:.76rem}}
+.home-prerender-shell{max-width:1120px;margin:0 auto;padding:clamp(40px,8vw,90px) 20px 50px;background:var(--paper);color:var(--ink);}
+.home-prerender-shell .eyebrow{margin:0 0 12px;color:var(--marigold-dark);font:700 .72rem/1.2 "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;}
+.home-prerender-shell h1{max-width:14ch;margin:0;font:600 clamp(1.9rem,5vw,3.2rem)/1.12 Fraunces,Georgia,serif;color:var(--ink);}
+.home-prerender-copy{max-width:520px;margin:14px 0 22px;color:var(--ink-soft);font-size:1rem;line-height:1.6;}
+.home-prerender-benefits{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;color:var(--ink-soft);font-size:.82rem;}
+.home-prerender-benefits span{padding:9px 12px;border:1px solid var(--kraft-dark);border-radius:10px;background:var(--sage);font-weight:600;}
+@media(max-width:480px){.home-prerender-shell{padding:28px 18px 26px}.home-prerender-benefits{display:grid;grid-template-columns:1fr 1fr}.home-prerender-benefits span{font-size:.76rem}}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 @media (max-width:520px){.field-row{grid-template-columns:1fr;}}
 

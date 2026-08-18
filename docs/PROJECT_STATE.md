@@ -6,6 +6,41 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-30)
+
+- **Approved post-freeze visual-only exception (HS-20260818-30, Warm Premium
+  Garden theme):** storefront visual/UI redesign only — no checkout/payment
+  calculations, Admin business logic, delivery rules, catalog/prices,
+  idempotency, LockService, load-test system, or GA4/Meta placeholders
+  touched. Rewrote `css/styles.css` `:root` tokens to a warm-ivory canvas /
+  deep-forest primary / pale-sage surface / muted-gold accent palette (same
+  variable names, so every component recolored consistently — no new
+  variables needed anywhere else). Header (`.site-header`) changed from a
+  dark-green gradient to a light warm-ivory surface so the circular logo
+  mark is clearly visible; the logo now sits in a pale-sage medallion with a
+  thin gold border (`.logo-mark-wrap`) in `index.html`/`admin.html` header
+  markup — desktop nav-tab text color was fixed from cream (invisible on
+  the new light header) to `--ink-soft`/`--leaf-dark`. Hero
+  (`Views.home()` in `js/app.js`, plus the static `.home-prerender-shell` in
+  `index.html`) rebuilt image-first: mobile is one card (bright R2 hero
+  photo on top ~58%, solid ivory text panel below with a 2-line headline,
+  1-line copy, and exactly two CTAs); desktop splits 42% text / 58% photo,
+  no dark overlay on the image anywhere. Category tiles restructured from
+  overlay-text-on-gradient to image (~70-75% of card) + solid ivory footer
+  with name/count. Added a "Popular Seeds" strip (6 product cards, icon
+  tile + name + price + Add) below categories. Reduced hero trust chips to
+  the 3 required (Nationwide Delivery/COD/Fresh Seed Stock) and removed the
+  duplicate 4-card "Why Hoja Seeds" section that repeated the same
+  messages. Cart/Delivery/Payment inherit the new tokens automatically
+  (no markup changes) and were screenshot-verified, not just assumed.
+  Verified locally via the repo's Playwright (`.tools/browser-runner`):
+  320/390/430/768/1366/1920 × Home/Vegetables/Cart/Delivery all 0px
+  overflow, 0 console/page errors, 0 failed requests (including live
+  `images.hojaseeds.pk` hero/category photo 200s). `node --check` on
+  `js/app.js`/`js/admin.js`, `npm test`, and `npm run sheets:verify` all
+  pass unchanged. No product, price, cart, checkout, delivery, Apps
+  Script, Sheet, or Cloudflare-project change.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-28)
 
 - **Launch date:** 2026-08-18

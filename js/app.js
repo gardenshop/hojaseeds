@@ -476,42 +476,51 @@ const Views = {
   },
 
   home() {
+    const products = Prices.get();
     const catCounts = {};
-    DEFAULT_PRODUCTS.forEach(p => catCounts[p.cat] = (catCounts[p.cat] || 0) + 1);
+    products.forEach(p => catCounts[p.cat] = (catCounts[p.cat] || 0) + 1);
+    const popular = products.slice(0, 6);
     return `
       <section class="hero">
-        <div class="hero-inner">
-          <div class="hero-badge">🌱 Hoja Seeds</div>
-          <h1>Good seeds, delivered to your door.</h1>
-          <p>Vegetable, flower and curated mix seed packets for home gardens across Pakistan — pay Cash on Delivery, or send an advance and save on delivery.</p>
-          <div class="cta-row">
-            <button class="btn btn-primary" onclick="Router.go('vegetables')">Shop Vegetable Seeds</button>
-            <button class="btn btn-secondary" onclick="Router.go('mix')">Browse Mix Kits</button>
-          </div>
-          <div class="trust-row">
-            <div class="trust-chip"><span class="ic">🚚</span>Nationwide delivery</div>
-            <div class="trust-chip"><span class="ic">💵</span>Cash on Delivery</div>
-            <div class="trust-chip"><span class="ic">🌱</span>Fresh seed stock</div>
+        <div class="hero-media" aria-hidden="true"></div>
+        <div class="hero-panel">
+          <div class="hero-inner">
+            <div class="hero-badge">Hoja Seeds</div>
+            <h1>Good seeds. Better harvests.</h1>
+            <p>Vegetable, flower and mix seeds delivered across Pakistan.</p>
+            <div class="cta-row">
+              <button class="btn btn-primary" onclick="Router.go('vegetables')">Shop Vegetable Seeds</button>
+              <button class="btn btn-secondary" onclick="Router.go('mix')">Browse Mix Kits</button>
+            </div>
           </div>
         </div>
       </section>
+      <div class="trust-row">
+        <div class="trust-chip"><span class="ic">🚚</span>Nationwide Delivery</div>
+        <div class="trust-chip"><span class="ic">💵</span>Cash on Delivery</div>
+        <div class="trust-chip"><span class="ic">🌱</span>Fresh Seed Stock</div>
+      </div>
       <div class="cat-grid">
         ${["vegetables", "flowers", "mix", "fertilizer"].map(cat => `
           <div class="cat-tile" data-cat="${cat}">
             <button class="cat-tile-btn" onclick="Router.go('${cat}')" aria-label="${CATEGORY_META[cat].label}"></button>
+            <div class="cat-tile-photo"></div>
             <div class="cat-tile-content">
               <span class="name">${CATEGORY_META[cat].label}</span>
-              <span class="count">${catCounts[cat]} varieties</span>
+              <span class="count">${catCounts[cat] || 0} varieties</span>
             </div>
           </div>`).join("")}
       </div>
-      <section class="page">
-        <h2 class="section-title">Why Hoja Seeds</h2>
-        <div class="why-grid">
-          <div class="why-card"><span class="ic">🌱</span><h4>Fresh stock</h4><p>Seed packets sourced and packed for this season.</p></div>
-          <div class="why-card"><span class="ic">💵</span><h4>Flexible payment</h4><p>COD, or pay in advance via JazzCash, EasyPaisa or bank transfer.</p></div>
-          <div class="why-card"><span class="ic">🚚</span><h4>Nationwide</h4><p>We deliver across Pakistan, city or countryside.</p></div>
-          <div class="why-card"><span class="ic">🌻</span><h4>For every garden</h4><p>From balcony pots to full kitchen plots.</p></div>
+      <section class="popular-strip" aria-labelledby="popular-title">
+        <h2 class="section-title" id="popular-title">Popular Seeds</h2>
+        <div class="popular-grid">
+          ${popular.map(p => `
+            <article class="popular-card">
+              <div class="popular-media">${p.image_url ? `<img src="${p.image_url}" alt="${escapeHTML(p.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">` : p.icon}</div>
+              <span class="popular-name">${escapeHTML(p.name)}</span>
+              <span class="popular-price mono">${CONFIG.CURRENCY} ${p.price}</span>
+              <button class="popular-add" onclick="Router.go('${p.cat}')">Add</button>
+            </article>`).join("")}
         </div>
       </section>`;
   },
