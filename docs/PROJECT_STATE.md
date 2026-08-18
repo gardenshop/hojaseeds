@@ -6,6 +6,109 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-32)
+
+- **Approved post-freeze performance exception (HS-20260818-32, clean
+  DevTools/Lighthouse forensics):** `chrome_devtools` MCP tried once via
+  ToolSearch — unavailable. Fallback used: `npx lighthouse` (v13.4.1) run
+  against production with the repo's own extension-free Playwright
+  Chromium (`.tools/ms-playwright`), `--chrome-flags="--headless=new
+  --no-sandbox --disable-extensions --incognito"`, plus a custom CDP-based
+  Playwright script for real (non-simulated) network/paint/layout-shift
+  evidence. **The task's own "contaminated" evidence (Performance 34,
+  extension-affected, timed-out) was correctly excluded**, per its own
+  instruction — but the task's quoted "clean baseline" (Performance 90,
+  FCP 1.0s, LCP 1.4s) could not be reproduced in this sandboxed runner;
+  every clean Lighthouse mobile run here (3 cold + repeats) measured
+  Performance 0.52-0.66, LCP 5.1-5.6s simulated (2.6-3.3s in direct
+  non-throttled CDP measurement). Root cause of the gap is Lighthouse's
+  simulated slow-mobile throttling combined with this sandbox's network
+  path to `images.hojaseeds.pk`/`fonts.gstatic.com`/the Apps Script
+  backend — not remaining first-party code issues (see fixes below, all
+  independently confirmed via `lcp-breakdown-insight`/`lcp-discovery-insight`).
+  Accessibility went **96 → 100**; Best Practices stayed at **81**, and its
+  one failing audit (`deprecations`) is 100% attributable to Cloudflare's
+  own `cdn-cgi/challenge-platform` bot-protection script — third-party,
+  intentionally left untouched per "do not weaken Cloudflare/security."
+- **Real, verified fixes applied (all evidence-backed, not guessed):**
+  1. **LCP discoverability (real bug, biggest win):** the hero carousel's
+     first slide `<img>` only exists after `app.js` renders the SPA, so
+     Lighthouse's `lcp-discovery-insight` reported
+     `requestDiscoverable: false` and `resourceLoadDelay` of 1761ms out of
+     a ~5.6s LCP. Added `<link rel="preload" as="image"
+     fetchpriority="high">` for the first hero slide (`HERO_SLIDES[0].img`)
+     plus `<link rel="preconnect" href="https://images.hojaseeds.pk">` in
+     `index.html` `<head>`. Re-measured: `requestDiscoverable` is now
+     `true` and `resourceLoadDelay` dropped to **19ms**.
+  2. **All 4 hero-carousel images were fetching on first load** despite
+     `loading="lazy"` on 3 of them — verified via CDP network capture
+     (~309KB, all 4 category photos). Root cause: the 3 inactive slides
+     sit absolutely-positioned in the *same on-screen box* as the active
+     slide (only `opacity` differs), so the browser's native lazy-load
+     heuristic (viewport-distance based) never defers them. Fixed by
+     giving slides 2-4 `data-src` instead of `src`; `HeroCarousel` now
+     hydrates them via `requestIdleCallback` (1.5s `setTimeout` fallback)
+     once the page has settled, with an on-demand hydration safety net in
+     `goTo()` if the user manually navigates before then. First slide is
+     unaffected (still eager + `fetchpriority="high"`).
+  3. **Google Fonts double round-trip:** the font CSS was loaded via
+     `@import` inside `css/styles.css`, which forced the browser to fetch
+     and parse the whole stylesheet before it could even discover the font
+     request. Moved to a real `<link rel="stylesheet">` in `<head>` with
+     `preconnect` hints to `fonts.googleapis.com`/`fonts.gstatic.com`; the
+     `@import` line was removed.
+  4. **Duplicate `?action=popularProducts` call (real bug):**
+     `Router.go("home")` runs twice during boot (immediate fallback
+     render, then again once `Prices`/`Settings` resolve) and each call
+     triggered `Views.refreshPopular()`. Verified via Lighthouse network
+     trace: the request fired twice on one fresh load. Fixed with an
+     in-flight-promise + cache guard on `Popularity.load()` (at most one
+     request per page load) and a `!Popularity.get()` check before calling
+     `refreshPopular()` again, so a later return-to-home reuses the
+     already-fetched ranking instead of re-fetching or re-rendering.
+     `?action=products`/`?action=settings` were already single-call (no
+     fix needed there).
+  5. **Accessibility (96→100):** `label-content-name-mismatch` — the cart
+     button's aria-label ("View cart") didn't include its visible text
+     content (🧺 + count); `Cart.renderCount()` now keeps the aria-label in
+     sync with the live count ("View cart, N items"). `target-size` — the
+     hero-dot indicators were a 7×7px tap target; kept the same small
+     visual dot (via a centered `::after`) but the button itself is now a
+     real 24×24px tap target.
+- **CLS root cause diagnosed, not blindly fixed:** Lighthouse's
+  `cls-culprits-insight` (desktop run, CLS 0.067) attributes ~99% of the
+  shift to `header.site-header > div.header-inner`, cause: "Web font" —
+  the "Hoja Seeds" wordmark (Fraunces, custom Google Font) swaps in after
+  a fallback-font paint, changing its rendered width and reflowing the
+  centered nav-tabs beside it. The Google Fonts double-round-trip fix
+  above should shrink this swap-timing window as a side effect, but a full
+  fix (metric-matched fallback font via `size-adjust`/`ascent-override`)
+  requires hand-tuning against the real Fraunces metrics with visual
+  verification this session didn't have tooling for — deliberately **not**
+  attempted blind, per "do not redesign typography" / "do not introduce
+  risky changes merely for score." Flagged as a scoped follow-up. A
+  custom CDP harness also intermittently observed a `FOOTER.site-footer`
+  layout-shift entry with a degenerate (0,0,0,0) `currRect`; direct
+  100ms-interval rect polling across a full page load never reproduced an
+  actual collapsed footer, so this specific reading is treated as
+  measurement noise (likely a `LayoutShift.sources[].node` artifact tied
+  to the SPA's second full `#app.innerHTML` replacement), not a confirmed
+  user-facing defect — reported rather than "fixed" against unverified
+  evidence.
+- **First-party JS/network baseline (clean, no action needed):**
+  `js/config.js` 2.1KB, `js/products.js` 2.2KB, `js/app.js` 22.5KB
+  transferred (82KB uncompressed) — Lighthouse's `unused-javascript` audit
+  returned zero items for any first-party script (the "1.5MB unused
+  JS"/"253KiB minify savings" in the task's excluded contaminated run was
+  extension noise, confirmed absent in the clean profile). No first-party
+  console errors or failed requests in any run.
+- Verified after deploy: `?action=products`, `?action=settings`, and
+  `?action=popularProducts` all anonymous 200 with no login redirect;
+  `node --check` (app.js, admin.js), `npm test`, `npm run sheets:verify`
+  all pass. No product, price, cart, checkout, delivery-rule, idempotency,
+  LockService, GIS auth, Apps Script deployment, or Cloudflare-project
+  change — this was a frontend-only performance/accessibility pass.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-31)
 
 - **Approved post-freeze visual/merchandising exception (HS-20260818-31,
