@@ -20,6 +20,16 @@
  * (CONFIG.SHEET_WEBHOOK_URL).
  */
 
+// One-time manual authorization helper: select this function in the
+// editor toolbar and click Run once as gisupp@gmail.com, approving the
+// consent dialog, to grant the script.external_request scope that
+// requireAdmin()'s UrlFetchApp call to Google's tokeninfo endpoint
+// needs. Safe to leave in place; it makes a harmless read-only request.
+function authorizeExternalRequestScope() {
+  const response = UrlFetchApp.fetch("https://www.googleapis.com/oauth2/v3/certs", { muteHttpExceptions: true });
+  Logger.log("external_request scope check: HTTP " + response.getResponseCode());
+}
+
 function doGet(e) {
   ensureAdminProperties();
   const action = e.parameter.action;
@@ -101,10 +111,15 @@ function requireAdmin(payload) {
     throw new OrderError("ADMIN_NOT_CONFIGURED", "Admin authorization is not configured.");
   }
 
-  const response = UrlFetchApp.fetch(
-    "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(token),
-    { muteHttpExceptions: true }
-  );
+  let response;
+  try {
+    response = UrlFetchApp.fetch(
+      "https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(token),
+      { muteHttpExceptions: true }
+    );
+  } catch (error) {
+    throw new OrderError("ADMIN_VERIFICATION_FAILED", "Could not verify admin authorization. Please retry.");
+  }
   if (response.getResponseCode() !== 200) {
     throw new OrderError("ADMIN_UNAUTHORIZED", "Admin authorization was rejected.");
   }
