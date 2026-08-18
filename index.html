@@ -38,6 +38,17 @@
 }
 </script>
 
+<!-- Fonts loaded here directly (not via CSS @import) so the browser can
+     discover/fetch them in parallel with styles.css instead of after it. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<!-- LCP is the first hero-carousel slide (js/app.js HERO_SLIDES[0]); it
+     only exists in the DOM after app.js renders the SPA, so without this
+     preload the browser can't discover/fetch it until JS runs. Keep this
+     URL in sync with HERO_SLIDES[0].img. -->
+<link rel="preconnect" href="https://images.hojaseeds.pk">
+<link rel="preload" as="image" fetchpriority="high" href="https://images.hojaseeds.pk/categories/vegetable-seeds.webp">
 <link rel="stylesheet" href="css/styles.css">
 <script src="js/config.js"></script>
 <script>
@@ -87,7 +98,7 @@
       <button class="nav-tab" data-cat="fertilizer" onclick="Router.go('fertilizer')">Fertilizer</button>
       <button class="nav-tab" data-cat="contact" onclick="Router.go('contact')">Contact</button>
     </nav>
-    <button class="cart-icon-btn" onclick="Router.go('cart')" aria-label="View cart">
+    <button class="cart-icon-btn" onclick="Router.go('cart')" aria-label="View cart, 0 items">
       🧺<span class="count" id="cartCount">0</span>
     </button>
   </div>

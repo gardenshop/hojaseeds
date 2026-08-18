@@ -64,14 +64,27 @@ const Settings = {
 // arrives. No PII is requested or stored here.
 const Popularity = {
   _cache: null,
+  _inflight: null,
+  // Fires at most once per page load: Router.go("home") runs twice during
+  // boot (immediate fallback render, then again once Prices/Settings
+  // resolve) — both calls land here, so an in-flight promise is reused
+  // instead of firing a second ?action=popularProducts request, and a
+  // resolved cache is reused by any later return-to-home navigation.
   async load() {
+    if (this._cache) return this._cache;
+    if (this._inflight) return this._inflight;
     if (!CONFIG.SHEET_WEBHOOK_URL) return null;
-    try {
-      const res = await fetch(`${CONFIG.SHEET_WEBHOOK_URL}?action=popularProducts`);
-      const data = await res.json();
-      if (Array.isArray(data) && data.length) { this._cache = data; return data; }
-    } catch (e) { console.warn("Popularity fetch failed, keeping fallback order:", e); }
-    return null;
+    this._inflight = (async () => {
+      try {
+        const res = await fetch(`${CONFIG.SHEET_WEBHOOK_URL}?action=popularProducts`);
+        const data = await res.json();
+        if (Array.isArray(data) && data.length) { this._cache = data; return data; }
+      } catch (e) { console.warn("Popularity fetch failed, keeping fallback order:", e); }
+      return null;
+    })();
+    const result = await this._inflight;
+    this._inflight = null;
+    return result;
   },
   get() { return this._cache; }
 };
@@ -267,7 +280,14 @@ const Cart = {
   },
   renderCount() {
     const countEl = document.getElementById("cartCount");
-    if (countEl) countEl.textContent = this.count();
+    const count = this.count();
+    if (countEl) countEl.textContent = count;
+    // Accessible name must include the button's visible text (WCAG 2.5.3 /
+    // Lighthouse label-content-name-mismatch) — the basket icon + count are
+    // visible content, so the label is kept in sync with the live count
+    // instead of a static "View cart".
+    const cartBtn = document.querySelector(".cart-icon-btn");
+    if (cartBtn && typeof cartBtn.setAttribute === "function") cartBtn.setAttribute("aria-label", `View cart, ${count} item${count === 1 ? "" : "s"}`);
   }
 };
 
@@ -485,10 +505,17 @@ const HERO_SLIDES = [
   { cat: "fertilizer", label: "Fertilizer", img: "https://images.hojaseeds.pk/categories/fertilizer.webp" }
 ];
 
+// Slides 1-3 use data-src, not src: they sit absolutely-stacked in the same
+// on-screen box as the active slide (only opacity differs), so the browser
+// treats them as already in-viewport and native loading="lazy" does NOT
+// defer them there — measured via Lighthouse network trace, all 4 hero
+// photos (~309KB) were fetching on first load. HeroCarousel.hydrateRest()
+// swaps data-src -> src after the page settles, well before the 5s
+// autoplay can reach them.
 function heroCarouselHTML() {
   const slides = HERO_SLIDES.map((s, i) => `
     <button type="button" class="hero-slide${i === 0 ? " active" : ""}" data-idx="${i}" onclick="Router.go('${s.cat}')" aria-label="Shop ${s.label}">
-      <img src="${s.img}" alt="${s.label}" ${i === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async">
+      <img ${i === 0 ? `src="${s.img}" loading="eager" fetchpriority="high"` : `data-src="${s.img}"`} alt="${s.label}" decoding="async">
       <span class="hero-slide-label">${s.label}</span>
     </button>`).join("");
   const dots = HERO_SLIDES.map((s, i) => `<button type="button" class="hero-dot${i === 0 ? " active" : ""}" data-idx="${i}" role="tab" aria-selected="${i === 0}" aria-label="Show ${s.label} slide" onclick="HeroCarousel.goTo(${i})"></button>`).join("");
@@ -531,6 +558,19 @@ const HeroCarousel = {
       if (dx < 0) this.next(); else this.prev();
     }, { passive: true });
     if (!reduceMotion) this.start();
+    // Defer the other 3 slide photos until the page has settled (idle, or a
+    // short timeout as a fallback) so they never compete with the first
+    // slide — the actual LCP resource — on initial load.
+    const hydrate = () => this.hydrateRest();
+    if ("requestIdleCallback" in window) window.requestIdleCallback(hydrate, { timeout: 2000 });
+    else setTimeout(hydrate, 1500);
+  },
+  hydrateRest() {
+    if (!this.root || !this.root.querySelectorAll) return;
+    this.root.querySelectorAll(".hero-slide img[data-src]").forEach(img => {
+      img.src = img.dataset.src;
+      img.removeAttribute("data-src");
+    });
   },
   stop() {
     clearInterval(this.timer);
@@ -565,6 +605,11 @@ const HeroCarousel = {
   goTo(i) {
     if (!this.root) return;
     this.index = (i + HERO_SLIDES.length) % HERO_SLIDES.length;
+    // Safety net: if the user navigates (dots/swipe/keyboard) before the
+    // idle hydration above has run, load that specific slide's photo now
+    // instead of showing it blank.
+    const targetImg = this.root.querySelector ? this.root.querySelector(`.hero-slide[data-idx="${this.index}"] img[data-src]`) : null;
+    if (targetImg) { targetImg.src = targetImg.dataset.src; targetImg.removeAttribute("data-src"); }
     const slides = this.root.querySelectorAll ? this.root.querySelectorAll(".hero-slide") : [];
     slides.forEach((el, idx) => el.classList.toggle("active", idx === this.index));
     const dots = this.root.querySelectorAll ? this.root.querySelectorAll(".hero-dot") : [];
@@ -617,7 +662,7 @@ const Views = {
   render(view) {
     const app = document.getElementById("app");
     if (view !== "home") HeroCarousel.stop();
-    if (view === "home") { app.innerHTML = this.home(); HeroCarousel.init(); this.refreshPopular(); return; }
+    if (view === "home") { app.innerHTML = this.home(); HeroCarousel.init(); if (!Popularity.get()) this.refreshPopular(); return; }
     if (["vegetables", "flowers", "mix", "fertilizer"].includes(view)) return this.category(view);
     if (view === "contact") return app.innerHTML = this.contact();
     if (view === "cart") return this.cart();
