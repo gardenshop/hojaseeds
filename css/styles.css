@@ -4,6 +4,27 @@
    could even discover the font CSS, adding a full extra round trip to
    render-blocking work. Keep this file free of @import. */
 
+/* Metric-matched local fallback for Fraunces (HS-20260818-33): reduces the
+   layout shift caused by the header wordmark/headings reflowing when
+   Fraunces swaps in after its fallback paint (confirmed via Lighthouse
+   cls-culprits-insight as the dominant CLS source: header.site-header >
+   div.header-inner, cause "Web font"). Values below are measured, not
+   guessed — extracted with fontkit from the actual production Fraunces
+   woff2 (unitsPerEm 2000, ascent 1956, descent -510, lineGap 0, average
+   glyph advance width ~1146.68 units over the site's real brand strings)
+   against local Georgia (unitsPerEm 2048, avg advance width ~994.2 units)
+   as the closest available serif system fallback. This only changes the
+   box geometry of the *fallback* paint before Fraunces loads — Fraunces
+   itself, its weights, and the final rendered typography are unchanged. */
+@font-face{
+  font-family:'Fraunces Fallback';
+  src:local('Georgia'),local('Times New Roman'),local('serif');
+  ascent-override:97.8%;
+  descent-override:25.5%;
+  line-gap-override:0%;
+  size-adjust:118.1%;
+}
+
 :root{
   /* Warm Premium Garden theme (HS-20260818-30): warm ivory canvas, deep
      forest primary, pale sage surfaces, muted saffron/gold accent. Variable
@@ -32,7 +53,7 @@
 *{box-sizing:border-box;}
 body{margin:0;font-family:'Inter',sans-serif;color:var(--ink);background:var(--paper);padding-bottom:0;}
 body.has-sticky-bar{padding-bottom:calc(var(--sticky-h) + env(safe-area-inset-bottom));}
-h1,h2,h3,.display{font-family:'Fraunces',serif;}
+h1,h2,h3,.display{font-family:'Fraunces','Fraunces Fallback',serif;}
 .mono{font-family:'IBM Plex Mono',monospace;}
 a{color:inherit;}
 img,svg{max-width:100%;}
@@ -42,7 +63,7 @@ button{font-family:inherit;cursor:pointer;}
 /* ══════════════ HEADER (mobile-first, light warm-ivory — logo visible) ══════════════ */
 .site-header{background:var(--paper);color:var(--ink);position:sticky;top:0;z-index:40;box-shadow:0 1px 0 var(--kraft-dark),0 4px 14px rgba(31,42,28,.06);height:var(--header-h);}
 .header-inner{max-width:1180px;height:100%;margin:0 auto;padding:0 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0;position:relative;}
-.logo{display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:'Fraunces',serif;font-weight:700;font-size:1.28rem;letter-spacing:.01em;background:none;border:none;border-radius:8px;color:var(--leaf-dark);padding:2px;position:absolute;left:50%;transform:translateX(-50%);z-index:1;}
+.logo{display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:'Fraunces','Fraunces Fallback',serif;font-weight:700;font-size:1.28rem;letter-spacing:.01em;background:none;border:none;border-radius:8px;color:var(--leaf-dark);padding:2px;position:absolute;left:50%;transform:translateX(-50%);z-index:1;}
 .logo:focus-visible{outline:2px solid var(--marigold);outline-offset:3px;}
 .logo .logo-mark-wrap{flex:none;width:44px;height:44px;border-radius:50%;background:var(--sage);display:flex;align-items:center;justify-content:center;}
 .logo .logo-mark{height:40px;width:auto;object-fit:contain;flex:none;}
@@ -101,7 +122,7 @@ button{font-family:inherit;cursor:pointer;}
 .hero-slide{position:absolute;inset:0;border:none;padding:0;width:100%;height:100%;cursor:pointer;opacity:0;transition:opacity .5s ease;pointer-events:none;}
 .hero-slide.active{opacity:1;pointer-events:auto;}
 .hero-slide img{width:100%;height:100%;object-fit:cover;display:block;}
-.hero-slide-label{position:absolute;left:10px;bottom:10px;background:rgba(251,247,238,.92);color:var(--leaf-dark);font-family:'Fraunces',serif;font-weight:600;font-size:.82rem;padding:5px 11px;border-radius:999px;}
+.hero-slide-label{position:absolute;left:10px;bottom:10px;background:rgba(251,247,238,.92);color:var(--leaf-dark);font-family:'Fraunces','Fraunces Fallback',serif;font-weight:600;font-size:.82rem;padding:5px 11px;border-radius:999px;}
 .hero-carousel-controls{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:2px;z-index:2;}
 .hero-dots{display:flex;}
 /* Visual dot stays small (premium look); the button itself is a full
@@ -164,7 +185,7 @@ button{font-family:inherit;cursor:pointer;}
 .cat-tile[data-cat="mix"] .cat-tile-photo{background-image:url('https://images.hojaseeds.pk/categories/mix-seeds.webp'),linear-gradient(150deg,#B84A3E,#7C2E25);}
 .cat-tile[data-cat="fertilizer"] .cat-tile-photo{background-image:url('https://images.hojaseeds.pk/categories/fertilizer.webp'),linear-gradient(150deg,#6B4A2A,#432D19);}
 .cat-tile-content{padding:11px 12px 12px;min-width:0;background:var(--paper);}
-.cat-tile-content .name{font-family:'Fraunces',serif;font-weight:600;font-size:.98rem;display:block;min-width:0;overflow-wrap:anywhere;color:var(--ink);}
+.cat-tile-content .name{font-family:'Fraunces','Fraunces Fallback',serif;font-weight:600;font-size:.98rem;display:block;min-width:0;overflow-wrap:anywhere;color:var(--ink);}
 .cat-tile-content .count{font-size:.72rem;color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;}
 .cat-tile-btn{position:absolute;inset:0;background:none;border:none;width:100%;height:100%;z-index:2;}
 @media (min-width:640px){.cat-grid{grid-template-columns:repeat(4,minmax(0,1fr));}.cat-tile-photo{height:160px;}}
@@ -187,7 +208,7 @@ button{font-family:inherit;cursor:pointer;}
 .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--leaf-dark);}
 .page-head h2{font-size:clamp(1.8rem,3vw,2.35rem);margin:5px 0 8px;letter-spacing:-.015em;}
 .page-head .tagline{color:#5b5142;margin:0;font-size:.92rem;}
-.section-title{font-family:'Fraunces',serif;font-size:1.3rem;margin:34px 0 14px;}
+.section-title{font-family:'Fraunces','Fraunces Fallback',serif;font-size:1.3rem;margin:34px 0 14px;}
 .why-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .why-card{background:var(--kraft);border-radius:12px;padding:16px 14px;box-shadow:var(--shadow-sm);}
 .why-card .ic{font-size:1.3rem;margin-bottom:6px;display:block;}
@@ -339,7 +360,7 @@ button{font-family:inherit;cursor:pointer;}
 .field-error:not(:empty){min-height:1em;}
 .home-prerender-shell{max-width:1120px;margin:0 auto;padding:clamp(40px,8vw,90px) 20px 50px;background:var(--paper);color:var(--ink);}
 .home-prerender-shell .eyebrow{margin:0 0 12px;color:var(--marigold-dark);font:700 .72rem/1.2 "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;}
-.home-prerender-shell h1{max-width:14ch;margin:0;font:600 clamp(1.9rem,5vw,3.2rem)/1.12 Fraunces,Georgia,serif;color:var(--ink);}
+.home-prerender-shell h1{max-width:14ch;margin:0;font:600 clamp(1.9rem,5vw,3.2rem)/1.12 Fraunces,'Fraunces Fallback',Georgia,serif;color:var(--ink);}
 .home-prerender-copy{max-width:520px;margin:14px 0 22px;color:var(--ink-soft);font-size:1rem;line-height:1.6;}
 .home-prerender-benefits{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;color:var(--ink-soft);font-size:.82rem;}
 .home-prerender-benefits span{padding:9px 12px;border:1px solid var(--kraft-dark);border-radius:10px;background:var(--sage);font-weight:600;}
@@ -511,7 +532,7 @@ button{font-family:inherit;cursor:pointer;}
 .explore-card[data-cat="mix"]{background-image:url('https://images.hojaseeds.pk/categories/mix-seeds.webp'),linear-gradient(150deg,#B84A3E,#7C2E25);}
 .explore-card[data-cat="fertilizer"]{background-image:url('https://images.hojaseeds.pk/categories/fertilizer.webp'),linear-gradient(150deg,#6B4A2A,#432D19);}
 .explore-card-label{position:relative;z-index:1;font-size:.66rem;font-weight:600;letter-spacing:.02em;opacity:.85;overflow-wrap:anywhere;}
-.explore-card-name{position:relative;z-index:1;display:flex;align-items:center;gap:6px;font-family:'Fraunces',serif;font-weight:600;font-size:1rem;}
+.explore-card-name{position:relative;z-index:1;display:flex;align-items:center;gap:6px;font-family:'Fraunces','Fraunces Fallback',serif;font-weight:600;font-size:1rem;}
 .explore-card-arrow{font-family:'Inter',sans-serif;font-weight:700;font-size:1rem;}
 @media (min-width:520px){.explore-more-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 
