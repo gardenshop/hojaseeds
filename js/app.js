@@ -662,7 +662,26 @@ const Views = {
   render(view) {
     const app = document.getElementById("app");
     if (view !== "home") HeroCarousel.stop();
-    if (view === "home") { app.innerHTML = this.home(); HeroCarousel.init(); if (!Popularity.get()) this.refreshPopular(); return; }
+    if (view === "home") {
+      const html = this.home();
+      // Skip a redundant full-page reflow when the fallback-vs-live-data
+      // render is actually byte-identical -- the common case (live Sheet
+      // catalog matches the local fallback unless Admin has changed
+      // something). Router.go("home") runs twice during boot (immediate
+      // fallback, then again once Prices/Settings resolve); replacing
+      // #app.innerHTML a second time with identical content was a
+      // confirmed CLS source (HS-20260818-32/33: a large single-frame
+      // layout recalculation around the footer). A real content change
+      // (e.g. an Admin price update) still produces a different string
+      // and re-renders normally.
+      if (this._lastHomeHTML !== html) {
+        this._lastHomeHTML = html;
+        app.innerHTML = html;
+        HeroCarousel.init();
+      }
+      if (!Popularity.get()) this.refreshPopular();
+      return;
+    }
     if (["vegetables", "flowers", "mix", "fertilizer"].includes(view)) return this.category(view);
     if (view === "contact") return app.innerHTML = this.contact();
     if (view === "cart") return this.cart();
