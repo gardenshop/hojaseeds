@@ -722,3 +722,19 @@ replace it.*
   mobile LCP 2709ms (TTFB 55ms, render delay 2425ms, CLS 0.00) and desktop LCP
   1192ms (TTFB 52ms, render delay 668ms, CLS 0.02); three-run medians and
   throttled EDGE runs remain pending.
+
+### 2026-08-18 (HS-20260818-06) repeated direct performance gate
+
+- Three direct production traces at 390×844 measured mobile LCP
+  `1794/1676/1671ms` (median `1676ms`), TTFB `48–61ms`, and CLS `0.00`.
+  Three traces at 1366×768 measured desktop LCP `1705/1806/2037ms` (median
+  `1806ms`), TTFB `50–60ms`, and CLS `0.02`. The traces show image load delay
+  around `1.3–1.5s` and mobile render delay from `285ms` onward; origin TTFB
+  is not the bottleneck. No speculative image/font/Cloudflare change was
+  applied.
+- Each cold cache-busted trace rendered the fallback-first app (`#app` had
+  three children) with 76–77 observed requests, including the expected local
+  assets, one hero and four category R2 images, Google Fonts, Cloudflare, and
+  Products/Settings reads. EDGE-like throttling, full route call-count
+  auditing, and the complete production checkout/Admin mutation gate remain
+  outstanding.
