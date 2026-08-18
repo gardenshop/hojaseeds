@@ -1,0 +1,28 @@
+import process from "node:process";
+import path from "node:path";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const target = JSON.parse(await fs.readFile(path.join(root, "config", "production-target.json"), "utf8"));
+const run = process.argv.find(value => value.startsWith("--test-run-id="))?.split("=")[1];
+if (!run) throw new Error("--test-run-id is required.");
+const googleapis = await import("googleapis");
+const auth = process.env.GOOGLE_OAUTH_ACCESS_TOKEN ? new googleapis.google.auth.OAuth2() : new googleapis.google.auth.GoogleAuth({ scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"] });
+if (process.env.GOOGLE_OAUTH_ACCESS_TOKEN) auth.setCredentials({ access_token: process.env.GOOGLE_OAUTH_ACCESS_TOKEN });
+const sheets = googleapis.google.sheets({ version: "v4", auth });
+const response = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.HOJA_SHEET_ID || target.sheet_id, range: "LoadTestOrders!A:Q" });
+const rows = response.data.values || [];
+const headers = rows.shift() || [];
+const index = name => headers.indexOf(name);
+const selected = rows.filter(row => String(row[index("testRunId")] || "") === run);
+const orderIds = selected.map(row => String(row[index("orderId")] || ""));
+const keys = selected.map(row => String(row[index("idempotencyKey")] || ""));
+const corrupt = selected.filter(row => {
+  const total = Number(row[index("orderTotal")]);
+  const payNow = Number(row[index("payNow")]);
+  const codDue = Number(row[index("codDue")]);
+  return !row[index("orderId")] || !row[index("idempotencyKey")] || !Number.isFinite(total) || payNow + codDue !== total || row[index("status")] !== "accepted";
+});
+const report = { testRunId: run, expectedRows: Number(process.env.LOAD_TEST_EXPECTED || 0), actualRows: selected.length, uniqueOrderIds: new Set(orderIds).size, duplicateOrderIds: orderIds.length - new Set(orderIds).size, uniqueIdempotencyKeys: new Set(keys).size, duplicateIdempotencyKeys: keys.length - new Set(keys).size, corruptRows: corrupt.length, ok: corrupt.length === 0 && orderIds.length === new Set(orderIds).size && keys.length === new Set(keys).size && (!process.env.LOAD_TEST_EXPECTED || selected.length === Number(process.env.LOAD_TEST_EXPECTED)) };
+console.log(JSON.stringify(report, null, 2));
+if (!report.ok) process.exitCode = 2;

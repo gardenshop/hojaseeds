@@ -738,3 +738,19 @@ replace it.*
   Products/Settings reads. EDGE-like throttling, full route call-count
   auditing, and the complete production checkout/Admin mutation gate remain
   outstanding.
+
+### 2026-08-18 (HS-20260818-11) isolated load-test infrastructure
+
+- Added schema version 4 with an additive `LoadTestOrders` sheet and a
+  server-side-only `loadTest` route. The route reuses the existing
+  authoritative product/payment/delivery builder and LockService idempotency,
+  and selects `LoadTestOrders` only after validating `LOAD_TEST_SECRET` and
+  `testRunId`; unauthorized requests fail with `LOAD_TEST_UNAUTHORIZED` before
+  any sheet write. Production `Orders` routing is unchanged.
+- Added the ramped `scripts/order-load-test.mjs` harness and read-only
+  `scripts/load-test-verify.mjs`; reports are ignored under `.tools/load-tests`.
+- The additive migration and Apps Script push succeeded; the protected web-app
+  deployment is version 16. Secret provisioning is blocked by the current
+  Google API credentials: Apps Script Execution API `scripts.run` returns HTTP
+  403 `PERMISSION_DENIED` / `The caller does not have permission`. No load-test
+  orders were sent, and 5/10/20/250/1000 capacity remains unverified.

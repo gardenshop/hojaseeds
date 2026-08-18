@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "spreadsheet_title": "Hoja Seeds",
   "sheets": {
     "Products": [
@@ -20,6 +20,11 @@
     ],
     "Contact": ["timestamp", "name", "phone", "message"],
     "AuditLog": ["timestamp", "admin_email", "action", "entity_type", "entity_id", "before", "after", "result"],
-    "Settings": ["key", "value"]
+    "Settings": ["key", "value"],
+    "LoadTestOrders": [
+      "timestamp", "testRunId", "sequence", "orderId", "idempotencyKey",
+      "paymentMode", "paymentChannel", "items", "itemsSubtotal", "deliveryFee",
+      "orderTotal", "payNow", "codDue", "status", "requestFingerprint", "processingMs", "errorCode"
+    ]
   }
 }

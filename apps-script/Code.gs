@@ -69,6 +69,15 @@ function doPost(e) {
   }
 }
 
+function setLoadTestSecret(secret) {
+  const email = Session.getActiveUser().getEmail();
+  if (email !== "gisupp@gmail.com") throw new OrderError("ADMIN_UNAUTHORIZED", "Only the verified owner may set the load-test secret.");
+  const value = requiredText(secret, "Load-test secret", 32, 200);
+  if (!/^[A-Za-z0-9_-]{32,200}$/.test(value)) throw new OrderError("INVALID_LOAD_TEST_SECRET", "The load-test secret format is invalid.");
+  PropertiesService.getScriptProperties().setProperty("LOAD_TEST_SECRET", value);
+  return { ok: true };
+}
+
 function ensureAdminProperties() {
   const properties = PropertiesService.getScriptProperties();
   const currentClientId = String(properties.getProperty("HOJA_GOOGLE_CLIENT_ID") || "");
@@ -178,6 +187,9 @@ function OrderError(code, message) {
 OrderError.prototype = Object.create(Error.prototype);
 
 function submitOrder(payload) {
+  const startTime = Date.now();
+  const loadTest = payload.loadTest === true;
+  if (loadTest) requireLoadTestAuthorization(payload);
   const idempotencyKey = requiredText(payload.idempotencyKey, "Idempotency key", 16, 100);
   if (!/^[A-Za-z0-9_-]+$/.test(idempotencyKey)) {
     throw new OrderError("INVALID_IDEMPOTENCY_KEY", "The order request key is invalid.");
@@ -191,16 +203,32 @@ function submitOrder(payload) {
 
   try {
     const orderId = generateOrderId(idempotencyKey);
-    const existingOrder = findMatchingOrder(orderId, fingerprint);
+    const existingOrder = findMatchingOrder(orderId, fingerprint, loadTest ? "LoadTestOrders" : "Orders");
     if (existingOrder) return existingOrder;
 
     const order = buildAuthoritativeOrder(payload, getProducts(), getOrderSettings(), orderId);
     order.idempotencyFingerprint = fingerprint;
-    logOrder(order);
+    if (loadTest) {
+      order.testRunId = requiredText(payload.testRunId, "Test run ID", 8, 100);
+      order.sequence = Number(payload.sequence) || 0;
+      order.idempotencyKey = idempotencyKey;
+      order.processingMs = Date.now() - startTime;
+      logLoadTestOrder(order);
+    } else {
+      logOrder(order);
+    }
     delete order.idempotencyFingerprint;
     return order;
   } finally {
     lock.releaseLock();
+  }
+}
+
+function requireLoadTestAuthorization(payload) {
+  const configured = PropertiesService.getScriptProperties().getProperty("LOAD_TEST_SECRET");
+  const supplied = String(payload.loadTestSecret || "");
+  if (!configured || !supplied || supplied !== configured || payload.loadTest !== true || !/^[A-Za-z0-9_-]{8,100}$/.test(String(payload.testRunId || ""))) {
+    throw new OrderError("LOAD_TEST_UNAUTHORIZED", "Load-test authorization is invalid.");
   }
 }
 
@@ -602,8 +630,21 @@ function logOrder(o) {
   ]);
 }
 
-function findMatchingOrder(orderId, fingerprint) {
-  const order = findOrderById(orderId);
+function logLoadTestOrder(o) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("LoadTestOrders");
+  if (!sheet) throw new OrderError("LOAD_TEST_SHEET_MISSING", "The LoadTestOrders sheet is not configured.");
+  sheet.appendRow([
+    o.createdAt, safeSheetText(o.testRunId), o.sequence, o.orderId, safeSheetText(o.idempotencyKey),
+    o.paymentMethod, safeSheetText(o.advanceMethod), JSON.stringify({ fingerprint: o.idempotencyFingerprint, items: o.items, response: o }),
+    o.subtotal, o.deliveryFee, o.total, o.payNow, o.codDue, "accepted", safeSheetText(o.idempotencyFingerprint),
+    o.processingMs, ""
+  ]);
+}
+
+function findMatchingOrder(orderId, fingerprint, sheetName) {
+  const order = sheetName === "LoadTestOrders"
+    ? findLoadTestOrderById(orderId)
+    : findOrderById(orderId);
   if (!order) return null;
   if (!order.idempotencyFingerprint) return null;
   if (order.idempotencyFingerprint !== fingerprint) {
@@ -611,6 +652,27 @@ function findMatchingOrder(orderId, fingerprint) {
   }
   delete order.idempotencyFingerprint;
   return order;
+}
+
+function findLoadTestOrderById(orderId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("LoadTestOrders");
+  if (!sheet) return null;
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  const headers = rows[0];
+  const orderIdColumn = headers.indexOf("orderId");
+  const itemsColumn = headers.indexOf("items");
+  if (orderIdColumn < 0 || itemsColumn < 0) throw new OrderError("INVALID_LOAD_TEST_SHEET", "The LoadTestOrders sheet is missing required columns.");
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][orderIdColumn]) !== orderId) continue;
+    try {
+      const snapshot = JSON.parse(String(rows[i][itemsColumn] || "{}"));
+      return snapshot.response || null;
+    } catch (error) {
+      throw new OrderError("INVALID_LOAD_TEST_RECORD", "The load-test order record is invalid.");
+    }
+  }
+  return null;
 }
 
 function findOrderById(orderId) {
