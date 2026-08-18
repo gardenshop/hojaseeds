@@ -6,6 +6,46 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-28)
+
+- **Launch date:** 2026-08-18
+- **Code readiness:** 99% | **Production E2E:** 99% | **Launch readiness:** 99%
+- **Remaining:** 1% — GA4/Meta Pixel activation, non-blocking, post-launch only
+- **Commit:** `896d0a6` (docs) on top of `e43d623` (admin auth fix), `main`, `gardenshop/hojaseeds`
+- **Apps Script deployment:** version 23, deployment ID
+  `AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0`
+  (unchanged this session), owner/deployer `gisupp@gmail.com` ONLY. After
+  every future backend deployment: verify anonymous `?action=products`,
+  anonymous `?action=settings`, no Google-login redirect, no Spreadsheet
+  OAuth error — all four, before considering it done.
+- **Cloudflare Pages:** same project/domain (`hojaseeds` → `www.hojaseeds.pk`),
+  unchanged this session.
+- **Protected commercial values (re-verified live, unchanged):** Tomato
+  (`veg-01`) = Rs.185/premium, `MIN_PARTIAL_ADVANCE` = 250,
+  `SPLIT_ADVANCE_PERCENT` = 50, `COD_ALLOWED` = true, `COD_DELIVERY_FEE` =
+  250, `ADVANCE_DELIVERY_FEE` = 100, `FREE_DELIVERY_THRESHOLD` = 1500, 47
+  approved products.
+- **Capacity baseline:** recommended safe concurrency **C5**. C10 passes
+  technically (with the 60s lock wait + harness retry) but has poor tail
+  latency (p99 ≈72s) — demonstrated, not advertised as normal. Bottleneck is
+  the single global Apps Script `LockService` order-write lock; no
+  concurrency redesign planned unless real order volume requires it.
+- **Analytics:** GA4/Meta Pixel wiring exists and is fail-closed —
+  `CONFIG.GA4_MEASUREMENT_ID`/`CONFIG.META_PIXEL_ID` (`js/config.js`) are
+  empty, so the tracker scripts never load and no events send anywhere,
+  placeholder or real. Purchase event fires only after a confirmed
+  successful order. First post-launch task: supply real IDs and activate.
+- **Browser/Admin evidence:** driven by the account owner directly (no
+  `chrome_devtools` MCP available this session, confirmed via explicit tool
+  search, not assumed) — Admin all-tabs, Tomato/MIN_PARTIAL_ADVANCE/
+  SPLIT_ADVANCE_PERCENT mutate-and-restore, and responsive/mobile/
+  slow-network checks all reported PASS.
+- **Protected Scope: FROZEN FOR LAUNCH.** Do not continue normal
+  development against the frozen scope below without a new approved task.
+  Next normal development task should be post-launch only.
+
+---
+
 ## Scope & non-goals
 - Static HTML/CSS/JS site. No build step, no framework (React/Vue/etc.),
   no npm install required to run it. Keep it that way unless explicitly
