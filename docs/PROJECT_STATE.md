@@ -88,11 +88,14 @@ replace it.*
   IDs for Mix COD, custom Advance, and custom Split. Admin visual Products
   screenshots and authorized mutation/restore remain pending GIS sign-in.
 
-- Production readiness: **96%** — payment-policy backend/frontend
-  synchronization and requested payment/image UX are live and verified.
-- Remaining: **4%** — authorized GIS admin sign-in + mutation/restore test
-  (still requires a human or DevTools-MCP-capable session), plus live analytics
-  vendor delivery (GA4/Meta IDs still placeholders)
+- Production readiness: **99%** (HS-20260818-27) — owner-authenticated
+  deployment fixed and verified end-to-end (anonymous Products/Settings,
+  load-test isolation, 5/10/20/50/100 load ramp, idempotency 5/20/100,
+  commercial COD/Advance/Split E2E, and the authenticated Admin
+  mutation/restore gate for Tomato/MIN_PARTIAL_ADVANCE/SPLIT_ADVANCE_PERCENT)
+  all PASS.
+- Remaining: **1%** — live analytics vendor delivery (GA4/Meta IDs still
+  placeholders), post-launch only.
 - Expanded operations scope readiness: **92%** (unchanged this session — the
   admin width repair and payment-policy matrix land without moving this
   number since neither closes an expanded-scope gap). The responsive admin
@@ -754,3 +757,89 @@ replace it.*
   Google API credentials: Apps Script Execution API `scripts.run` returns HTTP
   403 `PERMISSION_DENIED` / `The caller does not have permission`. No load-test
   orders were sent, and 5/10/20/250/1000 capacity remains unverified.
+
+### 2026-08-18 (HS-20260818-19/20/27) owner-authenticated deployment, load/idempotency verification, admin browser gate
+
+- **Deployment identity fixed.** The runtime is authenticated as the owner
+  (`gisupp@gmail.com`, confirmed from the stored clasp token). Created one
+  replacement Web App deployment (same ID kept across this whole arc:
+  `AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0`,
+  now at version 23) with `Execute as: Me` / `Anyone` access. The live
+  frontend (`index-standalone.html`, `js/config.js`) and
+  `config/production-target.json` had been pointing at a different, broken
+  "load-test diagnostics" deployment that 302-redirected anonymous requests
+  to Google login — repointed all three to the new deployment, deployed to
+  the same Cloudflare Pages project (clean artifact:
+  `index.html`/`admin.html`/`robots.txt`/`sitemap.xml`/`css`/`js`/`assets`),
+  confirmed `www.hojaseeds.pk` serves it live.
+- **OAuth scope consent gaps** (two, found and fixed sequentially — Apps
+  Script grants scopes lazily, per first actual API call, not upfront):
+  the Spreadsheets scope had never been consented to under the new owner
+  identity (`?action=products`/`settings` threw
+  `SpreadsheetApp.getActiveSpreadsheet` permission errors) — fixed by
+  manually running `getProducts`/`getSettings` once in the editor. Then
+  Admin `priceUpdate` failed separately (`requireAdmin()`'s `UrlFetchApp`
+  call to Google's tokeninfo endpoint needs `script.external_request`,
+  untouched by the Sheets-only functions) — added
+  `authorizeExternalRequestScope()` as a one-time manual-run helper,
+  granted the same way. `requireAdmin()` was also hardened to wrap that
+  `UrlFetchApp` call in try/catch so any future transient failure surfaces
+  a real error message instead of an empty one.
+- **Load-test isolation preflight PASS**: `HOJA_LOAD_TEST_SECRET` present in
+  `.env.local` (git-ignored), 1 authorized isolated order landed only in
+  `LoadTestOrders` (confirmed against live Sheet: production `Orders` count
+  unchanged, order ID absent), missing/wrong secret both correctly rejected
+  with `LOAD_TEST_UNAUTHORIZED` and zero writes.
+- **Load ramp**: 5@C1, 10@C2, 20@C5, 50@C5, 100@C10 all reached 100%
+  success / 0 duplicates / 0 corrupt rows — but only after diagnosing and
+  fixing a real capacity limit: `LockService.getScriptLock().tryLock()`
+  only waited 10s, which is too short once the queue for the single global
+  order-write lock legitimately exceeds that (average lock hold ~10–17s,
+  dominated by Products/Settings Sheet reads). Raised the wait to 60s (this
+  only changes how long a legitimately-queued request waits before giving
+  up — it does not change locking semantics, atomicity, or idempotency) and
+  added bounded retry-with-backoff on `ORDER_BUSY` to the load-test harness
+  (`scripts/order-load-test.mjs`). Even after the fix, C10 tail latency was
+  poor (p50 11s, p95 49.6s, p99 72s, max 79s) — a deliberate decision was
+  made **not** to scale further to C20/1000: the global lock is a real
+  architectural ceiling, and pushing harder would mostly just confirm the
+  same wall gets worse while risking Apps Script's 6-minute execution
+  ceiling on an individual request (a genuine corruption risk, not just a
+  slow response). **C5 is the recommended safe operating concurrency; C10
+  is demonstrated but not advertised as normal.**
+- **Idempotency stress PASS in full**: 5, 20, and 100 concurrent identical
+  requests (same idempotency key) each converged to exactly one order ID,
+  100% success once given a matching retry/wait budget. Same key + different
+  payload correctly returned `IDEMPOTENCY_CONFLICT` with no new row.
+  Double-submit and lost-response-retry scenarios both produced exactly one
+  order each. All verified against the live Sheet, not just harness output.
+- **Commercial E2E PASS**: 1 real COD, 1 Advance, 1 Split order created
+  (marked "FINAL E2E TEST - DO NOT FULFILL"), `payNow + codDue == total`
+  verified exactly for all three, confirming `MIN_PARTIAL_ADVANCE=250` and
+  `SPLIT_ADVANCE_PERCENT=50` were correct at the time. Missing transaction
+  reference and invalid phone both correctly rejected with zero writes.
+- **Admin browser gate** (manual, one action at a time, no chrome_devtools
+  MCP available in-session — confirmed absent by explicit `ToolSearch`, not
+  assumed): Admin Products table PASS at the tested viewport (Product/
+  Default Price/Current Price/Type all visible, no clipping); all 8 Admin
+  tabs (Dashboard, Products, Orders, Customers, Delivery & Payments,
+  Analytics, Store Settings, Audit Log) reported clean. Tomato mutate
+  (185→186) and restore (186→185) both verified live via the anonymous
+  `?action=products` read and the Audit Log. `MIN_PARTIAL_ADVANCE`
+  (250→300→250) and `SPLIT_ADVANCE_PERCENT` (50→30→50) mutate/restore
+  cycles verified against the live storefront Split Payment calculation
+  (300/250→250/300 pay-now/pay-on-delivery split, matching the exact
+  rounding/floor math) and the settings API; both confirmed back at their
+  protected final values. Responsive matrix, mobile card/nav/delivery/
+  payment checks, and the slow-network check were driven and reported by
+  the user directly (not independently re-verified this session) as PASS.
+- Protected/unchanged this arc: 47 approved products, delivery fees, Mix
+  COD rules, custom Advance/Partial rules, COD rounding, idempotency,
+  `LockService` correctness (only its wait budget was tuned), Sheet ID,
+  Apps Script project, R2 assets/domain, Cloudflare project/domain,
+  gisupp-only deployment identity. No 1000-order run was performed
+  (intentional).
+- Tooling note: this session has no `chrome_devtools` MCP or any browser
+  automation tool — confirmed via explicit tool search, not assumed. All
+  authenticated-Admin/browser evidence in this entry came from the user
+  driving a real Chrome session and reporting/screenshotting results.
