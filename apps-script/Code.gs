@@ -35,6 +35,7 @@ function doGet(e) {
   const action = e.parameter.action;
   if (action === "products") return jsonResponse(getProducts());
   if (action === "settings") return jsonResponse(getSettings());
+  if (action === "popularProducts") return jsonResponse(getPopularProducts());
   return jsonResponse({ error: "Unknown action" });
 }
 
@@ -490,6 +491,55 @@ function getProducts() {
       headers.forEach((h, i) => obj[h] = r[i]);
       return obj;
     });
+}
+
+// Read-only merchandising popularity ranking for the homepage "Popular
+// Seeds" strip (HS-20260818-31). Public response is deliberately limited to
+// {productId, soldQty} only — no customer name/phone/address/order detail
+// ever leaves this function. Reads the real "Orders" sheet only (never
+// LoadTestOrders) and skips any row whose customer-name column carries a
+// test/diagnostic marker, matching this project's existing marked-test
+// convention ("... DO NOT FULFILL", "... TEST ..."). Cached for 20 minutes
+// so this never adds real per-request Sheet-read cost to the homepage.
+function getPopularProducts() {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "popularProducts_v1";
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* fall through and recompute */ }
+  }
+  const result = computePopularProducts();
+  try { cache.put(cacheKey, JSON.stringify(result), 1200); } catch (e) { /* cache is best-effort */ }
+  return result;
+}
+
+function computePopularProducts() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Orders");
+  if (!sheet) return [];
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows.shift();
+  const nameCol = headers.indexOf("name");
+  const itemsCol = headers.indexOf("items");
+  if (itemsCol === -1) return [];
+  const totals = {};
+  rows.forEach(function (row) {
+    if (!row[itemsCol]) return;
+    const customerName = String(nameCol > -1 ? row[nameCol] : "").toUpperCase();
+    if (customerName.indexOf("TEST") !== -1 || customerName.indexOf("DO NOT FULFILL") !== -1) return;
+    let parsed;
+    try { parsed = JSON.parse(row[itemsCol]); } catch (e) { return; }
+    const items = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+    items.forEach(function (item) {
+      if (!item || !item.productId) return;
+      const qty = Number(item.quantity) || 0;
+      if (qty <= 0) return;
+      totals[item.productId] = (totals[item.productId] || 0) + qty;
+    });
+  });
+  return Object.keys(totals)
+    .map(function (productId) { return { productId: productId, soldQty: totals[productId] }; })
+    .sort(function (a, b) { return b.soldQty - a.soldQty; })
+    .slice(0, 6);
 }
 
 function updateProducts(updates, adminEmail) {

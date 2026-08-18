@@ -56,6 +56,39 @@ const Settings = {
   get() { return this._cache || { ...CONFIG.PRICING_RULES, ...CONFIG.PAYMENT_DISPLAY, ...this.overrides() }; }
 };
 
+// ---- Popularity: read-only bestseller ranking for the homepage "Popular
+// Seeds" strip. Fetches {productId, soldQty}[] from the server (real Orders
+// history, test/load rows already excluded server-side); never blocks the
+// header/hero/categories/Products render — the strip renders with a stable
+// catalog-order fallback immediately and re-sorts in place if/when ranking
+// arrives. No PII is requested or stored here.
+const Popularity = {
+  _cache: null,
+  async load() {
+    if (!CONFIG.SHEET_WEBHOOK_URL) return null;
+    try {
+      const res = await fetch(`${CONFIG.SHEET_WEBHOOK_URL}?action=popularProducts`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length) { this._cache = data; return data; }
+    } catch (e) { console.warn("Popularity fetch failed, keeping fallback order:", e); }
+    return null;
+  },
+  get() { return this._cache; }
+};
+
+// Picks the top 6 products for the homepage strip: ranked by real sold
+// quantity when available (unknown/removed product IDs are ignored), else a
+// stable fallback of the first 6 catalog products.
+function pickPopularProducts(products, ranking) {
+  if (Array.isArray(ranking) && ranking.length) {
+    const byId = {};
+    products.forEach(p => byId[p.id] = p);
+    const ranked = ranking.map(r => byId[r.productId]).filter(Boolean).slice(0, 6);
+    if (ranked.length) return ranked;
+  }
+  return products.slice(0, 6);
+}
+
 // Payable-amount label: COD is money owed at the door; Advance is money the
 // customer is submitting now (pending verification) — never call it "paid".
 function payableLabelText(method) {
@@ -429,6 +462,122 @@ const PAGE_TITLES = {
   confirmation: "Order Confirmed — Hoja Seeds"
 };
 
+function popularGridHTML(popular) {
+  return popular.map(p => `
+    <article class="popular-card">
+      <div class="popular-media">${p.image_url ? `<img src="${p.image_url}" alt="${escapeHTML(p.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">` : p.icon}</div>
+      <span class="popular-name">${escapeHTML(p.name)}</span>
+      <span class="popular-price mono">${CONFIG.CURRENCY} ${p.price}</span>
+      <button class="popular-add" onclick="Router.go('${p.cat}')">Add</button>
+    </article>`).join("");
+}
+
+// ---- Rotating category hero (HS-20260818-31) ----
+// Reuses the same existing R2 category photos already used by the category
+// tiles below — no new/scraped imagery. First slide loads eager+high
+// priority (it is the page's LCP element); the other three are
+// loading="lazy" so they never compete with it on first paint. Fixed
+// aspect-ratio box (see CSS) avoids CLS regardless of which slide is active.
+const HERO_SLIDES = [
+  { cat: "vegetables", label: "Vegetable Seeds", img: "https://images.hojaseeds.pk/categories/vegetable-seeds.webp" },
+  { cat: "flowers", label: "Flower Seeds", img: "https://images.hojaseeds.pk/categories/flower-seeds.webp" },
+  { cat: "mix", label: "Mix Seeds", img: "https://images.hojaseeds.pk/categories/mix-seeds.webp" },
+  { cat: "fertilizer", label: "Fertilizer", img: "https://images.hojaseeds.pk/categories/fertilizer.webp" }
+];
+
+function heroCarouselHTML() {
+  const slides = HERO_SLIDES.map((s, i) => `
+    <button type="button" class="hero-slide${i === 0 ? " active" : ""}" data-idx="${i}" onclick="Router.go('${s.cat}')" aria-label="Shop ${s.label}">
+      <img src="${s.img}" alt="${s.label}" ${i === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async">
+      <span class="hero-slide-label">${s.label}</span>
+    </button>`).join("");
+  const dots = HERO_SLIDES.map((s, i) => `<button type="button" class="hero-dot${i === 0 ? " active" : ""}" data-idx="${i}" role="tab" aria-selected="${i === 0}" aria-label="Show ${s.label} slide" onclick="HeroCarousel.goTo(${i})"></button>`).join("");
+  return `
+    <div class="hero-carousel" id="heroCarousel" role="region" aria-roledescription="carousel" aria-label="Featured categories">
+      <div class="hero-slides">${slides}</div>
+      <button type="button" class="hero-nav prev" aria-label="Previous slide" onclick="HeroCarousel.prev()">‹</button>
+      <button type="button" class="hero-nav next" aria-label="Next slide" onclick="HeroCarousel.next()">›</button>
+      <div class="hero-carousel-controls">
+        <div class="hero-dots" role="tablist" aria-label="Choose slide">${dots}</div>
+      </div>
+      <button type="button" class="hero-pause" id="heroPause" aria-label="Pause slideshow" aria-pressed="false" onclick="HeroCarousel.togglePause()">⏸</button>
+    </div>`;
+}
+
+const HeroCarousel = {
+  index: 0,
+  timer: null,
+  paused: false,
+  root: null,
+
+  init() {
+    this.root = document.getElementById("heroCarousel");
+    if (!this.root) return;
+    this.index = 0;
+    this.paused = false;
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.root.addEventListener("mouseenter", () => this.pause(false));
+    this.root.addEventListener("mouseleave", () => this.resume(false));
+    this.root.addEventListener("focusin", () => this.pause(false));
+    this.root.addEventListener("focusout", () => this.resume(false));
+    let touchStartX = null;
+    this.root.addEventListener("touchstart", e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    this.root.addEventListener("touchend", e => {
+      if (touchStartX == null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      touchStartX = null;
+      if (Math.abs(dx) < 40) return;
+      this.userInteract();
+      if (dx < 0) this.next(); else this.prev();
+    }, { passive: true });
+    if (!reduceMotion) this.start();
+  },
+  stop() {
+    clearInterval(this.timer);
+    this.timer = null;
+    this.root = null;
+  },
+  start() {
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.next(), 5000);
+  },
+  pause(manual) {
+    clearInterval(this.timer);
+    this.timer = null;
+    if (manual) {
+      this.paused = true;
+      const btn = document.getElementById("heroPause");
+      if (btn) { btn.textContent = "▶"; btn.setAttribute("aria-label", "Resume slideshow"); btn.setAttribute("aria-pressed", "true"); }
+    }
+  },
+  resume(manual) {
+    if (this.paused && !manual) return; // stays paused until the user explicitly resumes
+    if (manual) {
+      this.paused = false;
+      const btn = document.getElementById("heroPause");
+      if (btn) { btn.textContent = "⏸"; btn.setAttribute("aria-label", "Pause slideshow"); btn.setAttribute("aria-pressed", "false"); }
+    }
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!this.paused && !reduceMotion) this.start();
+  },
+  togglePause() { if (this.paused) this.resume(true); else this.pause(true); },
+  userInteract() { this.start(); }, // manual nav resets the auto-rotate timer without leaving it paused
+  goTo(i) {
+    if (!this.root) return;
+    this.index = (i + HERO_SLIDES.length) % HERO_SLIDES.length;
+    const slides = this.root.querySelectorAll ? this.root.querySelectorAll(".hero-slide") : [];
+    slides.forEach((el, idx) => el.classList.toggle("active", idx === this.index));
+    const dots = this.root.querySelectorAll ? this.root.querySelectorAll(".hero-dot") : [];
+    dots.forEach((el, idx) => {
+      el.classList.toggle("active", idx === this.index);
+      el.setAttribute("aria-selected", idx === this.index);
+    });
+    if (!this.paused) this.userInteract();
+  },
+  next() { this.goTo(this.index + 1); },
+  prev() { this.goTo(this.index - 1); }
+};
+
 function exploreMoreHTML(currentCategory) {
   const categories = ["vegetables", "flowers", "mix", "fertilizer"].filter(cat => cat !== currentCategory);
   return `<section class="explore-more" aria-labelledby="explore-more-title">
@@ -467,7 +616,8 @@ const Views = {
 
   render(view) {
     const app = document.getElementById("app");
-    if (view === "home") return app.innerHTML = this.home();
+    if (view !== "home") HeroCarousel.stop();
+    if (view === "home") { app.innerHTML = this.home(); HeroCarousel.init(); this.refreshPopular(); return; }
     if (["vegetables", "flowers", "mix", "fertilizer"].includes(view)) return this.category(view);
     if (view === "contact") return app.innerHTML = this.contact();
     if (view === "cart") return this.cart();
@@ -479,27 +629,21 @@ const Views = {
     const products = Prices.get();
     const catCounts = {};
     products.forEach(p => catCounts[p.cat] = (catCounts[p.cat] || 0) + 1);
-    const popular = products.slice(0, 6);
+    const popular = pickPopularProducts(products, Popularity.get());
     return `
       <section class="hero">
-        <div class="hero-media" aria-hidden="true"></div>
+        ${heroCarouselHTML()}
         <div class="hero-panel">
           <div class="hero-inner">
-            <div class="hero-badge">Hoja Seeds</div>
             <h1>Good seeds. Better harvests.</h1>
-            <p>Vegetable, flower and mix seeds delivered across Pakistan.</p>
+            <p>Seeds for home gardens across Pakistan.</p>
             <div class="cta-row">
-              <button class="btn btn-primary" onclick="Router.go('vegetables')">Shop Vegetable Seeds</button>
+              <button class="btn btn-primary" onclick="Router.go('vegetables')">Shop Seeds</button>
               <button class="btn btn-secondary" onclick="Router.go('mix')">Browse Mix Kits</button>
             </div>
           </div>
         </div>
       </section>
-      <div class="trust-row">
-        <div class="trust-chip"><span class="ic">🚚</span>Nationwide Delivery</div>
-        <div class="trust-chip"><span class="ic">💵</span>Cash on Delivery</div>
-        <div class="trust-chip"><span class="ic">🌱</span>Fresh Seed Stock</div>
-      </div>
       <div class="cat-grid">
         ${["vegetables", "flowers", "mix", "fertilizer"].map(cat => `
           <div class="cat-tile" data-cat="${cat}">
@@ -513,16 +657,27 @@ const Views = {
       </div>
       <section class="popular-strip" aria-labelledby="popular-title">
         <h2 class="section-title" id="popular-title">Popular Seeds</h2>
-        <div class="popular-grid">
-          ${popular.map(p => `
-            <article class="popular-card">
-              <div class="popular-media">${p.image_url ? `<img src="${p.image_url}" alt="${escapeHTML(p.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">` : p.icon}</div>
-              <span class="popular-name">${escapeHTML(p.name)}</span>
-              <span class="popular-price mono">${CONFIG.CURRENCY} ${p.price}</span>
-              <button class="popular-add" onclick="Router.go('${p.cat}')">Add</button>
-            </article>`).join("")}
+        <div class="popular-grid" id="popularGrid">
+          ${popularGridHTML(popular)}
         </div>
-      </section>`;
+      </section>
+      <div class="trust-row">
+        <div class="trust-chip"><span class="ic">🚚</span>Nationwide Delivery</div>
+        <div class="trust-chip"><span class="ic">💵</span>Cash on Delivery</div>
+        <div class="trust-chip"><span class="ic">🌱</span>Fresh Seed Stock</div>
+      </div>`;
+  },
+
+  // Fetches the real sold-quantity ranking in the background and re-sorts
+  // the already-rendered Popular Seeds grid in place — never blocks or
+  // re-renders the header/hero/categories, and no-ops if the customer has
+  // since navigated away from home.
+  async refreshPopular() {
+    const ranking = await Popularity.load();
+    if (!ranking || Router.current !== "home") return;
+    const grid = document.getElementById("popularGrid");
+    if (!grid) return;
+    grid.innerHTML = popularGridHTML(pickPopularProducts(Prices.get(), ranking));
   },
 
   category(cat) {

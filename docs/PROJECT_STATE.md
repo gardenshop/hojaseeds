@@ -6,6 +6,81 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-31)
+
+- **Approved post-freeze visual/merchandising exception (HS-20260818-31,
+  compact homepage + rotating hero + real bestsellers):** direct
+  `chrome_devtools` MCP was tried once and confirmed unavailable (no
+  `list_pages`); the repo's local Playwright (`.tools/browser-runner`) was
+  used as the documented fallback for all audit/regression evidence in this
+  entry, against a local static server and (for the deploy verification)
+  live production. Production audit before this change measured hero height
+  ~554px at 390px with the first category tile starting at y≈807px — barely
+  inside the 844px viewport, matching the reported "categories start too
+  low" defect.
+  **Homepage reorder:** header → compact category nav → compact rotating
+  hero → category cards (2×2) → Popular Seeds → 3 trust chips → footer (was:
+  hero → trust chips → categories → popular). **Hero:** rebuilt as a compact
+  4-slide rotating carousel (`HeroCarousel` in `js/app.js`, `.hero-carousel`
+  in `css/styles.css`) cycling the same existing R2 category photos already
+  used by the category tiles (Vegetables/Flowers/Mix/Fertilizer — no new or
+  scraped imagery); fixed `aspect-ratio` box (no CLS), only the first slide
+  is `loading="eager" fetchpriority="high"`, the other three are
+  `loading="lazy"`. Auto-rotates every 5s, pauses on hover/focus/manual
+  toggle, respects `prefers-reduced-motion` (no autoplay), supports touch
+  swipe, dot/prev-next controls, and is keyboard/aria-labelled
+  (`role="region"`, `aria-roledescription="carousel"`, dots as
+  `role="tablist"`). `HeroCarousel.stop()` clears its timer on every
+  non-home route change (verified no leaked timers/console errors
+  navigating home → category → cart → delivery → home). Measured mobile
+  hero height 340px (320px)/380px (390px)/380px (430px) — within the
+  330-410px target — with the first category row now visible at y≈483-523,
+  inside the first viewport at 320/390/430px. Hero copy shortened to the
+  approved compact set (headline + 1 line + "Shop Seeds"/"Browse Mix Kits"
+  in one compact row); the static `.home-prerender-shell` in `index.html`
+  matches. **Logo/header:** removed the decorative gold ring around the
+  medallion (was reading as a stray border) and enlarged the mark itself
+  (36→40px mobile, 42→46px desktop); added a real `:focus-visible` outline
+  on the logo button so keyboard focus is still indicated, separately from
+  the (now removed) decorative border.
+  **Popular Seeds is now real-order-ranked:** added `getPopularProducts()`/
+  `computePopularProducts()` to `apps-script/Code.gs` (new anonymous
+  `?action=popularProducts`, additive — no schema/column change) — sums
+  `quantity` per `productId` from the existing `Orders.items` JSON snapshot
+  (no `OrderItems` normalization needed), skipping any row whose `name`
+  column contains "TEST" or "DO NOT FULFILL" (this project's existing
+  marked-test convention) and never reading `LoadTestOrders`. Response is
+  `{productId, soldQty}[]` only — no name/phone/address/order detail.
+  Cached 20 minutes via `CacheService`. Frontend `Popularity`/
+  `pickPopularProducts()` in `js/app.js` renders the Popular Seeds strip
+  with a stable catalog-order fallback immediately, then fetches the
+  ranking in the background and re-sorts the strip in place — never blocks
+  header/hero/categories/Products, and no-ops if the customer has already
+  navigated away from home. Verified live against production: anonymous
+  `?action=popularProducts` returns real ranked `[{productId,soldQty}]`
+  (e.g. `veg-01` leading at qty 3) with no PII, alongside `?action=products`
+  and `?action=settings` both still 200 with no Google-login redirect.
+  Added `tests/popularity.test.js` (6 cases: real-quantity aggregation,
+  test/E2E/DO-NOT-FULFILL exclusion, unknown-product-ID safety, top-6
+  descending sort, empty-history fallback shape, no-PII response shape,
+  cache-hit behavior) wired into `npm test`; also added `setInterval`/
+  `clearInterval` to the existing frontend vm-sandbox test context so
+  `HeroCarousel` runs safely inside `tests/order-submission.test.js`'s
+  mocked DOM. **Analytics ID recovery:** searched the entire repo — working
+  tree, full `git log --all`/`git grep` across all 72 commits, the only
+  branch (`main`) and only remote (`gardenshop/hojaseeds`) — for GA4
+  (`G-`, `gtag(`, `measurementId`) and Meta (`fbq(`, pixel ID) patterns. No
+  real ID was ever committed; every match is the literal placeholder
+  (`G-XXXXXXXXXX` / `1234567890123456`) in `README.md`/`js/config.js`
+  examples. No legacy Garden Shop repo exists in this environment to search
+  separately. **No IDs were activated** — `CONFIG.GA4_MEASUREMENT_ID`/
+  `META_PIXEL_ID` remain blank, fail-closed, exactly as before.
+  `node --check` (app.js, admin.js), `npm test` (5 files including the new
+  popularity suite), and `npm run sheets:verify` all pass. No product,
+  price, cart, checkout, delivery-rule, idempotency, LockService, GIS auth,
+  Sheet schema, R2, or Cloudflare-project change — `popularProducts` is
+  strictly additive and read-only.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-30)
 
 - **Approved post-freeze visual-only exception (HS-20260818-30, Warm Premium

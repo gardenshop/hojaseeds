@@ -402,6 +402,8 @@ function createFrontend() {
     console,
     setTimeout,
     clearTimeout,
+    setInterval,
+    clearInterval,
     AbortController,
     CONFIG: {
       SHEET_WEBHOOK_URL: "",
