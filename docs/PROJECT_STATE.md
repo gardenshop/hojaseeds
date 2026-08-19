@@ -6,6 +6,107 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-35)
+
+- **Direct chrome_devtools MCP forensic audit (real Chrome, not the CLI
+  fallback) — the MCP namespace came online this session and was used
+  directly:** `list_pages`/`select_page` connected to the user's actual
+  live Chrome (left their other tabs untouched); `list_network_requests`,
+  `get_network_request`, `list_console_messages`, `performance_start_trace`
+  /`performance_analyze_insight`, and `lighthouse_audit` all used live
+  against production. The MCP connection disconnected mid-session (its
+  tools became unavailable again) after the forensic evidence below was
+  already captured — no work was blocked, consistent with the "CLI
+  fallback first" protocol from HS-20260818-34.
+- **`main.js` provenance — proven, not assumed:** the exact URL is
+  `https://www.hojaseeds.pk/cdn-cgi/challenge-platform/h/g/scripts/jsd/aae2b9a1c261/main.js`
+  (redirected from `.../cdn-cgi/challenge-platform/scripts/jsd/main.js`).
+  Response headers: `server: cloudflare`, `content-type:
+  application/javascript`. Body is obfuscated code beginning
+  `window._cf_chl_opt = {...}` (Cloudflare's own challenge-platform global)
+  and posts telemetry to
+  `/cdn-cgi/challenge-platform/h/g/jsd/oneshot/...`. `/cdn-cgi/` is
+  Cloudflare's reserved edge-namespace path on every zone behind
+  Cloudflare — never part of this repo's deploy artifact (confirmed: the
+  Cloudflare Pages deploy only ever uploads `index.html`, `admin.html`,
+  `robots.txt`, `sitemap.xml`, `css/`, `js/`, `assets/`). **Classification:
+  B — Cloudflare-injected code served under the hojaseeds.pk origin.**
+  Lighthouse calls it "1st party" purely because its classification is
+  origin-based (same domain = first party), not code-ownership-based —
+  this is the actual reason, confirmed directly, not inferred.
+- **Deprecated API ownership — proven identical in both the CLI Lighthouse
+  run and this session's live `lighthouse_audit` via MCP:** all 3 warnings
+  (Shared Storage API, `StorageType.persistent`, Protected Audience API)
+  attribute to `https://www.hojaseeds.pk/cdn-cgi/challenge-platform/scripts/jsd/main.js:0`
+  — the same Cloudflare script above. Owner: Cloudflare. Hoja cannot
+  control it. Action: none — rewriting/patching a dynamically-served
+  Cloudflare bot-protection script is not possible and would break bot
+  protection; correctly left untouched.
+- **New finding this session — Cloudflare Page Shield report-only CSP
+  (not a Hoja defect, documented for awareness):** live console capture
+  showed `content-security-policy-report-only` violations for effectively
+  every script tag and every `fetch()` call on the page, including Hoja's
+  own `config.js`/`products.js`/`app.js` and even Cloudflare's own
+  `beacon.min.js`/`main.js`. Traced to a `content-security-policy-report-only`
+  response header present on some (not all — a plain `curl -I` didn't see
+  it) navigations, whose `report-to` target is
+  `csp-reporting.cloudflare.com` (`"group":"cf-csp-endpoint"`) — this is
+  Cloudflare's own reporting domain, not one Hoja configured. The repo has
+  zero CSP configuration anywhere (no `_headers` file, no CSP meta tag,
+  confirmed via repo-wide grep). This is Cloudflare's **Page Shield**
+  script-monitoring feature auto-generating a default, not-yet-tuned,
+  report-only CSP at the zone/dashboard level — entirely Cloudflare-account
+  configuration, not a code-level fix, and **report-only means nothing is
+  actually blocked** (site functions normally). Documented, not touched —
+  changing it requires the Cloudflare dashboard (Page Shield), not this
+  repo, and per "no security weakening," out of scope regardless.
+- **Real-browser CLS trace — definitive, supersedes prior sandboxed
+  readings for this question:** `performance_start_trace` on production
+  (real Chrome, CPU 1x, no network throttling) measured **CLS: 0.00** and
+  LCP 1,423ms (TTFB 202ms / load delay 55ms / load duration 112ms /
+  render delay 1,054ms — 74% of LCP is render delay, not resource
+  fetching). The footer artifact investigated across HS-32/33/34 **did not
+  reproduce at all** under real, unthrottled browser conditions — directly
+  confirming the HS-33 conclusion (a `PerformanceObserver` measurement
+  artifact specific to heavy CDP network throttling in the sandboxed CLI
+  environment, not a real user-facing defect).
+- **Extension contamination — quantified, not just flagged this time:**
+  the `ThirdParties` trace insight on the user's real (non-clean) Chrome
+  profile broke down main-thread cost by origin: six browser extensions
+  totaling **838ms** of main-thread time (`khafmmhhbaabgdjdhnjkcfbfhadioocp`
+  532ms, `efaidnbmnnnibpcajpcglclefindmkaj` [a PDF/document-tools
+  extension] 199ms, plus four smaller ones) versus **Cloudflare's own
+  script costing only 33ms**. The 1,054ms LCP render-delay above plausibly
+  correlates with this same extension main-thread contention. This is
+  concrete, first-hand proof — not inference — that this profile's
+  Lighthouse contamination is overwhelmingly extension-driven, not
+  Cloudflare or first-party code; confirms why the numeric performance
+  baseline must keep coming from the extension-free CLI/Playwright
+  Chromium (unchanged methodology from HS-32 onward).
+- **Font forensics (live network capture):** exactly 4 first-party font
+  files transfer — 1 Fraunces woff2, 1 Inter woff2, 2 IBM Plex Mono woff2
+  (500/600) — matching the declared weights exactly. The browser's own
+  font-loading already fetches only glyphs/weights actually rendered
+  (Google Fonts' per-weight file splitting), so **no unused weight is
+  being downloaded** despite the CSS declaring a wider weight range; no
+  change made (there is nothing to remove).
+- **Zero Hoja-controlled console errors:** `list_console_messages`
+  filtered to `error` type returned none on a clean reload of production
+  (the CSP entries are `info`/`issue` severity, not `error`). API-call
+  audit via live network capture confirmed exactly one each of
+  `?action=products`/`settings`/`popularProducts` on a fresh Home load —
+  no duplicates, HS-31 fix still holds.
+- **No Hoja-owned defect was found this session** — every finding traced
+  conclusively to Cloudflare (bot-protection script, Page Shield CSP) or
+  browser extensions. Per this task's own instruction ("Deploy ONLY if a
+  Hoja-controlled defect is fixed"), **no code was changed and nothing was
+  deployed this session.** Clean-CLI Lighthouse medians from HS-32/33/34
+  remain the current valid baseline (Mobile Performance ~0.74, Desktop
+  ~0.77-0.78, in this sandboxed measurement environment) since no
+  performance-affecting code changed; this session's real-browser trace
+  (CLS 0.00, LCP 1,423ms) is materially better and is the more relevant
+  real-world data point.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-34)
 
 - **Universal DevTools layer built** (D:\AI-Tools\ChromeDevTools\, outside
