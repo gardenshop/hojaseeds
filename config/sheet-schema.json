@@ -1,5 +1,5 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "spreadsheet_title": "Hoja Seeds",
   "sheets": {
     "Products": [
@@ -24,7 +24,8 @@
     "Leads": [
       "leadId", "createdAt", "updatedAt", "status", "fullName", "phone", "address",
       "city", "postalCode", "notes", "cartJson", "itemsSubtotal", "estimatedOrderTotal",
-      "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId"
+      "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId",
+      "visitorId"
     ],
     "PushSubscriptions": [
       "subscriptionId", "visitorId", "endpoint", "p256dh", "authKey", "permissionStatus",

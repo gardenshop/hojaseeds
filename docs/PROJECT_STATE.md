@@ -6,6 +6,127 @@ into each request.
 
 ---
 
+## WEB PUSH: REAL SENDING + VAPID + FREQUENCY CONTROLS (HS-20260819-06) — PROTECTED CONTRACT
+
+Supersedes the "Push provider: none configured yet" state documented under
+HS-20260819-03 below — that section's UX/subscription/data-model content is
+still accurate and still in force; only the send path changed.
+
+- **Architecture:** Apps Script never holds the VAPID private key or does
+  Web Push encryption itself. A small, dedicated Cloudflare Worker
+  (`worker/hoja-push-worker`, deployed to the SAME Hoja Cloudflare account,
+  not attached to any hojaseeds.pk route or Pages project) does exactly
+  one thing: given one authorized `{subscription, payload}` request, build
+  a VAPID JWT (ES256) and an RFC 8291 `aes128gcm` encrypted payload using
+  the Web Crypto API, POST it to the browser's real push service, and
+  return that service's HTTP result untouched. Apps Script owns Super
+  Admin auth, audience/frequency/quiet-hour rules, dedupe, batching, and
+  all campaign/subscription bookkeeping — the Worker has zero customer-
+  facing business logic and is unreachable from a browser.
+- **Secret locations (never any other location, never a value in this
+  doc):** Cloudflare Worker secrets — `VAPID_PRIVATE_KEY`,
+  `VAPID_PUBLIC_KEY` (mirrors the public value shipped in `js/config.js`),
+  `VAPID_SUBJECT`, `PUSH_SERVER_SECRET`. Apps Script Script Properties —
+  `PUSH_WORKER_URL` (the Worker's `https://hoja-push-worker.<account>.workers.dev`
+  endpoint) and `PUSH_SERVER_SECRET` (same value as the Worker's, the only
+  other place it's ever stored). `VAPID_PRIVATE_KEY` in Apps Script Script
+  Properties is retired/no longer read anywhere — the Worker is now the
+  single holder of that key. **Until a human sets `PUSH_WORKER_URL` and
+  `PUSH_SERVER_SECRET` in Apps Script Script Properties (same posture as
+  `META_CAPI_ACCESS_TOKEN` before it), `sendPushCampaign`/`pushTestSend`
+  fail closed with `PUSH_PROVIDER_NOT_CONFIGURED`** — this was a
+  deliberate stop, not an oversight: no automated agent should be the one
+  to flip a real marketing-send switch live.
+- **Rotation:** rotate the VAPID keypair by generating a new one, setting
+  the new `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` Worker secrets, and
+  updating `CONFIG.VAPID_PUBLIC_KEY` in `js/config.js` — existing
+  subscriptions become invalid on rotation (the push service ties a
+  subscription to the VAPID key that created it) and subscribers
+  re-subscribe silently the next time `PushGrowth.reconcile()` runs.
+- **Worker request contract:** `POST <PUSH_WORKER_URL>` with
+  `Authorization: Bearer <PUSH_SERVER_SECRET>` and JSON body
+  `{ subscription: {endpoint,p256dh,auth}, payload: {title,body,targetUrl,image?,campaignId?,visitorId?,webhookUrl?}, ttl? }`.
+  Validates method/auth/subscription shape/title+body length/target URL
+  restricted to `hojaseeds.pk` before ever touching crypto. Response:
+  `{ ok, pushStatus: "accepted"|"expired"|"temporary_failure", httpStatus }`.
+- **Frequency limits (Settings, Super Admin editable, validated ranges):**
+  `MAX_PUSH_PER_DAY` (default 1, 0-10), `MAX_PUSH_PER_WEEK` (default 3,
+  0-30). **Quiet hours:** `QUIET_HOURS_START`/`QUIET_HOURS_END` (default
+  21:00/08:00, `HH:MM` 24h), timezone fixed `Asia/Karachi` (not
+  admin-editable — single-market store). A send attempted during quiet
+  hours sends **nothing at all** and reports back when it's safe to retry,
+  rather than sending late.
+- **Dedupe (protected):** a subscription that already has a `push_sent`
+  PushEvents row for a given campaignId is never targeted by that same
+  campaign again, enforced independently of frequency caps.
+- **Campaign states (protected):** Draft, Scheduled, Sending, Paused,
+  Completed, Partially Failed, Failed, Expired. Send Now works today.
+  **There is no time-driven scheduler** — "Scheduled" is a label only;
+  nothing fires a "Scheduled" campaign automatically. Pause blocks a
+  Sending/Scheduled campaign from being sent further; Resume only returns
+  it to Scheduled — an admin must click Send again.
+- **Batching:** bounded to `PUSH_SEND_BATCH_SIZE` (30) per Apps Script
+  execution via `UrlFetchApp.fetchAll`. A campaign larger than one batch
+  stays in "Sending" with a `remaining` count; the Admin UI's Send button
+  auto-continues (capped at 20 round trips) until a final status.
+- **Result handling (protected):** `accepted` increments the campaign's
+  `accepted` counter and logs `push_sent`; `expired`/`404`/`410` marks the
+  subscription `subscriptionStatus: expired` and is never retried;
+  anything else is a `temporary_failure` — the subscription stays active
+  and is naturally eligible for a retry on the next Send click (no
+  `push_sent` event was logged for it). "Accepted by push service" is
+  never relabeled "Delivered" anywhere in the Admin dashboard — no
+  provider here gives a real delivery receipt.
+- **Test-send procedure (required before any bulk campaign):** Admin →
+  Notifications → "Send test notification" → pick one active subscriber →
+  Send. Bypasses frequency/dedupe/quiet-hours (a single manual, deliberate
+  test is not a marketing send), logs a distinct `test_sent` event, never
+  touches a campaign's counters. Verified for real against the deployed
+  Worker + a real Chrome subscription to Google's live FCM push service:
+  the Worker's VAPID JWT + RFC 8291 encrypted payload was submitted and
+  **FCM responded `201 Created`** (the strongest reachable evidence of a
+  correct implementation — FCM independently validates the VAPID signature
+  and payload encryption before accepting). Visually confirming the
+  notification rendering on-screen was **not** mechanically verifiable in
+  this headless/no-GUI environment (Chromium headless has no OS surface to
+  paint a system notification onto) — that final visual check is the one
+  piece a human should do once, in a real desktop browser, before treating
+  bulk sending as fully proven end-to-end.
+- **Audience segments — honesty boundary (protected):** only `all_active`,
+  `cart_abandoned`, and `cod_requested` have a real subscriber linkage
+  today (via a new, additive `Leads.visitorId` column — the same
+  `PushGrowth.visitorId()` the frontend already sent with every Lead save,
+  now actually stored). `cart_abandoned` = Leads not `ORDER_CONVERTED`;
+  `cod_requested` = Leads with `abandonReason === "COD_REQUESTED"`. The
+  other campaign-form audience choices (`lead_not_converted`,
+  `interest_*`, `previous_buyers`) remain valid, saveable campaign fields
+  for forward-compatibility, but **`sendPushCampaign` refuses to send to
+  them** (`AUDIENCE_NOT_YET_LINKED`) rather than silently guessing the
+  wrong recipients or falling back to "everyone."
+- **Cart Abandoned / COD Requested campaign templates (protected copy,
+  `js/admin.js` `pushTemplates`):** "🛒 Your Seeds Are Still Saved /
+  Continue your Hoja Seeds order." and "💵 Prefer Cash on Delivery? /
+  Return to Hoja Seeds and see available COD options." Neither promises
+  Free Delivery, Gift Seeds, or a discount — no such server-authoritative
+  promotion exists to back that claim.
+- **Attribution (unchanged, verified still correct):** click →
+  `notification_click` PushEvents row → `attributePushConversion` credits
+  the visitor's most recent click (72h window) to that campaign's
+  `recoveredLeads`/`recoveredOrders`/`recoveredRevenue` — one Order or
+  Lead is never credited twice.
+- **No PII leakage (verified):** `readPushSubscriptionsSafe` still strips
+  `endpoint`/`p256dh`/`authKey` before any Admin read; the Worker never
+  returns subscription contents in its response, only `pushStatus`/
+  `httpStatus`.
+- **Zero regression (verified):** products, prices, delivery fees, free-
+  delivery rules, COD/Advance/Split eligibility, `MIN_PARTIAL_ADVANCE`,
+  `SPLIT_ADVANCE_PERCENT`, `paymentPreview`, and the HS-05 payment UX are
+  all untouched — confirmed via a live production checkout run (2×Tomato
+  F1, Rs. 470 total, 0 console errors, 0 overflow) after this task's
+  Apps Script deployment.
+
+---
+
 ## CHECKOUT PAYMENT UX (HS-20260819-04) — PRESENTATION-ONLY, PROTECTED CONTRACT
 
 - **What changed:** `Views.payment()` / `Views.updateDeliveryFee()` /

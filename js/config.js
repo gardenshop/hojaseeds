@@ -67,5 +67,5 @@ const CONFIG = {
   // browser's push service. The matching private key never goes here —
   // see docs/PROJECT_STATE.md for where it belongs and how to generate
   // both (e.g. `npx web-push generate-vapid-keys`).
-  VAPID_PUBLIC_KEY: "",
+  VAPID_PUBLIC_KEY: "BA3MYrsBBQ8zugJG2bt9ObFdkvVEN75_knVH0kkv9ju3LIfLwT0exo0aWHcxj9Bu_pFvtwVZg8U0OfdwAaBJR2A",
 };

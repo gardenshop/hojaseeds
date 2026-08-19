@@ -126,8 +126,9 @@ const Admin = {
       read("audit", result => this.renderAudit(result.items || []), ["auditContent"]),
       read("leads", result => this.renderLeads(result.items || []), ["leadsContent"]),
       read("pushDashboard", result => this.renderPushDashboard(result.summary || {}), ["pushDashboardContent"]),
-      read("pushSubscriptions", result => this.renderPushSubscribers(result.items || []), ["pushSubscribersContent"]),
-      read("pushCampaigns", result => this.renderPushCampaigns(result.items || []), ["pushCampaignsContent"])
+      read("pushSubscriptions", result => { this.renderPushSubscribers(result.items || []); this.renderPushTestSend(); }, ["pushSubscribersContent"]),
+      read("pushCampaigns", result => this.renderPushCampaigns(result.items || []), ["pushCampaignsContent"]),
+      read("settings", result => { this.liveSettings = result.settings || {}; this.renderPushSettings(); }, ["pushSettingsForm"])
     ]);
     this.renderCampaignForm();
   },
@@ -210,7 +211,70 @@ const Admin = {
       ["Clicks", s.pushClicked], ["Recovered Leads", s.recoveredLeads],
       ["Recovered Orders", s.recoveredOrders], ["Recovered revenue (Rs.)", s.recoveredRevenue]
     ];
-    document.getElementById("pushDashboardContent").innerHTML = `<div class="admin-metrics">${metrics.map(([label, value]) => `<div class="admin-metric"><strong>${escapeHTML(value ?? 0)}</strong><span>${label}</span></div>`).join("")}</div><p class="admin-muted">"Accepted by push service" reflects provider acceptance only — this project never labels a push "Delivered" without a real provider delivery receipt, which is not yet configured (see Analytics tab).</p>`;
+    document.getElementById("pushDashboardContent").innerHTML = `<div class="admin-metrics">${metrics.map(([label, value]) => `<div class="admin-metric"><strong>${escapeHTML(value ?? 0)}</strong><span>${label}</span></div>`).join("")}</div><p class="admin-muted">"Accepted by push service" reflects provider acceptance only, never "Delivered" — no push provider gives a real delivery receipt (see Analytics tab).</p>`;
+  },
+
+  // ── Frequency / quiet-hours controls + one-subscriber test send
+  // (HS-20260819-06). Same settingsUpdate/pushTestSend actions as every
+  // other Super-Admin-only mutation.
+  renderPushSettings() {
+    const el = document.getElementById("pushSettingsForm");
+    if (!el) return;
+    const r = this.settings();
+    el.innerHTML = `
+      <div class="field-row">
+        <div class="field"><label for="ps-day">Max pushes / subscriber / day</label><input type="number" min="0" max="10" id="ps-day" value="${r.MAX_PUSH_PER_DAY ?? 1}" class="mono"></div>
+        <div class="field"><label for="ps-week">Max pushes / subscriber / week</label><input type="number" min="0" max="30" id="ps-week" value="${r.MAX_PUSH_PER_WEEK ?? 3}" class="mono"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="ps-quiet-start">Quiet hours start</label><input type="time" id="ps-quiet-start" value="${r.QUIET_HOURS_START ?? "21:00"}" class="mono"></div>
+        <div class="field"><label for="ps-quiet-end">Quiet hours end</label><input type="time" id="ps-quiet-end" value="${r.QUIET_HOURS_END ?? "08:00"}" class="mono"></div>
+      </div>
+      <p class="admin-muted">Timezone is fixed to Asia/Karachi. A campaign send during quiet hours sends nothing at all rather than sending late.</p>
+      <button class="btn btn-primary" onclick="Admin.savePushSettings()">Save frequency settings</button>
+      <span class="save-note" id="pushSettingsSaveNote"></span>
+    `;
+  },
+
+  async savePushSettings() {
+    const rules = {
+      MAX_PUSH_PER_DAY: Math.min(10, Math.max(0, parseInt(document.getElementById("ps-day").value, 10) || 0)),
+      MAX_PUSH_PER_WEEK: Math.min(30, Math.max(0, parseInt(document.getElementById("ps-week").value, 10) || 0)),
+      QUIET_HOURS_START: document.getElementById("ps-quiet-start").value || "21:00",
+      QUIET_HOURS_END: document.getElementById("ps-quiet-end").value || "08:00"
+    };
+    const note = document.getElementById("pushSettingsSaveNote");
+    try {
+      await this.authorizedPost({ type: "settingsUpdate", rules });
+      this.liveSettings = { ...(this.liveSettings || {}), ...rules };
+      note.textContent = "Saved and authorized by the server.";
+    } catch (e) { note.textContent = e.message; }
+    setTimeout(() => note.textContent = "", 4000);
+  },
+
+  renderPushTestSend() {
+    const el = document.getElementById("pushTestSendForm");
+    if (!el) return;
+    const active = this.pushSubs.filter(s => s.subscriptionStatus === "active");
+    el.innerHTML = `
+      <div class="field"><label for="pt-visitor">Test subscriber</label>
+        <select id="pt-visitor">${active.length ? active.map(s => `<option value="${escapeHTML(s.visitorId)}">${escapeHTML(s.visitorId)} (${escapeHTML(s.deviceInfo)})</option>`).join("") : `<option value="">No active subscribers yet</option>`}</select>
+      </div>
+      <button class="btn btn-primary" type="button" ${active.length ? "" : "disabled"} onclick="Admin.sendPushTest()">Send Test Notification</button>
+      <span class="save-note" id="pushTestSendNote"></span>
+      <p class="admin-muted">Sends "🌱 Hoja Seeds Test — Your browser notifications are working." to exactly one subscriber, bypassing frequency limits and quiet hours (a single manual test, not a marketing send). Required before any bulk campaign.</p>
+    `;
+  },
+
+  async sendPushTest() {
+    const visitorId = document.getElementById("pt-visitor")?.value;
+    const note = document.getElementById("pushTestSendNote");
+    if (!visitorId) { note.textContent = "No test subscriber selected."; return; }
+    note.textContent = "Sending…";
+    try {
+      const result = await this.authorizedPost({ type: "pushTestSend", visitorId });
+      note.textContent = result.ok ? "Sent — accepted by the push service." : `Not accepted (${result.pushStatus}).`;
+    } catch (e) { note.textContent = e.message; }
   },
 
   renderPushSubscribers(items) {
@@ -227,9 +291,29 @@ const Admin = {
 
   renderPushCampaigns(items) {
     this.pushCampaigns = items;
-    document.getElementById("pushCampaignsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Title</th><th>Audience</th><th>Status</th><th>Attempted</th><th>Accepted</th><th>Failed</th><th>Clicked</th><th>Recovered</th><th></th></tr></thead><tbody>${items.map(c => `<tr><td>${escapeHTML(c.title)}<br><span class="admin-muted">${escapeHTML(c.body)}</span></td><td>${escapeHTML(c.audience)}</td><td>${escapeHTML(c.status)}</td><td>${escapeHTML(c.attempted || 0)}</td><td>${escapeHTML(c.accepted || 0)}</td><td>${escapeHTML(c.failed || 0)}</td><td>${escapeHTML(c.clicked || 0)}</td><td>${c.recoveredLeads || 0} leads / ${c.recoveredOrders || 0} orders / Rs. ${c.recoveredRevenue || 0}</td><td><button type="button" class="btn-text-secondary" data-edit-campaign="${escapeHTML(c.campaignId)}">Edit</button> <button type="button" class="btn-text-secondary" data-send-campaign="${escapeHTML(c.campaignId)}">Send</button></td></tr>`).join("") || `<tr><td colspan="9">No campaigns yet.</td></tr>`}</tbody></table></div>`;
+    const actionsFor = c => {
+      const canSend = ["Draft", "Scheduled", "Sending"].indexOf(c.status) !== -1;
+      const canPause = ["Sending", "Scheduled"].indexOf(c.status) !== -1;
+      const canResume = c.status === "Paused";
+      return `<button type="button" class="btn-text-secondary" data-edit-campaign="${escapeHTML(c.campaignId)}">Edit</button> `
+        + (canSend ? `<button type="button" class="btn-text-secondary" data-send-campaign="${escapeHTML(c.campaignId)}">Send</button> ` : "")
+        + (canPause ? `<button type="button" class="btn-text-secondary" data-pause-campaign="${escapeHTML(c.campaignId)}">Pause</button> ` : "")
+        + (canResume ? `<button type="button" class="btn-text-secondary" data-resume-campaign="${escapeHTML(c.campaignId)}">Resume</button>` : "");
+    };
+    document.getElementById("pushCampaignsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Title</th><th>Audience</th><th>Status</th><th>Attempted</th><th>Accepted</th><th>Failed</th><th>Clicked</th><th>Recovered</th><th></th></tr></thead><tbody>${items.map(c => `<tr><td>${escapeHTML(c.title)}<br><span class="admin-muted">${escapeHTML(c.body)}</span></td><td>${escapeHTML(c.audience)}</td><td>${escapeHTML(c.status)}</td><td>${escapeHTML(c.attempted || 0)}</td><td>${escapeHTML(c.accepted || 0)}</td><td>${escapeHTML(c.failed || 0)}</td><td>${escapeHTML(c.clicked || 0)}</td><td>${c.recoveredLeads || 0} leads / ${c.recoveredOrders || 0} orders / Rs. ${c.recoveredRevenue || 0}</td><td>${actionsFor(c)}</td></tr>`).join("") || `<tr><td colspan="9">No campaigns yet.</td></tr>`}</tbody></table></div>`;
     document.querySelectorAll("[data-edit-campaign]").forEach(btn => btn.addEventListener("click", () => this.editCampaign(btn.dataset.editCampaign)));
     document.querySelectorAll("[data-send-campaign]").forEach(btn => btn.addEventListener("click", () => this.sendCampaign(btn.dataset.sendCampaign)));
+    document.querySelectorAll("[data-pause-campaign]").forEach(btn => btn.addEventListener("click", () => this.pauseCampaign(btn.dataset.pauseCampaign)));
+    document.querySelectorAll("[data-resume-campaign]").forEach(btn => btn.addEventListener("click", () => this.resumeCampaign(btn.dataset.resumeCampaign)));
+  },
+
+  async pauseCampaign(campaignId) {
+    try { await this.authorizedPost({ type: "pushCampaignPause", campaignId }); await this.loadDashboard(); }
+    catch (error) { alert(error.message); } // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
+  },
+  async resumeCampaign(campaignId) {
+    try { await this.authorizedPost({ type: "pushCampaignResume", campaignId }); await this.loadDashboard(); }
+    catch (error) { alert(error.message); } // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
   },
 
   pushTemplates: {
@@ -297,9 +381,22 @@ const Admin = {
     }
   },
 
+  // A campaign larger than one Apps Script batch (PUSH_SEND_BATCH_SIZE)
+  // comes back with status "Sending" and a remaining count -- this loop
+  // keeps calling Send until the campaign reaches a final status, capped
+  // at MAX_SEND_ITERATIONS so a stuck/misbehaving backend can never spin
+  // the Admin tab forever.
+  MAX_SEND_ITERATIONS: 20,
   async sendCampaign(campaignId) {
+    let iterations = 0;
     try {
-      await this.authorizedPost({ type: "pushCampaignSend", campaignId });
+      let result = await this.authorizedPost({ type: "pushCampaignSend", campaignId });
+      if (result.quietHours) { alert(result.message); return; } // eslint-disable-line no-alert
+      while (result.status === "Sending" && result.remaining > 0 && iterations < this.MAX_SEND_ITERATIONS) {
+        iterations++;
+        await new Promise(resolve => setTimeout(resolve, 500));
+        result = await this.authorizedPost({ type: "pushCampaignSend", campaignId });
+      }
       await this.loadDashboard();
     } catch (error) {
       alert(error.message); // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback

@@ -1,0 +1,15 @@
+name = "hoja-push-worker"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# No routes/domains attached deliberately -- this Worker is a private,
+# server-to-server-only sender (called by Apps Script), never loaded by
+# the browser and never attached to the hojaseeds.pk zone. It has no
+# bindings besides Worker secrets set with `wrangler secret put`:
+#   VAPID_PUBLIC_KEY   -- same public key shipped in js/config.js
+#   VAPID_PRIVATE_KEY  -- Worker secret ONLY, never Git/frontend/Sheet/docs
+#   VAPID_SUBJECT      -- e.g. mailto:support@hojaseeds.pk (not secret, kept
+#                          as a secret var anyway for easy rotation)
+#   PUSH_SERVER_SECRET -- shared bearer secret; also stored in Apps Script
+#                          Script Properties (PUSH_SERVER_SECRET) as the only
+#                          other holder, never anywhere else

@@ -72,6 +72,9 @@ function doPost(e) {
     else if (payload.type === "settingsUpdate") { const adminEmail = requireAdmin(payload); updateSettings(payload.rules, adminEmail); }
     else if (payload.type === "pushCampaignSave") { const adminEmail = requireAdmin(payload); return jsonResponse(savePushCampaign(payload.campaign, adminEmail)); }
     else if (payload.type === "pushCampaignSend") { const adminEmail = requireAdmin(payload); return jsonResponse(sendPushCampaign(payload.campaignId, adminEmail)); }
+    else if (payload.type === "pushTestSend") { const adminEmail = requireAdmin(payload); return jsonResponse(pushTestSend(payload, adminEmail)); }
+    else if (payload.type === "pushCampaignPause") { const adminEmail = requireAdmin(payload); return jsonResponse(setPushCampaignPause(payload.campaignId, true, adminEmail)); }
+    else if (payload.type === "pushCampaignResume") { const adminEmail = requireAdmin(payload); return jsonResponse(setPushCampaignPause(payload.campaignId, false, adminEmail)); }
     else throw new OrderError("UNKNOWN_ACTION", "Unknown request type.");
     return jsonResponse({ ok: true });
   } catch (error) {
@@ -581,10 +584,10 @@ function updateProducts(updates, adminEmail) {
 // coercing "true"/"false" text and numeric strings back to real types.
 function getSettings() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Settings");
-  if (!sheet) return Object.assign({}, PAYMENT_DISPLAY_DEFAULTS);
+  if (!sheet) return Object.assign({}, PAYMENT_DISPLAY_DEFAULTS, PUSH_SETTINGS_DEFAULTS);
   const rows = sheet.getDataRange().getValues();
   rows.shift(); // header row: key | value
-  const out = Object.assign({}, PAYMENT_DISPLAY_DEFAULTS);
+  const out = Object.assign({}, PAYMENT_DISPLAY_DEFAULTS, PUSH_SETTINGS_DEFAULTS);
   rows.forEach(r => {
     if (!r[0]) return;
     let v = r[1];
@@ -598,7 +601,7 @@ function getSettings() {
 
 function updateSettings(rules, adminEmail) {
   if (!rules || typeof rules !== "object" || Array.isArray(rules)) throw new OrderError("INVALID_ADMIN_UPDATE", "Store settings are invalid.");
-  const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE", "SPLIT_ADVANCE_PERCENT", "MIN_PARTIAL_ADVANCE"].concat(PAYMENT_DISPLAY_KEYS);
+  const allowedKeys = ["FREE_DELIVERY_THRESHOLD", "ADVANCE_DELIVERY_FEE", "COD_DELIVERY_FEE", "COD_ALLOWED", "CUSTOMIZED_REQUIRES_FULL_ADVANCE", "SPLIT_ADVANCE_PERCENT", "MIN_PARTIAL_ADVANCE"].concat(PAYMENT_DISPLAY_KEYS).concat(Object.keys(PUSH_SETTINGS_DEFAULTS));
   Object.keys(rules).forEach(key => {
     if (allowedKeys.indexOf(key) === -1) throw new OrderError("INVALID_ADMIN_UPDATE", "A store setting is not allowed.");
   });
@@ -612,6 +615,16 @@ function updateSettings(rules, adminEmail) {
     rules.MIN_PARTIAL_ADVANCE = Number(rules.MIN_PARTIAL_ADVANCE);
     if (!Number.isInteger(rules.MIN_PARTIAL_ADVANCE) || rules.MIN_PARTIAL_ADVANCE < 1 || rules.MIN_PARTIAL_ADVANCE > 100000) throw new OrderError("INVALID_ADMIN_UPDATE", "MIN_PARTIAL_ADVANCE must be a whole number from 1 to 100000.");
   }
+  if ("MAX_PUSH_PER_DAY" in rules) {
+    rules.MAX_PUSH_PER_DAY = Number(rules.MAX_PUSH_PER_DAY);
+    if (!Number.isInteger(rules.MAX_PUSH_PER_DAY) || rules.MAX_PUSH_PER_DAY < 0 || rules.MAX_PUSH_PER_DAY > 10) throw new OrderError("INVALID_ADMIN_UPDATE", "MAX_PUSH_PER_DAY must be a whole number from 0 to 10.");
+  }
+  if ("MAX_PUSH_PER_WEEK" in rules) {
+    rules.MAX_PUSH_PER_WEEK = Number(rules.MAX_PUSH_PER_WEEK);
+    if (!Number.isInteger(rules.MAX_PUSH_PER_WEEK) || rules.MAX_PUSH_PER_WEEK < 0 || rules.MAX_PUSH_PER_WEEK > 30) throw new OrderError("INVALID_ADMIN_UPDATE", "MAX_PUSH_PER_WEEK must be a whole number from 0 to 30.");
+  }
+  if ("QUIET_HOURS_START" in rules && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(rules.QUIET_HOURS_START))) throw new OrderError("INVALID_ADMIN_UPDATE", "QUIET_HOURS_START must be HH:MM (24h).");
+  if ("QUIET_HOURS_END" in rules && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(rules.QUIET_HOURS_END))) throw new OrderError("INVALID_ADMIN_UPDATE", "QUIET_HOURS_END must be HH:MM (24h).");
   PAYMENT_DISPLAY_KEYS.forEach(key => {
     if (!(key in rules)) return;
     if (key.endsWith("_ENABLED") && typeof rules[key] !== "boolean") throw new OrderError("INVALID_ADMIN_UPDATE", key + " must be true or false.");
@@ -895,7 +908,8 @@ function logContact(c) {
 const LEAD_HEADERS = [
   "leadId", "createdAt", "updatedAt", "status", "fullName", "phone", "address",
   "city", "postalCode", "notes", "cartJson", "itemsSubtotal", "estimatedOrderTotal",
-  "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId"
+  "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId",
+  "visitorId"
 ];
 const LEAD_ABANDON_STATUSES = ["PAYMENT_ABANDONED", "COD_REQUESTED", "CALLBACK_REQUESTED"];
 
@@ -913,13 +927,36 @@ const PUSH_CAMPAIGN_HEADERS = [
 const PUSH_EVENT_HEADERS = ["timestamp", "visitorId", "campaignId", "eventType", "metadata"];
 const PUSH_EVENT_TYPES = [
   "prompt_view", "soft_accept_click", "soft_close", "native_granted", "native_denied",
-  "native_default", "subscribed", "unsubscribed", "notification_click"
+  "native_default", "subscribed", "unsubscribed", "notification_click",
+  "push_sent", "push_expired", "push_failed", "test_sent"
 ];
-const PUSH_CAMPAIGN_STATUSES = ["Draft", "Scheduled", "Sending", "Sent", "Paused", "Failed", "Expired"];
+// "Sent" was renamed "Completed" (HS-20260819-06) to match the real
+// campaign lifecycle -- no campaign had ever reached that state before
+// this task (send was fail-closed), so this is a safe rename, not a
+// migration. "Partially Failed" added for a batch with a mix of
+// accepted/failed subscriptions.
+const PUSH_CAMPAIGN_STATUSES = ["Draft", "Scheduled", "Sending", "Paused", "Completed", "Partially Failed", "Failed", "Expired"];
 const PUSH_AUDIENCES = [
   "all_active", "cart_abandoned", "lead_not_converted", "cod_requested",
   "interest_vegetables", "interest_flowers", "interest_mix", "interest_fertilizer", "previous_buyers"
 ];
+// Only these two segments have a real, honest data linkage today (Leads
+// rows carry visitorId + status/abandonReason, HS-20260819-06). The rest
+// stay valid, editable campaign-form choices for forward-compatibility,
+// but sendPushCampaign refuses to send to them rather than silently
+// falling back to "everyone" or "nobody" -- see docs/PROJECT_STATE.md.
+const PUSH_AUDIENCES_WITH_REAL_SEGMENT = ["all_active", "cart_abandoned", "cod_requested"];
+// Frequency/quiet-hours defaults (HS-20260819-06) -- Asia/Karachi is fixed,
+// not admin-editable (a single-market store; adding a timezone picker
+// would be unused surface). Everything else is editable via Settings.
+const PUSH_SETTINGS_DEFAULTS = {
+  MAX_PUSH_PER_DAY: 1,
+  MAX_PUSH_PER_WEEK: 3,
+  QUIET_HOURS_START: "21:00",
+  QUIET_HOURS_END: "08:00"
+};
+const PUSH_TIMEZONE = "Asia/Karachi";
+const PUSH_SEND_BATCH_SIZE = 30; // bounded per Apps Script execution -- see sendPushCampaign
 // Public Pixel/Dataset ID -- not a secret, already shipped client-side in
 // js/config.js. Only the CAPI access token (Script Property) is sensitive.
 const META_PIXEL_ID = "1467679375059082";
@@ -1005,6 +1042,11 @@ function saveLead(payload) {
     const sheet = ensureLeadsSheet();
     const existing = findLeadRow(sheet, leadId);
     const now = new Date().toISOString();
+    // Optional, additive (HS-20260819-06): the same PushGrowth.visitorId()
+    // already sent with every Lead save, now actually stored so a Lead can
+    // be matched back to a push subscription for Cart Abandoned / COD
+    // Requested campaign audiences. Never required, never blocks a Lead.
+    const visitorId = /^[A-Za-z0-9_-]{0,100}$/.test(String(payload.visitorId || "")) ? String(payload.visitorId || "") : "";
     if (existing) {
       isNew = false;
       // A duplicate Confirm Delivery updates the same row -- never
@@ -1018,7 +1060,8 @@ function saveLead(payload) {
         safeSheetText(postal), safeSheetText(notes), JSON.stringify(cartLines), itemsSubtotal, estimatedOrderTotal,
         eligiblePaymentModes, safeSheetText(optionalText(payload.utmSource, "UTM source", 200)),
         safeSheetText(optionalText(payload.fbp, "fbp", 200)), safeSheetText(optionalText(payload.fbc, "fbc", 200)),
-        "delivery", existing.row[existing.headers.indexOf("abandonReason")], existing.row[existing.headers.indexOf("convertedOrderId")]
+        "delivery", existing.row[existing.headers.indexOf("abandonReason")], existing.row[existing.headers.indexOf("convertedOrderId")],
+        visitorId || existing.row[existing.headers.indexOf("visitorId")] || ""
       ]];
       sheet.getRange(existing.rowIndex, 1, 1, LEAD_HEADERS.length).setValues(values);
     } else {
@@ -1028,7 +1071,7 @@ function saveLead(payload) {
         safeSheetText(postal), safeSheetText(notes), JSON.stringify(cartLines), itemsSubtotal, estimatedOrderTotal,
         eligiblePaymentModes, safeSheetText(optionalText(payload.utmSource, "UTM source", 200)),
         safeSheetText(optionalText(payload.fbp, "fbp", 200)), safeSheetText(optionalText(payload.fbc, "fbc", 200)),
-        "delivery", "", ""
+        "delivery", "", "", visitorId
       ]);
     }
   } finally {
@@ -1358,22 +1401,353 @@ function savePushCampaign(campaign, adminEmail) {
   }
 }
 
-// Fails closed, honestly: without a configured Web Push private key this
-// project cannot sign/encrypt a real push payload (RFC 8291), so it never
-// pretends to send. Returns a clear, actionable error instead of silently
-// marking the campaign failed -- the admin can retry once a provider is
-// configured, with the campaign left exactly as it was.
+// ── Real Web Push sending (HS-20260819-06) ─────────────────────────────
+// Apps Script never holds the VAPID private key or does the RFC 8291
+// encryption itself -- it calls a small, dedicated Cloudflare Worker
+// (worker/hoja-push-worker) that does exactly that, authenticated with a
+// shared PUSH_SERVER_SECRET. Apps Script owns everything else: Super
+// Admin auth, audience/frequency/quiet-hour rules, dedupe, batching, and
+// campaign/subscription bookkeeping. Fails closed with a clear error at
+// every stage that isn't configured or safe to proceed -- never fakes a
+// send. Bounded to PUSH_SEND_BATCH_SIZE per call so one Send click can
+// never blow the 6-minute Apps Script execution limit; a campaign whose
+// eligible audience is larger than one batch is left in "Sending" status
+// and the admin (or the Admin UI's auto-continue loop) calls Send again
+// to process the next batch. There is no automatic time-driven scheduler
+// for "Scheduled" campaigns -- see docs/PROJECT_STATE.md.
 function sendPushCampaign(campaignId, adminEmail) {
   const id = requiredText(campaignId, "Campaign ID", 8, 100);
-  const vapidPrivateKey = PropertiesService.getScriptProperties().getProperty("VAPID_PRIVATE_KEY");
-  if (!vapidPrivateKey) {
-    throw new OrderError("PUSH_PROVIDER_NOT_CONFIGURED", "No Web Push provider is configured yet (VAPID_PRIVATE_KEY is not set in Script Properties). The campaign was not sent or marked failed -- configure the provider and try again.");
+  const props = PropertiesService.getScriptProperties();
+  const workerUrl = props.getProperty("PUSH_WORKER_URL");
+  const workerSecret = props.getProperty("PUSH_SERVER_SECRET");
+  if (!workerUrl || !workerSecret) {
+    throw new OrderError("PUSH_PROVIDER_NOT_CONFIGURED", "The Push Worker is not configured yet (PUSH_WORKER_URL / PUSH_SERVER_SECRET are not set in Script Properties). The campaign was not sent or marked failed -- configure the provider and try again.");
   }
-  // A real send implementation (Web Push RFC 8291 aes128gcm encryption +
-  // VAPID JWT signing) is intentionally not implemented in Apps Script --
-  // see docs/PROJECT_STATE.md for the exact reason and the recommended
-  // path (a small Cloudflare Worker using a standard web-push library).
-  throw new OrderError("PUSH_SEND_NOT_IMPLEMENTED", "A Web Push provider key is configured, but the send path is not yet implemented. See docs/PROJECT_STATE.md.");
+
+  const campSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushCampaigns");
+  if (!campSheet) throw new OrderError("CAMPAIGN_NOT_FOUND", "Campaign not found.");
+  const existing = findRowById(campSheet, "campaignId", id);
+  if (!existing) throw new OrderError("CAMPAIGN_NOT_FOUND", "Campaign not found.");
+  const h = existing.headers, row = existing.row;
+  const status = String(row[h.indexOf("status")] || "Draft");
+  if (["Completed", "Failed", "Expired"].indexOf(status) !== -1) {
+    throw new OrderError("CAMPAIGN_ALREADY_FINAL", "This campaign already finished sending (" + status + ") and cannot be sent again.");
+  }
+  if (status === "Paused") {
+    throw new OrderError("CAMPAIGN_PAUSED", "This campaign is paused. Resume it before sending.");
+  }
+  const audience = String(row[h.indexOf("audience")] || "all_active");
+  if (PUSH_AUDIENCES_WITH_REAL_SEGMENT.indexOf(audience) === -1) {
+    throw new OrderError("AUDIENCE_NOT_YET_LINKED", "The \"" + audience + "\" audience segment has no real subscriber linkage yet -- only all_active, cart_abandoned, and cod_requested can be sent to today. Sending was refused rather than guessing the wrong recipients.");
+  }
+
+  const quietUntil = quietHoursActiveUntil();
+  if (quietUntil) {
+    return { ok: true, status: status, quietHours: true, message: "Quiet hours are active (" + PUSH_TIMEZONE + "); no push was sent. Try again after " + quietUntil + "." };
+  }
+
+  const title = String(row[h.indexOf("title")] || "");
+  const body = String(row[h.indexOf("body")] || "");
+  const targetUrl = String(row[h.indexOf("targetUrl")] || "");
+  const imageUrl = String(row[h.indexOf("imageUrl")] || "");
+
+  const eligible = computeEligibleSubscriptions(audience, id);
+  const batch = eligible.slice(0, PUSH_SEND_BATCH_SIZE);
+  const remaining = eligible.length - batch.length;
+
+  if (batch.length === 0) {
+    const finalStatus = remaining > 0 ? status : (Number(row[h.indexOf("attempted")]) > 0 ? finalizeCampaignStatus(row, h) : "Completed");
+    setCampaignField(id, "status", finalStatus);
+    if (finalStatus !== "Sending") setCampaignField(id, "sentAt", new Date().toISOString());
+    return { ok: true, status: finalStatus, batch: { attempted: 0, accepted: 0, failed: 0 }, remaining: 0 };
+  }
+
+  setCampaignField(id, "status", "Sending");
+  const webhookUrl = CONFIG_SHEET_WEBHOOK_URL_FOR_WORKER();
+  const requests = batch.map(sub => ({
+    url: workerUrl,
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + workerSecret },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({
+      subscription: { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.authKey },
+      payload: {
+        title: title, body: body, targetUrl: targetUrl, image: imageUrl || undefined,
+        campaignId: id, visitorId: sub.visitorId, webhookUrl: webhookUrl
+      },
+      ttl: 4 * 60 * 60
+    })
+  }));
+
+  const responses = UrlFetchApp.fetchAll(requests);
+  let accepted = 0, failed = 0;
+  const now = new Date().toISOString();
+  const subSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushSubscriptions");
+  responses.forEach((resp, i) => {
+    const sub = batch[i];
+    let pushStatus = "temporary_failure";
+    try { pushStatus = JSON.parse(resp.getContentText()).pushStatus || pushStatus; } catch (e) { /* treat as temporary_failure */ }
+    if (pushStatus === "accepted") {
+      accepted++;
+      logPushEventInternal(sub.visitorId, id, "push_sent");
+      if (subSheet) setSubscriptionField(subSheet, sub.rowIndex, "lastPushAt", now);
+    } else if (pushStatus === "expired") {
+      failed++;
+      logPushEventInternal(sub.visitorId, id, "push_expired");
+      if (subSheet) setSubscriptionField(subSheet, sub.rowIndex, "subscriptionStatus", "expired");
+    } else {
+      failed++;
+      logPushEventInternal(sub.visitorId, id, "push_failed");
+      // temporary failure -- subscription stays active, naturally eligible
+      // for a retry on the next Send click (no push_sent event was logged)
+    }
+  });
+
+  incrementCampaignCounterBy(id, "attempted", batch.length);
+  incrementCampaignCounterBy(id, "accepted", accepted);
+  incrementCampaignCounterBy(id, "failed", failed);
+  logAudit(adminEmail, "pushCampaignSend", "PushCampaign", id, { status: status }, { attempted: batch.length, accepted: accepted, failed: failed, remaining: remaining }, "success");
+
+  if (remaining > 0) {
+    return { ok: true, status: "Sending", batch: { attempted: batch.length, accepted: accepted, failed: failed }, remaining: remaining };
+  }
+  const finalRow = findRowById(campSheet, "campaignId", id);
+  const finalStatus = finalizeCampaignStatus(finalRow.row, finalRow.headers);
+  setCampaignField(id, "status", finalStatus);
+  setCampaignField(id, "sentAt", new Date().toISOString());
+  return { ok: true, status: finalStatus, batch: { attempted: batch.length, accepted: accepted, failed: failed }, remaining: 0 };
+}
+
+// Pause stops a "Sending" (batch-in-progress) or "Scheduled" campaign from
+// being sent further; resume only moves it back to "Scheduled" -- it never
+// auto-sends (no scheduler exists), the admin must click Send again.
+function setPushCampaignPause(campaignId, pause, adminEmail) {
+  const id = requiredText(campaignId, "Campaign ID", 8, 100);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushCampaigns");
+  if (!sheet) throw new OrderError("CAMPAIGN_NOT_FOUND", "Campaign not found.");
+  const existing = findRowById(sheet, "campaignId", id);
+  if (!existing) throw new OrderError("CAMPAIGN_NOT_FOUND", "Campaign not found.");
+  const status = String(existing.row[existing.headers.indexOf("status")] || "Draft");
+  if (pause) {
+    if (["Sending", "Scheduled"].indexOf(status) === -1) throw new OrderError("INVALID_CAMPAIGN_STATE", "Only a Sending or Scheduled campaign can be paused.");
+    setCampaignField(id, "status", "Paused");
+    logAudit(adminEmail, "pushCampaignPause", "PushCampaign", id, { status: status }, { status: "Paused" }, "success");
+    return { ok: true, status: "Paused" };
+  }
+  if (status !== "Paused") throw new OrderError("INVALID_CAMPAIGN_STATE", "Only a Paused campaign can be resumed.");
+  setCampaignField(id, "status", "Scheduled");
+  logAudit(adminEmail, "pushCampaignResume", "PushCampaign", id, { status: status }, { status: "Scheduled" }, "success");
+  return { ok: true, status: "Scheduled" };
+}
+
+function finalizeCampaignStatus(row, h) {
+  const attempted = Number(row[h.indexOf("attempted")]) || 0;
+  const acceptedTotal = Number(row[h.indexOf("accepted")]) || 0;
+  const failedTotal = Number(row[h.indexOf("failed")]) || 0;
+  if (attempted === 0) return "Failed";
+  if (failedTotal === 0) return "Completed";
+  if (acceptedTotal === 0) return "Failed";
+  return "Partially Failed";
+}
+
+function setCampaignField(campaignId, field, value) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushCampaigns");
+  if (!sheet) return;
+  const existing = findRowById(sheet, "campaignId", campaignId);
+  if (!existing) return;
+  const col = existing.headers.indexOf(field) + 1;
+  if (col > 0) sheet.getRange(existing.rowIndex, col).setValue(value);
+}
+
+function setSubscriptionField(sheet, rowIndex, field, value) {
+  const headers = sheet.getDataRange().getValues()[0];
+  const col = headers.indexOf(field) + 1;
+  if (col > 0) sheet.getRange(rowIndex, col).setValue(value);
+}
+
+function incrementCampaignCounterBy(campaignId, field, amount) {
+  if (!amount) return;
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushCampaigns");
+  if (!sheet) return;
+  const existing = findRowById(sheet, "campaignId", campaignId);
+  if (!existing) return;
+  const col = existing.headers.indexOf(field) + 1;
+  if (col <= 0) return;
+  const current = Number(existing.row[col - 1]) || 0;
+  sheet.getRange(existing.rowIndex, col).setValue(current + amount);
+}
+
+// Best-effort event log used internally by the send pipeline -- same
+// sheet/shape as logPushEvent, but never throws (a telemetry write should
+// never fail a real send that already happened).
+function logPushEventInternal(visitorId, campaignId, eventType) {
+  try {
+    const sheet = ensureSheetWithHeaders("PushEvents", PUSH_EVENT_HEADERS);
+    sheet.appendRow([new Date().toISOString(), String(visitorId || ""), String(campaignId || ""), eventType, ""]);
+  } catch (e) { console.error(e); }
+}
+
+function CONFIG_SHEET_WEBHOOK_URL_FOR_WORKER() {
+  // The service worker's click telemetry needs this project's own Web App
+  // URL, embedded per-notification (see push-sw.js) -- it has no other way
+  // to reach it. This Apps Script deployment's own doPost URL.
+  try { return ScriptApp.getService().getUrl(); } catch (e) { return ""; }
+}
+
+// Returns a human-readable "try again after HH:MM" string if Asia/Karachi
+// local time is currently inside the configured quiet-hours window,
+// otherwise null. Handles a window that wraps midnight (e.g. 21:00-08:00).
+function quietHoursActiveUntil() {
+  const settings = Object.assign({}, PUSH_SETTINGS_DEFAULTS, getSettings());
+  const start = String(settings.QUIET_HOURS_START || "21:00");
+  const end = String(settings.QUIET_HOURS_END || "08:00");
+  const nowMinutes = karachiMinutesSinceMidnight(new Date());
+  const startMinutes = hhmmToMinutes(start);
+  const endMinutes = hhmmToMinutes(end);
+  const inWindow = startMinutes <= endMinutes
+    ? (nowMinutes >= startMinutes && nowMinutes < endMinutes)
+    : (nowMinutes >= startMinutes || nowMinutes < endMinutes);
+  return inWindow ? end + " " + PUSH_TIMEZONE : null;
+}
+
+function hhmmToMinutes(hhmm) {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!m) return 0;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function karachiMinutesSinceMidnight(date) {
+  const formatted = Utilities.formatDate(date, PUSH_TIMEZONE, "HH:mm");
+  return hhmmToMinutes(formatted);
+}
+
+// Resolves the real, eligible, deduped, frequency-capped subscriber list
+// for a campaign send. Never invents recipients: all_active is every
+// active subscription; cart_abandoned/cod_requested are matched by a real
+// Leads.visitorId linkage (HS-20260819-06). Excludes: inactive/expired
+// subscriptions, a subscription this exact campaign already reached
+// (push_sent event on record), and any subscription over its daily/weekly
+// frequency cap.
+function computeEligibleSubscriptions(audience, campaignId) {
+  const subSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushSubscriptions");
+  if (!subSheet) return [];
+  const subRows = subSheet.getDataRange().getValues();
+  if (subRows.length < 2) return [];
+  const sh = subRows[0];
+  const active = [];
+  for (let i = 1; i < subRows.length; i++) {
+    if (String(subRows[i][sh.indexOf("subscriptionStatus")]) !== "active") continue;
+    active.push({
+      rowIndex: i + 1, visitorId: String(subRows[i][sh.indexOf("visitorId")] || ""),
+      endpoint: String(subRows[i][sh.indexOf("endpoint")] || ""), p256dh: String(subRows[i][sh.indexOf("p256dh")] || ""),
+      authKey: String(subRows[i][sh.indexOf("authKey")] || "")
+    });
+  }
+  const segmentSet = audience === "all_active" ? null : computeAudienceVisitorSet(audience);
+  const inSegment = active.filter(s => !segmentSet || segmentSet.has(s.visitorId));
+
+  const settings = Object.assign({}, PUSH_SETTINGS_DEFAULTS, getSettings());
+  const maxPerDay = Number(settings.MAX_PUSH_PER_DAY);
+  const maxPerWeek = Number(settings.MAX_PUSH_PER_WEEK);
+  const eventsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushEvents");
+  const dayCounts = {}, weekCounts = {}, sentThisCampaign = new Set();
+  if (eventsSheet) {
+    const evRows = eventsSheet.getDataRange().getValues();
+    if (evRows.length >= 2) {
+      const eh = evRows[0];
+      const tsCol = eh.indexOf("timestamp"), vCol = eh.indexOf("visitorId"), typeCol = eh.indexOf("eventType"), campCol = eh.indexOf("campaignId");
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000, weekMs = 7 * dayMs;
+      for (let i = 1; i < evRows.length; i++) {
+        if (String(evRows[i][typeCol]) !== "push_sent") continue;
+        const vid = String(evRows[i][vCol] || "");
+        const ts = new Date(evRows[i][tsCol]).getTime();
+        if (now - ts < dayMs) dayCounts[vid] = (dayCounts[vid] || 0) + 1;
+        if (now - ts < weekMs) weekCounts[vid] = (weekCounts[vid] || 0) + 1;
+        if (String(evRows[i][campCol]) === campaignId) sentThisCampaign.add(vid);
+      }
+    }
+  }
+
+  return inSegment.filter(s => {
+    if (sentThisCampaign.has(s.visitorId)) return false; // never resend same campaign/subscription pair
+    if ((dayCounts[s.visitorId] || 0) >= maxPerDay) return false;
+    if ((weekCounts[s.visitorId] || 0) >= maxPerWeek) return false;
+    return true;
+  });
+}
+
+// Real Leads-based segments only (HS-20260819-06): a Lead is matched to a
+// subscription purely by the visitorId both already carry. A Lead whose
+// status is ORDER_CONVERTED is excluded from cart_abandoned (it isn't
+// abandoned, it converted) but cod_requested still honors an explicit
+// COD_REQUESTED reason even post-conversion is moot since that can't
+// coexist with ORDER_CONVERTED in practice.
+function computeAudienceVisitorSet(audience) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Leads");
+  const set = new Set();
+  if (!sheet) return set;
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return set;
+  const h = rows[0];
+  const vCol = h.indexOf("visitorId"), sCol = h.indexOf("status"), rCol = h.indexOf("abandonReason");
+  if (vCol < 0) return set;
+  for (let i = 1; i < rows.length; i++) {
+    const vid = String(rows[i][vCol] || "");
+    if (!vid) continue;
+    const status = String(rows[i][sCol] || "");
+    const reason = String(rows[i][rCol] || "");
+    if (audience === "cod_requested") { if (reason === "COD_REQUESTED") set.add(vid); continue; }
+    if (audience === "cart_abandoned") { if (status !== "ORDER_CONVERTED") set.add(vid); continue; }
+  }
+  return set;
+}
+
+// Super Admin only (requireAdmin already checked by the caller). Sends to
+// exactly ONE subscription, bypassing frequency/dedupe/quiet-hours (a
+// single deliberate manual test is not a marketing send) -- but still
+// requires the Worker to be configured and still logs a distinct
+// "test_sent" event rather than touching any campaign's counters.
+function pushTestSend(payload, adminEmail) {
+  const visitorId = requiredText(payload.visitorId, "Visitor ID", 16, 100);
+  const props = PropertiesService.getScriptProperties();
+  const workerUrl = props.getProperty("PUSH_WORKER_URL");
+  const workerSecret = props.getProperty("PUSH_SERVER_SECRET");
+  if (!workerUrl || !workerSecret) {
+    throw new OrderError("PUSH_PROVIDER_NOT_CONFIGURED", "The Push Worker is not configured yet (PUSH_WORKER_URL / PUSH_SERVER_SECRET are not set in Script Properties).");
+  }
+  const subSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushSubscriptions");
+  if (!subSheet) throw new OrderError("SUBSCRIPTION_NOT_FOUND", "No subscriptions recorded yet.");
+  const existing = findRowById(subSheet, "visitorId", visitorId);
+  if (!existing || String(existing.row[existing.headers.indexOf("subscriptionStatus")]) !== "active") {
+    throw new OrderError("SUBSCRIPTION_NOT_FOUND", "That visitor does not have an active push subscription.");
+  }
+  const sub = {
+    endpoint: String(existing.row[existing.headers.indexOf("endpoint")] || ""),
+    p256dh: String(existing.row[existing.headers.indexOf("p256dh")] || ""),
+    auth: String(existing.row[existing.headers.indexOf("authKey")] || "")
+  };
+  const resp = UrlFetchApp.fetch(workerUrl, {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + workerSecret },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({
+      subscription: sub,
+      payload: {
+        title: "🌱 Hoja Seeds Test", body: "Your browser notifications are working.",
+        targetUrl: "https://www.hojaseeds.pk/", campaignId: "", visitorId: visitorId,
+        webhookUrl: CONFIG_SHEET_WEBHOOK_URL_FOR_WORKER()
+      },
+      ttl: 300
+    })
+  });
+  let result = { pushStatus: "temporary_failure" };
+  try { result = JSON.parse(resp.getContentText()); } catch (e) { /* keep default */ }
+  logPushEventInternal(visitorId, "", "test_sent");
+  logAudit(adminEmail, "pushTestSend", "PushSubscription", visitorId, null, { pushStatus: result.pushStatus }, result.pushStatus === "accepted" ? "success" : "failure");
+  return { ok: result.pushStatus === "accepted", pushStatus: result.pushStatus || "temporary_failure" };
 }
 
 function sha256Hex(value) {
