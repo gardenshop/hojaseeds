@@ -24,10 +24,52 @@ const Admin = {
   pushCampaigns: [],
   editingCampaignId: "",
 
+  SESSION_KEY: "hoja_admin_id_token", // sessionStorage: cleared on tab close, survives an ordinary refresh
+
   login(response) {
     if (!response || !response.credential) return this.showError("Google sign-in did not return a credential.");
     this.idToken = response.credential;
+    try { sessionStorage.setItem(this.SESSION_KEY, this.idToken); } catch { /* storage unavailable -- session just won't survive a refresh */ }
     this.enter();
+  },
+
+  // Decodes (never verifies -- that's the server's job, on every request,
+  // via requireAdmin) the JWT's own `exp` claim so the client can decide
+  // whether to skip the login screen after a refresh. A forged/tampered
+  // token still can't do anything: every privileged call re-sends it and
+  // Apps Script re-validates the signature + allowlisted email itself.
+  decodeJwtExpMs(token) {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+      return Number(payload.exp || 0) * 1000;
+    } catch { return 0; }
+  },
+
+  // Restores a still-valid Google credential saved before an ordinary
+  // page refresh. Never trusts the email inside it -- only its own
+  // presence + not-yet-expired-per-its-own-claim is used to decide
+  // whether to skip straight to the Admin view; the server still
+  // authoritatively re-verifies the token (signature, audience, allowed
+  // email) on the very first privileged request that follows.
+  restoreSession() {
+    let token;
+    try { token = sessionStorage.getItem(this.SESSION_KEY); } catch { return false; }
+    if (!token) return false;
+    if (this.decodeJwtExpMs(token) <= Date.now()) {
+      try { sessionStorage.removeItem(this.SESSION_KEY); } catch { /* ignore */ }
+      return false;
+    }
+    this.idToken = token;
+    return true;
+  },
+
+  logout() {
+    this.idToken = "";
+    try { sessionStorage.removeItem(this.SESSION_KEY); } catch { /* ignore */ }
+    try { google?.accounts?.id?.disableAutoSelect(); } catch { /* ignore */ }
+    document.getElementById("adminView").style.display = "none";
+    document.getElementById("adminLogoutBtn").style.display = "none";
+    document.getElementById("loginView").style.display = "block";
   },
 
   checkSession() {
@@ -44,6 +86,12 @@ const Admin = {
       google.accounts.id.renderButton(document.getElementById("googleSignIn"), {
         theme: "outline", size: "large", text: "signin_with", width: 280
       });
+      // A valid, not-yet-(client-side)-expired credential from before a
+      // refresh skips straight back into the Admin view. If the server
+      // ends up rejecting it anyway (revoked, clock skew, etc.), the very
+      // first privileged request's ADMIN_UNAUTHORIZED response drops back
+      // to this same login screen -- see authorizedPost.
+      if (this.restoreSession()) this.enter();
     };
     start();
   },
@@ -65,7 +113,15 @@ const Admin = {
     });
     if (!response.ok) throw new Error(`Admin service returned HTTP ${response.status}.`);
     const result = await response.json();
-    if (!result || result.ok !== true) throw new Error(result.error?.message || "Admin update was rejected.");
+    if (!result || result.ok !== true) {
+      const code = result?.error?.code;
+      // The server is always the final authority: if it rejects this
+      // token for any reason (expired, revoked, wrong audience, no longer
+      // an allowed email), drop the restored/cached session immediately
+      // rather than keep retrying with a credential that will never work.
+      if (code === "ADMIN_UNAUTHORIZED" || code === "ADMIN_NOT_CONFIGURED") this.logout();
+      throw new Error(result?.error?.message || "Admin update was rejected.");
+    }
     return result;
   },
 
@@ -86,6 +142,8 @@ const Admin = {
   enter() {
     document.getElementById("loginView").style.display = "none";
     document.getElementById("adminView").style.display = "block";
+    const logoutBtn = document.getElementById("adminLogoutBtn");
+    if (logoutBtn) logoutBtn.style.display = "";
     document.getElementById("modeNote").textContent = CONFIG.SHEET_WEBHOOK_URL
       ? "(live — synced to Google Sheet)"
       : "(demo mode — saved in this browser only, see README to connect Google Sheets)";
@@ -273,7 +331,7 @@ const Admin = {
     note.textContent = "Sending…";
     try {
       const result = await this.authorizedPost({ type: "pushTestSend", visitorId });
-      note.textContent = result.ok ? "Sent — accepted by the push service." : `Not accepted (${result.pushStatus}).`;
+      note.textContent = result.ok ? "Sent — accepted by the push service." : `Not accepted: ${result.code || result.pushStatus}${result.httpStatus ? " (HTTP " + result.httpStatus + ")" : ""}.`;
     } catch (e) { note.textContent = e.message; }
   },
 
@@ -286,7 +344,7 @@ const Admin = {
       bar.querySelectorAll("[data-sub-filter]").forEach(btn => btn.addEventListener("click", () => { this.pushSubFilter = btn.dataset.subFilter; this.renderPushSubscribers(this.pushSubs); }));
     }
     const rows = this.pushSubFilter === "all" ? items : items.filter(i => (i.subscriptionStatus || "") === this.pushSubFilter || (this.pushSubFilter === "default" && i.permissionStatus === "default"));
-    document.getElementById("pushSubscribersContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Status</th><th>Visitor</th><th>Permission</th><th>Subscribed</th><th>Last seen</th><th>Device</th><th>Source</th><th>Last push</th><th>Clicks</th><th>Lead</th><th>Order</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escapeHTML(r.subscriptionStatus)}</td><td class="mono">${escapeHTML(r.visitorId)}</td><td>${escapeHTML(r.permissionStatus)}</td><td>${escapeHTML(r.createdAt)}</td><td>${escapeHTML(r.lastSeenAt)}</td><td>${escapeHTML(r.deviceInfo)} · ${escapeHTML(r.browserInfo)}</td><td>${escapeHTML(r.utmSource)}</td><td>${escapeHTML(r.lastPushAt)}</td><td>${escapeHTML(r.clickCount || 0)}</td><td>${escapeHTML(r.linkedLeadId)}</td><td>${escapeHTML(r.linkedOrderId)}</td></tr>`).join("") || `<tr><td colspan="11">No subscribers yet.</td></tr>`}</tbody></table></div>`;
+    document.getElementById("pushSubscribersContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Status</th><th>Visitor</th><th>Permission</th><th>Subscribed</th><th>Last seen</th><th>Device</th><th>Source</th><th>Last push</th><th>Last failure</th><th>Clicks</th><th>Lead</th><th>Order</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escapeHTML(r.subscriptionStatus)}</td><td class="mono">${escapeHTML(r.visitorId)}</td><td>${escapeHTML(r.permissionStatus)}</td><td>${escapeHTML(r.createdAt)}</td><td>${escapeHTML(r.lastSeenAt)}</td><td>${escapeHTML(r.deviceInfo)} · ${escapeHTML(r.browserInfo)}</td><td>${escapeHTML(r.utmSource)}</td><td>${escapeHTML(r.lastPushAt)}</td><td>${escapeHTML(r.lastFailure || "—")}</td><td>${escapeHTML(r.clickCount || 0)}</td><td>${escapeHTML(r.linkedLeadId)}</td><td>${escapeHTML(r.linkedOrderId)}</td></tr>`).join("") || `<tr><td colspan="12">No subscribers yet.</td></tr>`}</tbody></table></div>`;
   },
 
   renderPushCampaigns(items) {

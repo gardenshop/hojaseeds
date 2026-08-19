@@ -79,12 +79,12 @@ function createBackend({ pushWorkerUrl = null, pushServerSecret = null, fetchAll
     ScriptApp: { getService: () => ({ getUrl: () => "https://example.test/exec" }) },
     ContentService: { MimeType: { JSON: "application/json" }, createTextOutput: text => ({ text, setMimeType() { return this; } }) },
     UrlFetchApp: {
-      fetch: () => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify(respond()) }),
-      fetchAll: requests => requests.map(() => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify(respond()) }))
+      fetch: () => { const r = respond(); return { getResponseCode: () => r.httpStatus || 200, getContentText: () => JSON.stringify(r) }; },
+      fetchAll: requests => requests.map(() => { const r = respond(); return { getResponseCode: () => r.httpStatus || 200, getContentText: () => JSON.stringify(r) }; })
     }
   });
   const code = fs.readFileSync(path.join(root, "apps-script", "Code.gs"), "utf8");
-  vm.runInContext(`${code}\nthis.__api = { savePushSubscription, logPushEvent, savePushCampaign, sendPushCampaign, pushTestSend, setPushCampaignPause, computeEligibleSubscriptions, buildPushDashboard, readPushSubscriptionsSafe, saveLead, submitOrder, updateSettings, getSettings, OrderError };`, context);
+  vm.runInContext(`${code}\nthis.__api = { savePushSubscription, logPushEvent, savePushCampaign, sendPushCampaign, pushTestSend, setPushCampaignPause, computeEligibleSubscriptions, buildPushDashboard, readPushSubscriptionsSafe, saveLead, submitOrder, updateSettings, getSettings, classifyWorkerResponse, OrderError };`, context);
   return { api: context.__api, rows };
 }
 
@@ -273,6 +273,40 @@ function visitorId() { return "visitor-test-" + Math.random().toString(36).slice
   assert.throws(() => api.sendPushCampaign(created.campaignId, "admin@hojaseeds.pk"), err => err.code === "CAMPAIGN_PAUSED");
   const resumed = api.setPushCampaignPause(created.campaignId, false, "admin@hojaseeds.pk");
   assert.strictEqual(resumed.status, "Scheduled", "resume never auto-sends -- admin must click Send again");
+})();
+
+// ── HS-20260819-09: safe failure diagnosis ─────────────────────────────
+
+(function authFailureClassifiedNotHiddenAsGenericFailure() {
+  const { api, rows } = createBackend({
+    pushWorkerUrl: "https://worker.test/", pushServerSecret: "s3cret",
+    fetchAllResponder: () => ({ ok: false, error: "UNAUTHORIZED", httpStatus: 401 })
+  });
+  const vid = visitorId();
+  api.savePushSubscription({ visitorId: vid, permissionStatus: "granted", subscription: { endpoint: "https://push.example/a", p256dh: "x".repeat(30), auth: "y".repeat(16) } });
+  const created = api.savePushCampaign({ title: "Gift Seeds", body: "Free gift seeds this week.", targetUrl: "https://www.hojaseeds.pk/", audience: "all_active" }, "admin@hojaseeds.pk");
+  api.sendPushCampaign(created.campaignId, "admin@hojaseeds.pk");
+  const eventHeaders = rows.PushEvents[0];
+  const failEvent = rows.PushEvents.slice(1).find(r => r[eventHeaders.indexOf("eventType")] === "push_failed");
+  const meta = JSON.parse(failEvent[eventHeaders.indexOf("metadata")]);
+  assert.strictEqual(meta.code, "AUTH_FAILED", "a Worker 401 is classified distinctly, not lumped in as a generic failure");
+  assert.strictEqual(meta.httpStatus, 401);
+  // Surfaced to Admin without ever exposing endpoint/keys/secrets.
+  const items = api.readPushSubscriptionsSafe(100);
+  const row = items.find(i => i.visitorId === vid);
+  assert.ok(row.lastFailure.indexOf("AUTH_FAILED") !== -1);
+  assert.strictEqual(row.endpoint, undefined);
+  assert.strictEqual(row.p256dh, undefined);
+})();
+
+(function classifyWorkerResponseCodes() {
+  const { api } = createBackend();
+  const mk = (status, body) => ({ getResponseCode: () => status, getContentText: () => JSON.stringify(body) });
+  assert.strictEqual(api.classifyWorkerResponse(mk(201, { pushStatus: "accepted" })).code, "ACCEPTED");
+  assert.strictEqual(api.classifyWorkerResponse(mk(410, { pushStatus: "expired" })).code, "EXPIRED_SUBSCRIPTION");
+  assert.strictEqual(api.classifyWorkerResponse(mk(401, { error: "UNAUTHORIZED" })).code, "AUTH_FAILED");
+  assert.strictEqual(api.classifyWorkerResponse(mk(400, { error: "INVALID_SUBSCRIPTION_ENDPOINT" })).code, "PUSH_SERVICE_REJECTED");
+  assert.strictEqual(api.classifyWorkerResponse(mk(502, {})).code, "TEMPORARY_ERROR");
 })();
 
 (function pushSettingsValidateRanges() {

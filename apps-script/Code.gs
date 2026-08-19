@@ -708,12 +708,45 @@ function buildAdminDashboard(limit) {
 // Admin never sees the raw endpoint/keys, even though they're stored
 // server-side for eventual sending -- "do not expose endpoints/tokens
 // publicly" applies to the Admin UI too, not just anonymous access.
+// Safe failure visibility (HS-20260819-09): the most recent push_failed/
+// push_expired/test_sent event's classification code + HTTP status per
+// visitor, so Super Admin can see WHY a send failed without ever exposing
+// endpoint/p256dh/authKey/secrets. Never guesses -- absent if no such
+// event exists yet for that visitor.
+function lastPushFailureByVisitor() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushEvents");
+  const out = {};
+  if (!sheet) return out;
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return out;
+  const h = rows[0];
+  const tsCol = h.indexOf("timestamp"), vCol = h.indexOf("visitorId"), typeCol = h.indexOf("eventType"), metaCol = h.indexOf("metadata");
+  const relevant = ["push_failed", "push_expired", "test_sent"];
+  for (let i = 1; i < rows.length; i++) {
+    const type = String(rows[i][typeCol]);
+    if (relevant.indexOf(type) === -1) continue;
+    const vid = String(rows[i][vCol] || "");
+    if (!vid) continue;
+    let meta = {};
+    try { meta = JSON.parse(rows[i][metaCol] || "{}"); } catch (e) { /* ignore malformed */ }
+    if (!meta.code) continue; // pre-HS-09 events have no safe code recorded
+    const existing = out[vid];
+    if (!existing || new Date(rows[i][tsCol]) > new Date(existing.timestamp)) {
+      out[vid] = { code: meta.code, httpStatus: meta.httpStatus, timestamp: rows[i][tsCol], eventType: type };
+    }
+  }
+  return out;
+}
+
 function readPushSubscriptionsSafe(limit) {
+  const failures = lastPushFailureByVisitor();
   return readAdminRows("PushSubscriptions", limit).map(row => {
     const clean = Object.assign({}, row);
     delete clean.endpoint;
     delete clean.p256dh;
     delete clean.authKey;
+    const f = failures[row.visitorId];
+    if (f) clean.lastFailure = f.code + (f.httpStatus ? " (HTTP " + f.httpStatus + ")" : "");
     return clean;
   });
 }
@@ -1486,19 +1519,18 @@ function sendPushCampaign(campaignId, adminEmail) {
   const subSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushSubscriptions");
   responses.forEach((resp, i) => {
     const sub = batch[i];
-    let pushStatus = "temporary_failure";
-    try { pushStatus = JSON.parse(resp.getContentText()).pushStatus || pushStatus; } catch (e) { /* treat as temporary_failure */ }
-    if (pushStatus === "accepted") {
+    const diag = classifyWorkerResponse(resp);
+    if (diag.pushStatus === "accepted") {
       accepted++;
-      logPushEventInternal(sub.visitorId, id, "push_sent");
+      logPushEventInternal(sub.visitorId, id, "push_sent", diag);
       if (subSheet) setSubscriptionField(subSheet, sub.rowIndex, "lastPushAt", now);
-    } else if (pushStatus === "expired") {
+    } else if (diag.pushStatus === "expired") {
       failed++;
-      logPushEventInternal(sub.visitorId, id, "push_expired");
+      logPushEventInternal(sub.visitorId, id, "push_expired", diag);
       if (subSheet) setSubscriptionField(subSheet, sub.rowIndex, "subscriptionStatus", "expired");
     } else {
       failed++;
-      logPushEventInternal(sub.visitorId, id, "push_failed");
+      logPushEventInternal(sub.visitorId, id, "push_failed", diag);
       // temporary failure -- subscription stays active, naturally eligible
       // for a retry on the next Send click (no push_sent event was logged)
     }
@@ -1580,12 +1612,32 @@ function incrementCampaignCounterBy(campaignId, field, amount) {
 
 // Best-effort event log used internally by the send pipeline -- same
 // sheet/shape as logPushEvent, but never throws (a telemetry write should
-// never fail a real send that already happened).
-function logPushEventInternal(visitorId, campaignId, eventType) {
+// never fail a real send that already happened). `diag` (from
+// classifyWorkerResponse) is safe-only: httpStatus + a short code, never
+// endpoint/keys/secrets.
+function logPushEventInternal(visitorId, campaignId, eventType, diag) {
   try {
     const sheet = ensureSheetWithHeaders("PushEvents", PUSH_EVENT_HEADERS);
-    sheet.appendRow([new Date().toISOString(), String(visitorId || ""), String(campaignId || ""), eventType, ""]);
+    const metadata = diag ? JSON.stringify({ httpStatus: diag.httpStatus, code: diag.code }) : "";
+    sheet.appendRow([new Date().toISOString(), String(visitorId || ""), String(campaignId || ""), eventType, metadata]);
   } catch (e) { console.error(e); }
+}
+
+// Turns one Worker HTTP response into a safe, admin-displayable diagnosis
+// -- HS-20260819-09 (previously the exact failure reason for a "failed"
+// send was invisible; every non-accepted result looked identical). Never
+// includes endpoint/p256dh/authKey/PUSH_SERVER_SECRET/VAPID material --
+// only an HTTP status and a short classification code.
+function classifyWorkerResponse(resp) {
+  const httpStatus = resp.getResponseCode();
+  let body = {};
+  try { body = JSON.parse(resp.getContentText()); } catch (e) { /* non-JSON body -- treat as unknown */ }
+  if (body.pushStatus === "accepted") return { pushStatus: "accepted", httpStatus: httpStatus, code: "ACCEPTED" };
+  if (body.pushStatus === "expired") return { pushStatus: "expired", httpStatus: httpStatus, code: "EXPIRED_SUBSCRIPTION" };
+  if (httpStatus === 401 || body.error === "UNAUTHORIZED") return { pushStatus: "temporary_failure", httpStatus: httpStatus, code: "AUTH_FAILED" };
+  if (httpStatus === 400) return { pushStatus: "temporary_failure", httpStatus: httpStatus, code: "PUSH_SERVICE_REJECTED" };
+  if (httpStatus === 0 || !httpStatus) return { pushStatus: "temporary_failure", httpStatus: httpStatus || 0, code: "WORKER_UNREACHABLE" };
+  return { pushStatus: "temporary_failure", httpStatus: httpStatus, code: "TEMPORARY_ERROR" };
 }
 
 function CONFIG_SHEET_WEBHOOK_URL_FOR_WORKER() {
@@ -1743,11 +1795,10 @@ function pushTestSend(payload, adminEmail) {
       ttl: 300
     })
   });
-  let result = { pushStatus: "temporary_failure" };
-  try { result = JSON.parse(resp.getContentText()); } catch (e) { /* keep default */ }
-  logPushEventInternal(visitorId, "", "test_sent");
-  logAudit(adminEmail, "pushTestSend", "PushSubscription", visitorId, null, { pushStatus: result.pushStatus }, result.pushStatus === "accepted" ? "success" : "failure");
-  return { ok: result.pushStatus === "accepted", pushStatus: result.pushStatus || "temporary_failure" };
+  const diag = classifyWorkerResponse(resp);
+  logPushEventInternal(visitorId, "", "test_sent", diag);
+  logAudit(adminEmail, "pushTestSend", "PushSubscription", visitorId, null, { pushStatus: diag.pushStatus, httpStatus: diag.httpStatus, code: diag.code }, diag.pushStatus === "accepted" ? "success" : "failure");
+  return { ok: diag.pushStatus === "accepted", pushStatus: diag.pushStatus, httpStatus: diag.httpStatus, code: diag.code };
 }
 
 function sha256Hex(value) {
