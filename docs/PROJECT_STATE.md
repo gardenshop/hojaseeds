@@ -6,6 +6,76 @@ into each request.
 
 ---
 
+## PUSH FAILURE DIAGNOSIS + PERSISTENT ADMIN SESSION (HS-20260819-09) — PROTECTED CONTRACT
+
+- **"Time to Sow" campaign (2 attempted / 0 accepted / 2 failed) —
+  diagnosis, not guessed:** at the time it ran, `push_failed` events were
+  logged with no metadata at all (the exact blind spot this task fixes),
+  so the specific HTTP status/reason for those two failures cannot be
+  recovered retroactively. What WAS proven this session, directly: (a)
+  both real subscribers involved (`c2c1a940-...`, `f6d19277-...`) are
+  healthy, active, real production subscriptions; (b) the deployed Worker,
+  VAPID keys, and RFC 8291 encryption are 100% healthy right now — a
+  direct Worker call using the Worker's actual current
+  `PUSH_SERVER_SECRET` (known from HS-07's rotation) sent to both real
+  subscriptions and **FCM accepted both with HTTP 201**. This rules out
+  the subscriptions, the Worker, and VAPID as the cause. The strong
+  remaining explanation is a `PUSH_SERVER_SECRET` **mismatch** between
+  Apps Script's Script Property and the Worker's actual secret — Apps
+  Script's own property values still cannot be read by the agent (no
+  non-admin-authenticated path exists), so this is reported as the
+  most-probable cause with real supporting evidence, not asserted as
+  certain.
+  **Owner action to close this out:** re-paste the exact value from
+  `PASTE_INTO_APPS_SCRIPT_PUSH_SERVER_SECRET.txt` (still present in this
+  machine's Claude scratchpad folder from HS-07, confirmed still correct
+  against the live Worker this session) into Apps Script's
+  `PUSH_SERVER_SECRET` Script Property, overwriting whatever is there now
+  — then delete that file. Then Send Test Notification to either real
+  subscriber; `attempted:1/accepted:1/failed:0` confirms it's fixed.
+- **Safe failure visibility added (protected, permanent):** every Worker
+  response is now classified into a short, safe code —
+  `ACCEPTED` / `EXPIRED_SUBSCRIPTION` / `AUTH_FAILED` /
+  `PUSH_SERVICE_REJECTED` / `WORKER_UNREACHABLE` / `TEMPORARY_ERROR` —
+  stored in `PushEvents.metadata` (httpStatus + code only, never
+  endpoint/p256dh/authKey/secrets) and surfaced as a new "Last failure"
+  column in Admin → Notifications → Subscribers, and in the "Send Test
+  Notification" result text. This is what will make the *next* failure
+  (if any) instantly diagnosable instead of an opaque 0/0/0 or blind
+  failed/failed.
+- **Super Admin session now survives an ordinary page refresh
+  (protected):** the Google ID credential is saved to `sessionStorage` on
+  sign-in, restored on load only if its own `exp` claim (decoded
+  client-side, never trusted as authorization) hasn't passed, and a new
+  **Sign out** button clears it immediately. `requireAdmin()` on the Apps
+  Script side is **completely unchanged** — every privileged request is
+  still independently re-verified server-side (signature, audience,
+  allowlisted `gisupp@gmail.com`) on every single call; if the server ever
+  rejects a restored/cached token for any reason, the client immediately
+  drops the session and returns to the sign-in screen. No permanent
+  bypass token exists anywhere.
+- **Optional customer Google Identity linkage: left disabled.** Per this
+  task's own explicit gate, `HOJA_GOOGLE_CLIENT_ID`'s Google Cloud Console
+  configuration (authorized JavaScript origins for `hojaseeds.pk`, OAuth
+  consent screen branding) cannot be verified with any tool available in
+  this environment. No customer-facing "Continue with Google" UI was
+  added. **To enable later:** confirm in Google Cloud Console that this
+  OAuth client's authorized origins include `https://www.hojaseeds.pk`
+  and that the consent screen is correctly branded for Hoja Seeds, then
+  this can be revisited as its own additive task — it does not block or
+  relate to anything else in this module.
+- **Anonymous push remains fully supported (protected, unchanged):**
+  `Notification.permission`/`PushSubscription` never can and never do
+  expose a Chrome profile's name/email — nothing was added or attempted
+  here that would try. Every subscriber that hasn't (optionally, in the
+  future) linked a verified Google identity displays as anonymous by
+  visitorId only.
+- **Files changed:** `apps-script/Code.gs` (failure classification +
+  `lastFailure` surfacing), `js/admin.js` + `admin.html` (Admin session
+  persistence, Sign out, Last failure column), `tests/push.test.js`.
+
+---
+
 ## WEB PUSH: ROOT CAUSE FOUND + FIXED — REAL SUBSCRIBER PROVEN LIVE (HS-20260819-08)
 
 - **Root cause of "no notification / 0 attempted/accepted/failed", found by
