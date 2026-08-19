@@ -1187,8 +1187,12 @@ const Views = {
                <div class="advance-details" id="advanceDetails" style="display:${codAllowed ? "none" : "block"}">
                  <div class="free-delivery-progress" id="freeDeliveryProgress"></div>
                  <h4>Choose payment method</h4>
-                 <div class="advance-method-tabs" role="tablist" aria-label="Advance payment method">
+                 <div class="advance-method-tabs" id="advanceMethodTabs" role="tablist" aria-label="Advance payment method" style="display:${selectedAdvanceMethod ? "none" : ""}">
                    ${advanceMethods.map(method => `<button type="button" class="advance-method-tab${method.id === selectedAdvanceMethod ? " selected" : ""}" data-method="${method.id}" role="tab" aria-selected="${method.id === selectedAdvanceMethod}" aria-expanded="${method.id === selectedAdvanceMethod}" aria-controls="advanceMethodDetails" onclick="Views.selectAdvanceMethod('${method.id}')">${method.label}</button>`).join("") || `<p class="payment-restricted-note">No advance payment method is currently enabled. Please contact the store.</p>`}
+                 </div>
+                 <div class="advance-method-selected-bar" id="advanceMethodSelectedBar" style="display:${selectedAdvanceMethod ? "flex" : "none"}">
+                   <span class="advance-method-selected-label">Selected payment method: <strong id="advanceMethodSelectedName">${escapeHTML(selectedAdvanceMethod)}</strong></span>
+                   <button type="button" class="advance-method-change" onclick="Views.changeAdvanceMethod()" aria-controls="advanceMethodTabs">Change payment method</button>
                  </div>
                  <input type="hidden" id="o-advance-method" value="${selectedAdvanceMethod}">
                  <div id="advanceMethodDetails" role="tabpanel"></div>
@@ -1299,7 +1303,47 @@ const Views = {
     if (note) note.style.display = "block";
     const submitBtn = document.getElementById("submitBtn");
     if (submitBtn) submitBtn.style.display = "";
+    // HS-20260819-05: once a channel is chosen, hide the other two method
+    // buttons entirely (not just visually de-emphasize) and show a compact
+    // "Selected payment method: X / Change payment method" bar instead.
+    const tabs = document.getElementById("advanceMethodTabs");
+    if (tabs) tabs.style.display = "none";
+    const bar = document.getElementById("advanceMethodSelectedBar");
+    if (bar) bar.style.display = "flex";
+    const nameEl = document.getElementById("advanceMethodSelectedName");
+    if (nameEl) nameEl.textContent = method;
     this.renderAdvanceMethod(method);
+  },
+
+  // "Change payment method" -- collapses the selected-method view and
+  // restores all enabled method buttons so the customer can pick a
+  // different one. Clears the previously-selected channel and any typed
+  // reference so nothing can be submitted against the wrong channel.
+  changeAdvanceMethod() {
+    this._order.advanceMethod = "";
+    const input = document.getElementById("o-advance-method");
+    if (input) input.value = "";
+    const ref = document.getElementById("o-txn-ref");
+    if (ref) ref.value = "";
+    document.querySelectorAll(".advance-method-tab").forEach(button => {
+      button.classList.remove("selected");
+      button.setAttribute("aria-selected", "false");
+      button.setAttribute("aria-expanded", "false");
+    });
+    const tabs = document.getElementById("advanceMethodTabs");
+    if (tabs) tabs.style.display = "";
+    const bar = document.getElementById("advanceMethodSelectedBar");
+    if (bar) bar.style.display = "none";
+    const txnField = document.getElementById("advanceTxnRefField");
+    const note = document.getElementById("advanceNote");
+    if (txnField) txnField.style.display = "none";
+    if (note) note.style.display = "none";
+    const submitBtn = document.getElementById("submitBtn");
+    if (submitBtn) submitBtn.style.display = "none";
+    const container = document.getElementById("advanceMethodDetails");
+    if (container) container.innerHTML = `<p class="admin-muted">Select an enabled advance payment method.</p>`;
+    const first = document.querySelector(".advance-method-tab");
+    if (first) first.focus();
   },
 
   renderAdvanceMethod(method) {
