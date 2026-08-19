@@ -318,21 +318,30 @@ const Admin = {
       <div class="field"><label for="pt-visitor">Test subscriber</label>
         <select id="pt-visitor">${active.length ? active.map(s => `<option value="${escapeHTML(s.visitorId)}">${escapeHTML(s.visitorId)} (${escapeHTML(s.deviceInfo)})</option>`).join("") : `<option value="">No active subscribers yet</option>`}</select>
       </div>
-      <button class="btn btn-primary" type="button" ${active.length ? "" : "disabled"} onclick="Admin.sendPushTest()">Send Test Notification</button>
+      <button class="btn btn-primary" type="button" id="pushTestSendBtn" ${active.length ? "" : "disabled"} onclick="Admin.sendPushTest()">Send Test Notification</button>
       <span class="save-note" id="pushTestSendNote"></span>
       <p class="admin-muted">Sends "🌱 Hoja Seeds Test — Your browser notifications are working." to exactly one subscriber, bypassing frequency limits and quiet hours (a single manual test, not a marketing send). Required before any bulk campaign.</p>
     `;
   },
 
+  _testSendInFlight: false,
   async sendPushTest() {
+    if (this._testSendInFlight) return; // single-flight -- same rapid-click protection as sendCampaign
     const visitorId = document.getElementById("pt-visitor")?.value;
     const note = document.getElementById("pushTestSendNote");
+    const btn = document.getElementById("pushTestSendBtn");
     if (!visitorId) { note.textContent = "No test subscriber selected."; return; }
+    this._testSendInFlight = true;
+    if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = "Sending…"; }
     note.textContent = "Sending…";
     try {
       const result = await this.authorizedPost({ type: "pushTestSend", visitorId });
       note.textContent = result.ok ? "Sent — accepted by the push service." : `Not accepted: ${result.code || result.pushStatus}${result.httpStatus ? " (HTTP " + result.httpStatus + ")" : ""}.`;
     } catch (e) { note.textContent = e.message; }
+    finally {
+      this._testSendInFlight = false;
+      if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Send Test Notification"; }
+    }
   },
 
   renderPushSubscribers(items) {
@@ -347,18 +356,29 @@ const Admin = {
     document.getElementById("pushSubscribersContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Status</th><th>Visitor</th><th>Permission</th><th>Subscribed</th><th>Last seen</th><th>Device</th><th>Source</th><th>Last push</th><th>Last failure</th><th>Clicks</th><th>Lead</th><th>Order</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escapeHTML(r.subscriptionStatus)}</td><td class="mono">${escapeHTML(r.visitorId)}</td><td>${escapeHTML(r.permissionStatus)}</td><td>${escapeHTML(r.createdAt)}</td><td>${escapeHTML(r.lastSeenAt)}</td><td>${escapeHTML(r.deviceInfo)} · ${escapeHTML(r.browserInfo)}</td><td>${escapeHTML(r.utmSource)}</td><td>${escapeHTML(r.lastPushAt)}</td><td>${escapeHTML(r.lastFailure || "—")}</td><td>${escapeHTML(r.clickCount || 0)}</td><td>${escapeHTML(r.linkedLeadId)}</td><td>${escapeHTML(r.linkedOrderId)}</td></tr>`).join("") || `<tr><td colspan="12">No subscribers yet.</td></tr>`}</tbody></table></div>`;
   },
 
+  // Client-side single-flight guard (HS-20260819-13): which campaignIds
+  // currently have a Send in flight. Survives across renderPushCampaigns
+  // re-renders (loadDashboard calls it again after every completed send)
+  // so a rapid-click burst can never start a second logical send even if
+  // the row gets rebuilt mid-operation.
+  _sendInFlight: new Set(),
+
   renderPushCampaigns(items) {
     this.pushCampaigns = items;
     const actionsFor = c => {
+      const busy = this._sendInFlight.has(c.campaignId);
       const canSend = ["Draft", "Scheduled", "Sending"].indexOf(c.status) !== -1;
       const canPause = ["Sending", "Scheduled"].indexOf(c.status) !== -1;
       const canResume = c.status === "Paused";
+      if (busy) {
+        return `<button type="button" class="btn-text-secondary" disabled aria-busy="true">⏳ Sending…</button>`;
+      }
       return `<button type="button" class="btn-text-secondary" data-edit-campaign="${escapeHTML(c.campaignId)}">Edit</button> `
         + (canSend ? `<button type="button" class="btn-text-secondary" data-send-campaign="${escapeHTML(c.campaignId)}">Send</button> ` : "")
         + (canPause ? `<button type="button" class="btn-text-secondary" data-pause-campaign="${escapeHTML(c.campaignId)}">Pause</button> ` : "")
         + (canResume ? `<button type="button" class="btn-text-secondary" data-resume-campaign="${escapeHTML(c.campaignId)}">Resume</button>` : "");
     };
-    document.getElementById("pushCampaignsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Title</th><th>Audience</th><th>Status</th><th>Attempted</th><th>Accepted</th><th>Failed</th><th>Clicked</th><th>Recovered</th><th></th></tr></thead><tbody>${items.map(c => `<tr><td>${escapeHTML(c.title)}<br><span class="admin-muted">${escapeHTML(c.body)}</span></td><td>${escapeHTML(c.audience)}</td><td>${escapeHTML(c.status)}</td><td>${escapeHTML(c.attempted || 0)}</td><td>${escapeHTML(c.accepted || 0)}</td><td>${escapeHTML(c.failed || 0)}</td><td>${escapeHTML(c.clicked || 0)}</td><td>${c.recoveredLeads || 0} leads / ${c.recoveredOrders || 0} orders / Rs. ${c.recoveredRevenue || 0}</td><td>${actionsFor(c)}</td></tr>`).join("") || `<tr><td colspan="9">No campaigns yet.</td></tr>`}</tbody></table></div>`;
+    document.getElementById("pushCampaignsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Title</th><th>Audience</th><th>Status</th><th>Attempted</th><th>Accepted</th><th>Failed</th><th>Clicked</th><th>Recovered</th><th></th></tr></thead><tbody>${items.map(c => `<tr data-campaign-row="${escapeHTML(c.campaignId)}"><td>${escapeHTML(c.title)}<br><span class="admin-muted">${escapeHTML(c.body)}</span></td><td>${escapeHTML(c.audience)}</td><td>${escapeHTML(c.status)}</td><td>${escapeHTML(c.attempted || 0)}</td><td>${escapeHTML(c.accepted || 0)}</td><td>${escapeHTML(c.failed || 0)}</td><td>${escapeHTML(c.clicked || 0)}</td><td>${c.recoveredLeads || 0} leads / ${c.recoveredOrders || 0} orders / Rs. ${c.recoveredRevenue || 0}</td><td>${actionsFor(c)}</td></tr>`).join("") || `<tr><td colspan="9">No campaigns yet.</td></tr>`}</tbody></table></div><p class="admin-muted" id="pushSendStatus"></p>`;
     document.querySelectorAll("[data-edit-campaign]").forEach(btn => btn.addEventListener("click", () => this.editCampaign(btn.dataset.editCampaign)));
     document.querySelectorAll("[data-send-campaign]").forEach(btn => btn.addEventListener("click", () => this.sendCampaign(btn.dataset.sendCampaign)));
     document.querySelectorAll("[data-pause-campaign]").forEach(btn => btn.addEventListener("click", () => this.pauseCampaign(btn.dataset.pauseCampaign)));
@@ -366,12 +386,20 @@ const Admin = {
   },
 
   async pauseCampaign(campaignId) {
-    try { await this.authorizedPost({ type: "pushCampaignPause", campaignId }); await this.loadDashboard(); }
+    if (this._sendInFlight.has(campaignId)) return;
+    this._sendInFlight.add(campaignId);
+    this.renderPushCampaigns(this.pushCampaigns);
+    try { await this.authorizedPost({ type: "pushCampaignPause", campaignId }); }
     catch (error) { alert(error.message); } // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
+    finally { this._sendInFlight.delete(campaignId); await this.loadDashboard(); }
   },
   async resumeCampaign(campaignId) {
-    try { await this.authorizedPost({ type: "pushCampaignResume", campaignId }); await this.loadDashboard(); }
+    if (this._sendInFlight.has(campaignId)) return;
+    this._sendInFlight.add(campaignId);
+    this.renderPushCampaigns(this.pushCampaigns);
+    try { await this.authorizedPost({ type: "pushCampaignResume", campaignId }); }
     catch (error) { alert(error.message); } // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
+    finally { this._sendInFlight.delete(campaignId); await this.loadDashboard(); }
   },
 
   pushTemplates: {
@@ -446,18 +474,41 @@ const Admin = {
   // the Admin tab forever.
   MAX_SEND_ITERATIONS: 20,
   async sendCampaign(campaignId) {
+    // Client-side single-flight (HS-20260819-13): a rapid double-click, or
+    // 10 rapid clicks, all land here before the first request can finish --
+    // this guard makes every one after the first a silent no-op. The
+    // server holds its own short-lived lock too (see PUSH_BUSY), so even a
+    // second admin tab clicking the same campaign at the same instant
+    // can't cause two concurrent sends.
+    if (this._sendInFlight.has(campaignId)) return;
+    this._sendInFlight.add(campaignId);
+    this.renderPushCampaigns(this.pushCampaigns); // immediate busy state, no network round-trip
+    const status = document.getElementById("pushSendStatus");
     let iterations = 0;
     try {
       let result = await this.authorizedPost({ type: "pushCampaignSend", campaignId });
-      if (result.quietHours) { alert(result.message); return; } // eslint-disable-line no-alert
+      if (result.quietHours) {
+        this._sendInFlight.delete(campaignId);
+        await this.loadDashboard();
+        alert(result.message); // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
+        return;
+      }
       while (result.status === "Sending" && result.remaining > 0 && iterations < this.MAX_SEND_ITERATIONS) {
         iterations++;
+        if (status) status.textContent = `Sending… processed ${result.batch.attempted}, accepted ${result.batch.accepted}, failed ${result.batch.failed} (${result.remaining} remaining).`;
         await new Promise(resolve => setTimeout(resolve, 500));
         result = await this.authorizedPost({ type: "pushCampaignSend", campaignId });
       }
-      await this.loadDashboard();
+      this._sendInFlight.delete(campaignId);
+      await this.loadDashboard(); // re-fetches + rerenders this tab only -- no page reload, session untouched
+      const summary = document.getElementById("pushSendStatus");
+      if (summary) summary.textContent = `Campaign processed: ${result.batch.accepted} accepted, ${result.batch.failed} failed.`;
     } catch (error) {
-      alert(error.message); // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
+      this._sendInFlight.delete(campaignId);
+      this.renderPushCampaigns(this.pushCampaigns); // restore the button immediately, don't leave it stuck busy
+      const failNote = document.getElementById("pushSendStatus");
+      if (failNote) failNote.textContent = `Send failed: ${error.message}`;
+      else alert(error.message); // eslint-disable-line no-alert -- fallback if the status area isn't in the DOM
     }
   },
   renderAudit(items) {

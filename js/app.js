@@ -384,6 +384,23 @@ const Analytics = {
   hasGA() { return typeof window.gtag === "function" && !!CONFIG.GA4_MEASUREMENT_ID; },
   hasMeta() { return typeof window.fbq === "function" && !!CONFIG.META_PIXEL_ID; },
 
+  // Purchase-dedupe (HS-20260819-13): a small rolling list of Order IDs
+  // this browser has already fired Purchase for, so a bfcache restore or
+  // any other unexpected re-entry into the confirmation path can never
+  // double-fire the same Order ID. Capped so it can't grow unbounded.
+  PURCHASE_LOG_KEY: "hoja_purchase_fired",
+  hasFiredPurchase(orderId) {
+    try { return (JSON.parse(localStorage.getItem(this.PURCHASE_LOG_KEY)) || []).includes(orderId); }
+    catch { return false; }
+  },
+  markPurchaseFired(orderId) {
+    try {
+      const log = (JSON.parse(localStorage.getItem(this.PURCHASE_LOG_KEY)) || []).filter(id => id !== orderId);
+      log.push(orderId);
+      localStorage.setItem(this.PURCHASE_LOG_KEY, JSON.stringify(log.slice(-20)));
+    } catch { /* best-effort only */ }
+  },
+
   gaItem(p, qty) {
     return { item_id: p.id, item_name: p.name, item_category: (CATEGORY_META[p.cat] || {}).label || p.cat, price: p.price, quantity: qty || 1 };
   },
@@ -1525,6 +1542,13 @@ const Views = {
     }
     request.idempotencyKey = this._order.idempotencyKey;
 
+    // Written just before the request goes out, cleared on any definitive
+    // response below (HS-20260819-13). If the tab closes/backgrounds
+    // between here and the response, the next visit's boot-time
+    // reconciliation can find out whether this exact idempotencyKey
+    // actually went through, without ever generating a second key.
+    PendingOrder.save(request.idempotencyKey, paymentMethod);
+
     const result = await Orders.submit(request);
     if (result.ok) {
       const confirmedLines = result.items.map(item => {
@@ -1535,15 +1559,26 @@ const Views = {
           line: item.lineTotal
         };
       });
+      PendingOrder.clear();
       this.showOrderConfirmation(result);
       Cart.clearSubmitted(result.items);
       this._order = null;
-      try {
-        Analytics.purchase(result.orderId, result, confirmedLines);
-      } catch (error) {
-        console.error("Purchase analytics failed:", error);
+      // Dedupe against a rare bfcache/reconciliation replay firing twice
+      // for the same Order ID (HS-20260819-13) -- Purchase must fire
+      // exactly once per real order.
+      if (!Analytics.hasFiredPurchase(result.orderId)) {
+        try {
+          Analytics.purchase(result.orderId, result, confirmedLines);
+          Analytics.markPurchaseFired(result.orderId);
+        } catch (error) {
+          console.error("Purchase analytics failed:", error);
+        }
       }
     } else {
+      // A definitive server response (even a rejection) means we know the
+      // true state -- only a genuine network/timeout failure leaves real
+      // uncertainty worth keeping the pending marker for.
+      if (result.error?.code !== "ORDER_TIMEOUT" && result.error?.code !== "ORDER_NETWORK_ERROR") PendingOrder.clear();
       this.showOrderError(status, result.error?.message || "Couldn't place the order. Please try again shortly.");
       inlineBtn.disabled = false;
       this.updateDeliveryFee(); // restores the method-specific submit-button copy
@@ -1629,6 +1664,47 @@ const Views = {
   }
 };
 
+// ---- Pending-order marker (HS-20260819-13) ----
+// A minimal, non-PII local record written just before the final order
+// POST and cleared on any definitive response. Its only purpose: if the
+// tab closes/backgrounds between the click and the response, the next
+// visit can ask the server "did idempotencyKey X actually go through?"
+// (checkOrderStatus) instead of the customer unknowingly resubmitting
+// with a brand-new key and risking a second real order. Never stores
+// name/phone/address/items -- only what's needed to look the order up
+// and show a generic "which payment method" hint in the reconciliation
+// banner.
+const PendingOrder = {
+  KEY: "hoja_pending_order",
+  save(idempotencyKey, paymentMethod) {
+    try { localStorage.setItem(this.KEY, JSON.stringify({ idempotencyKey, paymentMethod, ts: Date.now() })); }
+    catch { /* storage unavailable -- reconciliation just won't be available this session */ }
+  },
+  clear() { try { localStorage.removeItem(this.KEY); } catch { /* ignore */ } },
+  get() {
+    try { return JSON.parse(localStorage.getItem(this.KEY)); } catch { return null; }
+  },
+  // Best-effort, runs once at boot. Never blocks rendering, never retries
+  // automatically, never resubmits -- only asks the server for a status
+  // and shows a small confirmation banner if the order is found.
+  async reconcileOnBoot() {
+    const pending = this.get();
+    if (!pending || !pending.idempotencyKey) return;
+    const result = await Orders.submit({ type: "orderStatus", idempotencyKey: pending.idempotencyKey }).catch(() => null);
+    this.clear(); // either way, this check is one-shot -- don't re-ask forever
+    if (result && result.ok && result.confirmed && result.orderId) {
+      // Deliberately does NOT fire a Purchase analytics event here --
+      // checkOrderStatus returns only confirmed/orderId (no value/items,
+      // by design, to keep the endpoint PII-minimal), and firing Purchase
+      // with fabricated or missing value data would corrupt analytics,
+      // which is worse than the rare edge case of an under-reported
+      // Purchase when a tab closed before the original response arrived.
+      Toast.show(`Good news — your earlier order (${result.orderId}) went through successfully.`);
+      Cart.clear();
+    }
+  }
+};
+
 // ---- Order/contact submission (Google Sheet, with local fallback log) ----
 const Orders = {
   async submit(payload) {
@@ -1645,11 +1721,22 @@ const Orders = {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
+      const body = JSON.stringify(payload);
+      // keepalive (HS-20260819-13): lets the browser finish sending the
+      // final order POST even if the tab closes/backgrounds right after
+      // Confirm Order is clicked, instead of the request being aborted
+      // mid-flight. Only for the actual order submission (not every
+      // payload type), and only when the body is safely under the
+      // browser's ~64KiB keepalive limit -- falls back to a normal
+      // request otherwise rather than risk a silently-dropped send.
+      const bodySize = typeof Blob !== "undefined" ? new Blob([body]).size : body.length;
+      const useKeepalive = payload.type === "order" && bodySize < 60000;
       const response = await fetch(CONFIG.SHEET_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
+        body,
+        signal: controller.signal,
+        ...(useKeepalive ? { keepalive: true } : {})
       });
       if (!response.ok) throw new Error(`Order service returned HTTP ${response.status}.`);
       const result = await response.json();
@@ -1768,4 +1855,6 @@ document.getElementById("navToggle").addEventListener("click", () => {
       Router.go(deepLinkView);
     }
   }
+  // Best-effort, never blocks first paint or any of the above (HS-20260819-13).
+  PendingOrder.reconcileOnBoot().catch(() => {});
 })();

@@ -62,6 +62,7 @@ function doPost(e) {
     ensureAdminProperties();
     const payload = JSON.parse(e.postData.contents);
     if (payload.type === "order") return jsonResponse(submitOrder(payload));
+    if (payload.type === "orderStatus") return jsonResponse(checkOrderStatus(payload));
     if (payload.type === "saveLead") return jsonResponse(saveLead(payload));
     if (payload.type === "updateLeadStatus") return jsonResponse(updateLeadStatus(payload));
     if (payload.type === "pushSubscription") return jsonResponse(savePushSubscription(payload));
@@ -257,6 +258,25 @@ function submitOrder(payload) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Pending-order reconciliation (HS-20260819-13): if a customer's tab
+// closes/backgrounds between clicking Confirm Order and receiving the
+// response, the client can ask "did this idempotencyKey actually go
+// through?" on its next visit, without resubmitting anything and without
+// generating a second key. Read-only, no lock needed (orderId is a
+// deterministic SHA-256 of idempotencyKey, so a match is unambiguous).
+// Deliberately minimal response -- confirmed/orderId only, never
+// name/phone/address/items/amounts, so a leaked idempotencyKey (a random
+// client-generated UUID, not guessable) still exposes nothing sensitive.
+function checkOrderStatus(payload) {
+  const idempotencyKey = requiredText(payload.idempotencyKey, "Idempotency key", 16, 100);
+  if (!/^[A-Za-z0-9_-]+$/.test(idempotencyKey)) {
+    throw new OrderError("INVALID_IDEMPOTENCY_KEY", "The order request key is invalid.");
+  }
+  const orderId = generateOrderId(idempotencyKey);
+  const existing = findOrderById(orderId);
+  return { ok: true, confirmed: Boolean(existing), orderId: existing ? orderId : null };
 }
 
 function requireLoadTestAuthorization(payload) {
@@ -1448,8 +1468,29 @@ function savePushCampaign(campaign, adminEmail) {
 // and the admin (or the Admin UI's auto-continue loop) calls Send again
 // to process the next batch. There is no automatic time-driven scheduler
 // for "Scheduled" campaigns -- see docs/PROJECT_STATE.md.
+// Server-side single-flight guard (HS-20260819-13): client-side button
+// disabling is not enough on its own (rapid double-click races, retries
+// after a slow response, two admin tabs) -- a short CacheService lock per
+// campaignId means a second concurrent sendPushCampaign call for the same
+// campaign fails fast with PUSH_BUSY instead of racing the first call's
+// batch/counter updates. 25s covers one realistic Apps Script batch
+// round-trip; the lock is always released in the finally block below.
 function sendPushCampaign(campaignId, adminEmail) {
   const id = requiredText(campaignId, "Campaign ID", 8, 100);
+  const cache = CacheService.getScriptCache();
+  const lockKey = "push_sending_" + id;
+  if (cache.get(lockKey)) {
+    throw new OrderError("PUSH_BUSY", "This campaign is already being sent. Please wait for it to finish.");
+  }
+  cache.put(lockKey, "1", 25);
+  try {
+    return sendPushCampaignLocked(id, adminEmail);
+  } finally {
+    cache.remove(lockKey);
+  }
+}
+
+function sendPushCampaignLocked(id, adminEmail) {
   const props = PropertiesService.getScriptProperties();
   const workerUrl = props.getProperty("PUSH_WORKER_URL");
   const workerSecret = props.getProperty("PUSH_SERVER_SECRET");
@@ -1763,6 +1804,18 @@ function computeAudienceVisitorSet(audience) {
 // "test_sent" event rather than touching any campaign's counters.
 function pushTestSend(payload, adminEmail) {
   const visitorId = requiredText(payload.visitorId, "Visitor ID", 16, 100);
+  const cache = CacheService.getScriptCache();
+  const lockKey = "push_test_sending_" + visitorId;
+  if (cache.get(lockKey)) throw new OrderError("PUSH_BUSY", "A test send to this subscriber is already in progress.");
+  cache.put(lockKey, "1", 15);
+  try {
+    return pushTestSendLocked(payload, visitorId, adminEmail);
+  } finally {
+    cache.remove(lockKey);
+  }
+}
+
+function pushTestSendLocked(payload, visitorId, adminEmail) {
   const props = PropertiesService.getScriptProperties();
   const workerUrl = props.getProperty("PUSH_WORKER_URL");
   const workerSecret = props.getProperty("PUSH_SERVER_SECRET");

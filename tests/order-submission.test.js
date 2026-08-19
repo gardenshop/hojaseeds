@@ -53,7 +53,7 @@ function createBackend(products, settings, auth = {}) {
     }
   });
   const code = fs.readFileSync(path.join(root, "apps-script", "Code.gs"), "utf8");
-  vm.runInContext(`${code}\nthis.__api = { doPost, submitOrder, buildAuthoritativeOrder, safeSheetText };`, context);
+  vm.runInContext(`${code}\nthis.__api = { doPost, submitOrder, checkOrderStatus, buildAuthoritativeOrder, safeSheetText };`, context);
   return { api: context.__api, rows, properties, getLockCount: () => lockCount };
 }
 
@@ -530,9 +530,35 @@ async function frontendTests() {
   scripts.forEach((script, index) => assert.doesNotThrow(() => new vm.Script(script), `standalone script ${index + 1} parses`));
 }
 
+function orderReconciliationTests() {
+  // HS-20260819-13: pending-order reconciliation lookup -- confirms a
+  // successful order without resubmitting, using the SAME idempotencyKey,
+  // and never leaks name/phone/address/items in the response.
+  {
+    const { api } = createBackend(products(), rules);
+    const req = order({ items: [{ productId: "fert-500", quantity: 1 }] });
+    const before = api.checkOrderStatus({ idempotencyKey: req.idempotencyKey });
+    assert.equal(before.confirmed, false, "unknown idempotencyKey reports not confirmed");
+    assert.equal(before.orderId, null);
+
+    const result = api.submitOrder(req);
+    const after = api.checkOrderStatus({ idempotencyKey: req.idempotencyKey });
+    assert.equal(after.confirmed, true, "a real order is found by its idempotencyKey after the fact");
+    assert.equal(after.orderId, result.orderId, "reconciliation returns the SAME order ID, never a new one");
+    assert.equal(Object.keys(after).sort().join(","), "confirmed,ok,orderId", "response exposes nothing beyond confirmed/orderId -- no name/phone/address/items");
+  }
+  {
+    const { api } = createBackend(products(), rules);
+    assert.throws(() => api.checkOrderStatus({ idempotencyKey: "short" }), err => err.code === "INVALID_FIELD", "too-short key rejected");
+    assert.throws(() => api.checkOrderStatus({ idempotencyKey: "not a valid key with spaces!!" }), err => err.code === "INVALID_IDEMPOTENCY_KEY", "malformed-but-long-enough key rejected");
+  }
+  console.log("PASS: order reconciliation tests");
+}
+
 (async () => {
   await backendTests();
   await frontendTests();
+  orderReconciliationTests();
   console.log("PASS: order submission and regression tests");
 })().catch(error => {
   console.error(error);

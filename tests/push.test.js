@@ -40,6 +40,12 @@ function createBackend({ pushWorkerUrl = null, pushServerSecret = null, fetchAll
   // override fetchAllResponder to simulate expired (410) / temporary
   // failures without ever making a real network call.
   const respond = fetchAllResponder || (() => ({ pushStatus: "accepted" }));
+  const cacheMap = new Map();
+  const cacheStore = {
+    get: key => cacheMap.get(key) || null,
+    put: (key, value) => cacheMap.set(key, value),
+    remove: key => cacheMap.delete(key)
+  };
 
   const context = vm.createContext({
     console,
@@ -77,6 +83,7 @@ function createBackend({ pushWorkerUrl = null, pushServerSecret = null, fetchAll
       formatDate: () => nowKarachiHHMM
     },
     ScriptApp: { getService: () => ({ getUrl: () => "https://example.test/exec" }) },
+    CacheService: { getScriptCache: () => cacheStore },
     ContentService: { MimeType: { JSON: "application/json" }, createTextOutput: text => ({ text, setMimeType() { return this; } }) },
     UrlFetchApp: {
       fetch: () => { const r = respond(); return { getResponseCode: () => r.httpStatus || 200, getContentText: () => JSON.stringify(r) }; },
@@ -85,7 +92,7 @@ function createBackend({ pushWorkerUrl = null, pushServerSecret = null, fetchAll
   });
   const code = fs.readFileSync(path.join(root, "apps-script", "Code.gs"), "utf8");
   vm.runInContext(`${code}\nthis.__api = { savePushSubscription, logPushEvent, savePushCampaign, sendPushCampaign, pushTestSend, setPushCampaignPause, computeEligibleSubscriptions, buildPushDashboard, readPushSubscriptionsSafe, saveLead, submitOrder, updateSettings, getSettings, classifyWorkerResponse, OrderError };`, context);
-  return { api: context.__api, rows };
+  return { api: context.__api, rows, cacheMap };
 }
 
 function visitorId() { return "visitor-test-" + Math.random().toString(36).slice(2, 10); }
@@ -307,6 +314,23 @@ function visitorId() { return "visitor-test-" + Math.random().toString(36).slice
   assert.strictEqual(api.classifyWorkerResponse(mk(401, { error: "UNAUTHORIZED" })).code, "AUTH_FAILED");
   assert.strictEqual(api.classifyWorkerResponse(mk(400, { error: "INVALID_SUBSCRIPTION_ENDPOINT" })).code, "PUSH_SERVICE_REJECTED");
   assert.strictEqual(api.classifyWorkerResponse(mk(502, {})).code, "TEMPORARY_ERROR");
+})();
+
+(function concurrentSendCampaignRejectedServerSide() {
+  // HS-20260819-13: simulates a second concurrent sendPushCampaign call
+  // for the same campaign (e.g. two admin tabs, or a client-side race the
+  // button-disabling missed) by pre-occupying the same cache lock key the
+  // real function uses -- proves the server-side guard exists
+  // independently of client-side button disabling.
+  const { api, rows, cacheMap } = createBackend({ pushWorkerUrl: "https://worker.test/", pushServerSecret: "s3cret" });
+  const vid = visitorId();
+  api.savePushSubscription({ visitorId: vid, permissionStatus: "granted", subscription: { endpoint: "https://push.example/a", p256dh: "x".repeat(30), auth: "y".repeat(16) } });
+  const created = api.savePushCampaign({ title: "Gift Seeds", body: "Free gift seeds this week.", targetUrl: "https://www.hojaseeds.pk/", audience: "all_active" }, "admin@hojaseeds.pk");
+  cacheMap.set("push_sending_" + created.campaignId, "1");
+  assert.throws(() => api.sendPushCampaign(created.campaignId, "admin@hojaseeds.pk"), err => err.code === "PUSH_BUSY", "a campaign already being sent rejects a concurrent call instead of double-processing");
+  cacheMap.delete("push_sending_" + created.campaignId);
+  const result = api.sendPushCampaign(created.campaignId, "admin@hojaseeds.pk");
+  assert.strictEqual(result.batch.attempted, 1, "once the lock clears, sending works normally");
 })();
 
 (function pushSettingsValidateRanges() {

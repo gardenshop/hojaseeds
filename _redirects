@@ -1,0 +1,8 @@
+# HS-20260819-13: canonicalize to www.hojaseeds.pk.
+# Notification.permission and PushSubscription are per-origin -- with
+# both hojaseeds.pk and www.hojaseeds.pk previously serving 200 directly
+# (no redirect), a customer already granted on one saw "default" again on
+# the other, causing the soft opt-in card to reappear confusingly. A
+# single canonical origin fixes this at the root, no JS change needed for
+# this part.
+https://hojaseeds.pk/*  https://www.hojaseeds.pk/:splat  301!

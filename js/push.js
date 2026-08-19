@@ -66,12 +66,18 @@ const PushGrowth = {
   },
 
   init() {
-    if (!this.supported() || !this.eligibleForSoftPrompt()) return;
+    if (!this.supported()) return;
+    // Reconcile runs on every load regardless of eligibility (HS-20260819-13:
+    // previously nested inside the eligibleForSoftPrompt() gate, so it
+    // never ran once permission was already "granted" -- exactly the
+    // customers who most need their lastSeen/subscription kept in sync,
+    // silently, with zero UI and zero native prompt).
+    this.reconcile();
+    if (!this.eligibleForSoftPrompt()) return;
     // First offer: 3-5s after useful content is visible (called once from
     // the Home render bootstrap, not on every route change).
     setTimeout(() => this.showSoftPrompt("first"), 3000 + Math.floor(Math.random() * 2000));
     this.armSecondOpportunity();
-    this.reconcile();
   },
 
   // Exit-intent (desktop) + a generous inactivity fallback (works on
@@ -98,16 +104,31 @@ const PushGrowth = {
     setTimeout(tryShowSecond, 45000); // mobile-safe inactivity fallback
   },
 
+  // Runs on every page load, permission-decided or not. Never shows any
+  // UI and never calls Notification.requestPermission() -- decision
+  // contract (HS-20260819-13):
+  //   granted + active subscription -> just re-report lastSeen/status
+  //   granted + NO subscription     -> silently re-subscribe (this browser
+  //                                    already said yes; PushManager.subscribe()
+  //                                    with permission already granted never
+  //                                    shows a native prompt)
+  //   denied                        -> report status only, never re-ask
+  //   default                       -> do nothing here (soft prompt owns that)
   reconcile() {
-    if (!("serviceWorker" in navigator)) return;
+    if (!("serviceWorker" in navigator) || !this.supported()) return;
+    if (Notification.permission === "default") return;
     navigator.serviceWorker.getRegistration("/push-sw.js").then(reg => {
-      if (!reg) return;
+      if (Notification.permission === "denied") { this.reportSubscription("denied", null); return; }
+      if (!reg) {
+        // Permission already granted but this browser/profile has no
+        // registration at all yet (e.g. a fresh device, or the SW
+        // registration was cleared) -- recover silently, no native prompt.
+        if (Notification.permission === "granted") this.subscribe();
+        return;
+      }
       reg.pushManager.getSubscription().then(sub => {
-        if (Notification.permission === "granted" && sub) {
-          this.reportSubscription("granted", sub);
-        } else if (Notification.permission === "denied") {
-          this.reportSubscription("denied", null);
-        }
+        if (sub) { this.reportSubscription("granted", sub); return; }
+        if (Notification.permission === "granted") this.subscribe(); // silent recovery, no prompt
       }).catch(() => {});
     }).catch(() => {});
   },
