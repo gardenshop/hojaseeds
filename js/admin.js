@@ -13,11 +13,16 @@ const Admin = {
   activeTab: "dashboard",
   tabs: [
     ["dashboard", "Dashboard"], ["products", "Products"], ["orders", "Orders"],
-    ["customers", "Customers"], ["leads", "Checkout Leads"], ["delivery", "Delivery & Payments"], ["analytics", "Analytics"],
+    ["customers", "Customers"], ["leads", "Checkout Leads"], ["notifications", "Notifications"],
+    ["delivery", "Delivery & Payments"], ["analytics", "Analytics"],
     ["settings", "Store Settings"], ["audit", "Audit Log"]
   ],
   leadFilter: "all",
   leads: [],
+  pushSubFilter: "all",
+  pushSubs: [],
+  pushCampaigns: [],
+  editingCampaignId: "",
 
   login(response) {
     if (!response || !response.credential) return this.showError("Google sign-in did not return a credential.");
@@ -119,8 +124,12 @@ const Admin = {
       read("orders", result => { this.renderOrders(result.items || []); this.renderCustomers(result.items || []); }, ["ordersContent", "customersContent"]),
       read("contacts", result => this.renderContacts(result.items || []), []),
       read("audit", result => this.renderAudit(result.items || []), ["auditContent"]),
-      read("leads", result => this.renderLeads(result.items || []), ["leadsContent"])
+      read("leads", result => this.renderLeads(result.items || []), ["leadsContent"]),
+      read("pushDashboard", result => this.renderPushDashboard(result.summary || {}), ["pushDashboardContent"]),
+      read("pushSubscriptions", result => this.renderPushSubscribers(result.items || []), ["pushSubscribersContent"]),
+      read("pushCampaigns", result => this.renderPushCampaigns(result.items || []), ["pushCampaignsContent"])
     ]);
+    this.renderCampaignForm();
   },
 
   settings() {
@@ -184,6 +193,117 @@ const Admin = {
     }
     const rows = this.leadFilter === "all" ? leads : leads.filter(l => (l.status || "NEW") === this.leadFilter);
     document.getElementById("leadsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Lead</th><th>Phone</th><th>City</th><th>Cart value</th><th>Last step</th><th>Reason</th><th>Status</th><th>Created</th><th>Converted Order</th></tr></thead><tbody>${rows.map(l => `<tr><td>${escapeHTML(l.fullName)}</td><td>${escapeHTML(l.phone)}</td><td>${escapeHTML(l.city)}</td><td>Rs. ${escapeHTML(l.estimatedOrderTotal)}</td><td>${escapeHTML(l.lastStep)}</td><td>${escapeHTML(l.abandonReason)}</td><td>${escapeHTML(l.status || "NEW")}</td><td>${escapeHTML(l.createdAt)}</td><td>${escapeHTML(l.convertedOrderId)}</td></tr>`).join("") || `<tr><td colspan="9">No leads yet.</td></tr>`}</tbody></table></div>`;
+  },
+
+  // ── Notifications (HS-20260819-03) — Super Admin only, same adminRead
+  // auth boundary as every other resource. Subscriber rows never include
+  // the raw push endpoint/keys -- the backend already strips them.
+  renderPushDashboard(s) {
+    const metrics = [
+      ["Eligible visitors", s.eligibleVisitors], ["Prompt impressions", s.promptImpressions],
+      ["Enable clicks", s.enableClicks], ["Permission granted", s.permissionGranted],
+      ["Permission denied", s.permissionDenied], ["Native default", s.permissionDefault],
+      ["Active subscribers", s.activeSubscribers], ["Unsubscribed", s.unsubscribed],
+      ["Expired", s.expiredSubscriptions], ["Opt-in rate", (s.optInRate || 0) + "%"],
+      ["Campaigns", s.campaigns], ["Push attempts", s.pushAttempted],
+      ["Accepted by push service", s.pushAccepted], ["Failed", s.pushFailed],
+      ["Clicks", s.pushClicked], ["Recovered Leads", s.recoveredLeads],
+      ["Recovered Orders", s.recoveredOrders], ["Recovered revenue (Rs.)", s.recoveredRevenue]
+    ];
+    document.getElementById("pushDashboardContent").innerHTML = `<div class="admin-metrics">${metrics.map(([label, value]) => `<div class="admin-metric"><strong>${escapeHTML(value ?? 0)}</strong><span>${label}</span></div>`).join("")}</div><p class="admin-muted">"Accepted by push service" reflects provider acceptance only — this project never labels a push "Delivered" without a real provider delivery receipt, which is not yet configured (see Analytics tab).</p>`;
+  },
+
+  renderPushSubscribers(items) {
+    this.pushSubs = items;
+    const filters = [["all", "All"], ["active", "Active"], ["denied", "Denied"], ["default", "Default"], ["unsubscribed", "Unsubscribed"], ["expired", "Expired"]];
+    const bar = document.getElementById("pushSubFilters");
+    if (bar) {
+      bar.innerHTML = filters.map(([id, label]) => `<button class="admin-tab ${id === this.pushSubFilter ? "active" : ""}" type="button" data-sub-filter="${id}">${label}</button>`).join("");
+      bar.querySelectorAll("[data-sub-filter]").forEach(btn => btn.addEventListener("click", () => { this.pushSubFilter = btn.dataset.subFilter; this.renderPushSubscribers(this.pushSubs); }));
+    }
+    const rows = this.pushSubFilter === "all" ? items : items.filter(i => (i.subscriptionStatus || "") === this.pushSubFilter || (this.pushSubFilter === "default" && i.permissionStatus === "default"));
+    document.getElementById("pushSubscribersContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Status</th><th>Visitor</th><th>Permission</th><th>Subscribed</th><th>Last seen</th><th>Device</th><th>Source</th><th>Last push</th><th>Clicks</th><th>Lead</th><th>Order</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escapeHTML(r.subscriptionStatus)}</td><td class="mono">${escapeHTML(r.visitorId)}</td><td>${escapeHTML(r.permissionStatus)}</td><td>${escapeHTML(r.createdAt)}</td><td>${escapeHTML(r.lastSeenAt)}</td><td>${escapeHTML(r.deviceInfo)} · ${escapeHTML(r.browserInfo)}</td><td>${escapeHTML(r.utmSource)}</td><td>${escapeHTML(r.lastPushAt)}</td><td>${escapeHTML(r.clickCount || 0)}</td><td>${escapeHTML(r.linkedLeadId)}</td><td>${escapeHTML(r.linkedOrderId)}</td></tr>`).join("") || `<tr><td colspan="11">No subscribers yet.</td></tr>`}</tbody></table></div>`;
+  },
+
+  renderPushCampaigns(items) {
+    this.pushCampaigns = items;
+    document.getElementById("pushCampaignsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Title</th><th>Audience</th><th>Status</th><th>Attempted</th><th>Accepted</th><th>Failed</th><th>Clicked</th><th>Recovered</th><th></th></tr></thead><tbody>${items.map(c => `<tr><td>${escapeHTML(c.title)}<br><span class="admin-muted">${escapeHTML(c.body)}</span></td><td>${escapeHTML(c.audience)}</td><td>${escapeHTML(c.status)}</td><td>${escapeHTML(c.attempted || 0)}</td><td>${escapeHTML(c.accepted || 0)}</td><td>${escapeHTML(c.failed || 0)}</td><td>${escapeHTML(c.clicked || 0)}</td><td>${c.recoveredLeads || 0} leads / ${c.recoveredOrders || 0} orders / Rs. ${c.recoveredRevenue || 0}</td><td><button type="button" class="btn-text-secondary" data-edit-campaign="${escapeHTML(c.campaignId)}">Edit</button> <button type="button" class="btn-text-secondary" data-send-campaign="${escapeHTML(c.campaignId)}">Send</button></td></tr>`).join("") || `<tr><td colspan="9">No campaigns yet.</td></tr>`}</tbody></table></div>`;
+    document.querySelectorAll("[data-edit-campaign]").forEach(btn => btn.addEventListener("click", () => this.editCampaign(btn.dataset.editCampaign)));
+    document.querySelectorAll("[data-send-campaign]").forEach(btn => btn.addEventListener("click", () => this.sendCampaign(btn.dataset.sendCampaign)));
+  },
+
+  pushTemplates: {
+    gift: { title: "🎁 Free Gift Seeds Offer", body: "Complete your Hoja Seeds order and check today's gift seed offer." },
+    delivery: { title: "🚚 Free Delivery Offer", body: "Your Hoja Seeds cart is waiting. Check today's delivery offer." },
+    seasonal: { title: "🌱 Time to Sow", body: "See seeds recommended for this month's growing season." },
+    newarrivals: { title: "✨ New Seeds Have Arrived", body: "See the latest Hoja Seeds collection." },
+    savedcart: { title: "🛒 Your Seeds Are Still Saved", body: "Return to your saved cart and continue your order." },
+    cod: { title: "💵 Prefer Cash on Delivery?", body: "Return to Hoja Seeds and see available COD options." }
+  },
+
+  renderCampaignForm(draft) {
+    const d = draft || {};
+    const audiences = ["all_active", "cart_abandoned", "lead_not_converted", "cod_requested", "interest_vegetables", "interest_flowers", "interest_mix", "interest_fertilizer", "previous_buyers"];
+    document.getElementById("pushCampaignForm").innerHTML = `
+      <div class="field"><label for="pcTemplate">Template</label><select id="pcTemplate"><option value="">Custom</option>${Object.keys(this.pushTemplates).map(k => `<option value="${k}">${escapeHTML(this.pushTemplates[k].title)}</option>`).join("")}</select></div>
+      <div class="field"><label for="pcTitle">Notification title</label><input id="pcTitle" maxlength="65" value="${escapeHTML(d.title || "")}"></div>
+      <div class="field"><label for="pcBody">Message</label><textarea id="pcBody" maxlength="200" rows="2">${escapeHTML(d.body || "")}</textarea></div>
+      <div class="field"><label for="pcUrl">Target URL</label><input id="pcUrl" value="${escapeHTML(d.targetUrl || "https://www.hojaseeds.pk/?hs_view=cart")}"></div>
+      <div class="field"><label for="pcAudience">Audience</label><select id="pcAudience">${audiences.map(a => `<option value="${a}" ${a === d.audience ? "selected" : ""}>${a.replace(/_/g, " ")}</option>`).join("")}</select></div>
+      <div class="field"><label for="pcOffer">Offer type</label><input id="pcOffer" maxlength="40" value="${escapeHTML(d.offerType || "")}" placeholder="e.g. gift, free_delivery"></div>
+      <div class="admin-push-preview" id="pcPreview"></div>
+      <div class="save-bar"><button type="button" class="btn btn-primary" id="pcSaveDraft">Save Draft</button><span class="save-note" id="pcSaveNote"></span></div>
+    `;
+    document.getElementById("pcTemplate").addEventListener("change", e => {
+      const t = this.pushTemplates[e.target.value];
+      if (t) { document.getElementById("pcTitle").value = t.title; document.getElementById("pcBody").value = t.body; }
+      this.updateCampaignPreview();
+    });
+    ["pcTitle", "pcBody"].forEach(id => document.getElementById(id).addEventListener("input", () => this.updateCampaignPreview()));
+    document.getElementById("pcSaveDraft").addEventListener("click", () => this.saveCampaignDraft());
+    this.editingCampaignId = d.campaignId || "";
+    this.updateCampaignPreview();
+  },
+
+  updateCampaignPreview() {
+    const title = document.getElementById("pcTitle")?.value || "";
+    const body = document.getElementById("pcBody")?.value || "";
+    const preview = document.getElementById("pcPreview");
+    if (preview) preview.innerHTML = `<div class="admin-push-preview-card"><strong>${escapeHTML(title || "Notification title")}</strong><p>${escapeHTML(body || "Message body")}</p></div>`;
+  },
+
+  editCampaign(campaignId) {
+    const c = this.pushCampaigns.find(x => x.campaignId === campaignId);
+    if (c) this.renderCampaignForm(c);
+  },
+
+  async saveCampaignDraft() {
+    const note = document.getElementById("pcSaveNote");
+    try {
+      const campaign = {
+        campaignId: this.editingCampaignId,
+        title: document.getElementById("pcTitle").value,
+        body: document.getElementById("pcBody").value,
+        targetUrl: document.getElementById("pcUrl").value,
+        audience: document.getElementById("pcAudience").value,
+        offerType: document.getElementById("pcOffer").value,
+        status: "Draft"
+      };
+      const result = await this.authorizedPost({ type: "pushCampaignSave", campaign });
+      note.textContent = `Saved (${result.status}).`;
+      await this.loadDashboard();
+    } catch (error) {
+      note.textContent = error.message;
+    }
+  },
+
+  async sendCampaign(campaignId) {
+    try {
+      await this.authorizedPost({ type: "pushCampaignSend", campaignId });
+      await this.loadDashboard();
+    } catch (error) {
+      alert(error.message); // eslint-disable-line no-alert -- Admin-only, immediate actionable feedback
+    }
   },
   renderAudit(items) {
     document.getElementById("auditContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Timestamp</th><th>Admin</th><th>Action</th><th>Entity</th><th>Result</th></tr></thead><tbody>${items.map(item => `<tr><td>${escapeHTML(item.timestamp)}</td><td>${escapeHTML(item.admin_email)}</td><td>${escapeHTML(item.action)}</td><td>${escapeHTML(item.entity_type)}: ${escapeHTML(item.entity_id)}</td><td>${escapeHTML(item.result)}</td></tr>`).join("") || `<tr><td colspan="5">No audit entries yet.</td></tr>`}</tbody></table></div>`;

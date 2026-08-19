@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "spreadsheet_title": "Hoja Seeds",
   "sheets": {
     "Products": [
@@ -26,6 +26,17 @@
       "city", "postalCode", "notes", "cartJson", "itemsSubtotal", "estimatedOrderTotal",
       "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId"
     ],
+    "PushSubscriptions": [
+      "subscriptionId", "visitorId", "endpoint", "p256dh", "authKey", "permissionStatus",
+      "subscriptionStatus", "createdAt", "updatedAt", "lastSeenAt", "browserInfo", "deviceInfo",
+      "utmSource", "lastPushAt", "clickCount", "linkedLeadId", "linkedOrderId"
+    ],
+    "PushCampaigns": [
+      "campaignId", "title", "body", "targetUrl", "imageUrl", "audience", "offerType", "status",
+      "createdAt", "scheduledAt", "sentAt", "expiryAt", "attempted", "accepted", "failed", "clicked",
+      "recoveredLeads", "recoveredOrders", "recoveredRevenue", "createdBy"
+    ],
+    "PushEvents": ["timestamp", "visitorId", "campaignId", "eventType", "metadata"],
     "LoadTestOrders": [
       "timestamp", "testRunId", "sequence", "orderId", "idempotencyKey",
       "paymentMode", "paymentChannel", "items", "itemsSubtotal", "deliveryFee",

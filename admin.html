@@ -29,6 +29,11 @@
   .save-bar{position:sticky;bottom:0;background:var(--paper);padding:14px 0;margin-top:10px;display:flex;gap:12px;align-items:center;}
   .save-note{font-size:.85rem;color:#5b5142;}
   .settings-card{background:var(--kraft);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;border:1px solid var(--kraft-dark);margin-bottom:30px;}
+  .admin-subhead{font-size:1.02rem;margin:0 0 10px;}
+  .admin-push-preview{margin:6px 0 14px;}
+  .admin-push-preview-card{background:var(--paper);border:1px solid var(--kraft-dark);border-radius:10px;padding:12px 14px;max-width:320px;}
+  .admin-push-preview-card strong{display:block;font-size:.9rem;margin-bottom:4px;}
+  .admin-push-preview-card p{margin:0;font-size:.82rem;color:var(--ink-soft);}
   .admin-layout{display:grid;grid-template-columns:168px minmax(0,1fr);gap:16px;align-items:start;min-width:0;}
   .admin-sidebar{position:sticky;top:80px;min-width:0;background:var(--soil);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:3px;}
   .admin-tab{border:0;background:transparent;color:var(--kraft);text-align:left;border-radius:8px;padding:10px 11px;font-weight:600;font-size:.82rem;cursor:pointer;}
@@ -85,6 +90,17 @@
       <section class="admin-panel" data-panel="orders"><div class="page-head"><div class="eyebrow">Fulfillment</div><h2>Orders</h2><p class="tagline">Read-only order snapshots from the protected Orders sheet.</p></div><div id="ordersContent"></div></section>
       <section class="admin-panel" data-panel="customers"><div class="page-head"><div class="eyebrow">Customers</div><h2>Customers</h2><p class="tagline">Derived operational view; historical orders are never deleted here.</p></div><div id="customersContent"></div></section>
       <section class="admin-panel" data-panel="leads"><div class="page-head"><div class="eyebrow">Growth</div><h2>Checkout Leads</h2><p class="tagline">Delivery details saved before Payment — recovery/COD/callback signal, read-only.</p></div><div class="admin-lead-filters" id="leadFilters"></div><div id="leadsContent"></div></section>
+      <section class="admin-panel" data-panel="notifications">
+        <div class="page-head"><div class="eyebrow">Growth</div><h2>Notifications</h2><p class="tagline">Web Push opt-in, subscribers, and campaigns — Super Admin only.</p></div>
+        <div id="pushDashboardContent"></div>
+        <h3 class="admin-subhead">New / edit campaign</h3>
+        <div class="settings-card" id="pushCampaignForm"></div>
+        <h3 class="admin-subhead">Campaigns</h3>
+        <div id="pushCampaignsContent"></div>
+        <h3 class="admin-subhead">Subscribers</h3>
+        <div class="admin-lead-filters" id="pushSubFilters"></div>
+        <div id="pushSubscribersContent"></div>
+      </section>
       <section class="admin-panel" data-panel="delivery"><div class="page-head"><div class="eyebrow">Commerce rules</div><h2>Delivery &amp; Payments</h2><p class="tagline">COD, advance delivery, threshold, and payment display settings.</p></div><div class="settings-card" id="rulesForm"></div></section>
       <section class="admin-panel" data-panel="analytics"><div class="page-head"><div class="eyebrow">Measurement</div><h2>Analytics</h2><p class="tagline">Configuration status only; no fabricated reports.</p></div><div id="analyticsContent"></div></section>
       <section class="admin-panel" data-panel="settings"><div class="page-head"><div class="eyebrow">Store</div><h2>Store Settings</h2><p class="tagline">Current mode: <span id="modeNote" class="mono"></span></p></div><div class="settings-card"><p class="admin-muted">Store-wide delivery and payment rules are managed in Delivery &amp; Payments.</p></div></section>

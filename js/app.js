@@ -325,6 +325,7 @@ const Leads = {
         body: JSON.stringify({
           type: "saveLead",
           leadId: this.id(),
+          visitorId: (typeof PushGrowth !== "undefined" && PushGrowth.visitorId()) || "",
           customer: delivery,
           items: Cart.flatLines().map(l => ({ productId: l.p.id, quantity: l.qty })),
           fbp: this.cookie("_fbp"),
@@ -1437,6 +1438,7 @@ const Views = {
       // with real match data. Never read/used by pricing, validation, or
       // idempotency -- purely additive fields.
       leadId: Leads.id(),
+      visitorId: (typeof PushGrowth !== "undefined" && PushGrowth.visitorId()) || "",
       fbp: Leads.cookie("_fbp"),
       fbc: Leads.cookie("_fbc"),
       userAgent: (typeof navigator !== "undefined" && navigator.userAgent) || "",
@@ -1680,4 +1682,16 @@ document.getElementById("navToggle").addEventListener("click", () => {
   // the active view without changing the current route or cart state.
   await Promise.allSettled([Prices.load(), Settings.load()]);
   Router.go(Router.current || "home");
+
+  // Push-notification deep link (HS-20260819-03): a campaign's targetUrl
+  // may carry ?hs_view=cart&campaignId=...&pushId=... to route the click
+  // straight to the relevant page and restore context (e.g. the saved
+  // cart) instead of dropping the customer on Home. Restricted to safe,
+  // state-independent views only.
+  if (typeof URLSearchParams !== "undefined" && typeof location !== "undefined") {
+    const deepLinkView = new URLSearchParams(location.search).get("hs_view");
+    if (["cart", "vegetables", "flowers", "mix", "fertilizer"].includes(deepLinkView)) {
+      Router.go(deepLinkView);
+    }
+  }
 })();

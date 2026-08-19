@@ -64,10 +64,14 @@ function doPost(e) {
     if (payload.type === "order") return jsonResponse(submitOrder(payload));
     if (payload.type === "saveLead") return jsonResponse(saveLead(payload));
     if (payload.type === "updateLeadStatus") return jsonResponse(updateLeadStatus(payload));
+    if (payload.type === "pushSubscription") return jsonResponse(savePushSubscription(payload));
+    if (payload.type === "pushEvent") return jsonResponse(logPushEvent(payload));
     if (payload.type === "contact") logContact(payload);
     else if (payload.type === "adminRead") { requireAdmin(payload); return jsonResponse(readAdminResource(payload.resource, payload.limit)); }
     else if (payload.type === "priceUpdate") { const adminEmail = requireAdmin(payload); updateProducts(payload.updates, adminEmail); }
     else if (payload.type === "settingsUpdate") { const adminEmail = requireAdmin(payload); updateSettings(payload.rules, adminEmail); }
+    else if (payload.type === "pushCampaignSave") { const adminEmail = requireAdmin(payload); return jsonResponse(savePushCampaign(payload.campaign, adminEmail)); }
+    else if (payload.type === "pushCampaignSend") { const adminEmail = requireAdmin(payload); return jsonResponse(sendPushCampaign(payload.campaignId, adminEmail)); }
     else throw new OrderError("UNKNOWN_ACTION", "Unknown request type.");
     return jsonResponse({ ok: true });
   } catch (error) {
@@ -638,6 +642,9 @@ function readAdminResource(resource, limit) {
   if (resource === "settings") return { ok: true, resource: resource, settings: getSettings() };
   if (resource === "dashboard") return { ok: true, resource: resource, summary: buildAdminDashboard(boundedLimit) };
   if (resource === "leads") return { ok: true, resource: resource, items: readAdminRows("Leads", boundedLimit) };
+  if (resource === "pushSubscriptions") return { ok: true, resource: resource, items: readPushSubscriptionsSafe(boundedLimit) };
+  if (resource === "pushCampaigns") return { ok: true, resource: resource, items: readAdminRows("PushCampaigns", boundedLimit) };
+  if (resource === "pushDashboard") return { ok: true, resource: resource, summary: buildPushDashboard() };
   throw new OrderError("INVALID_ADMIN_READ", "The requested admin resource is not available.");
 }
 
@@ -683,6 +690,51 @@ function buildAdminDashboard(limit) {
     recentOrders: orders.slice(0, 10)
   };
   return summary;
+}
+
+// Admin never sees the raw endpoint/keys, even though they're stored
+// server-side for eventual sending -- "do not expose endpoints/tokens
+// publicly" applies to the Admin UI too, not just anonymous access.
+function readPushSubscriptionsSafe(limit) {
+  return readAdminRows("PushSubscriptions", limit).map(row => {
+    const clean = Object.assign({}, row);
+    delete clean.endpoint;
+    delete clean.p256dh;
+    delete clean.authKey;
+    return clean;
+  });
+}
+
+function buildPushDashboard() {
+  const subs = readAdminRows("PushSubscriptions", 5000);
+  const events = readAdminRows("PushEvents", 5000);
+  const campaigns = readAdminRows("PushCampaigns", 500);
+  const countBy = (arr, key, value) => arr.filter(r => String(r[key]) === value).length;
+  const promptImpressions = countBy(events, "eventType", "prompt_view");
+  const granted = countBy(subs, "permissionStatus", "granted");
+  const denied = countBy(subs, "permissionStatus", "denied");
+  const defaultCount = countBy(subs, "permissionStatus", "default");
+  const eligibleVisitors = new Set(events.map(e => e.visitorId).concat(subs.map(s => s.visitorId))).size;
+  return {
+    eligibleVisitors: eligibleVisitors,
+    promptImpressions: promptImpressions,
+    enableClicks: countBy(events, "eventType", "soft_accept_click"),
+    permissionGranted: granted,
+    permissionDenied: denied,
+    permissionDefault: defaultCount,
+    activeSubscribers: countBy(subs, "subscriptionStatus", "active"),
+    unsubscribed: countBy(subs, "subscriptionStatus", "unsubscribed"),
+    expiredSubscriptions: countBy(subs, "subscriptionStatus", "expired"),
+    optInRate: promptImpressions > 0 ? Math.round((granted / promptImpressions) * 1000) / 10 : 0,
+    campaigns: campaigns.length,
+    pushAttempted: campaigns.reduce((s, c) => s + (Number(c.attempted) || 0), 0),
+    pushAccepted: campaigns.reduce((s, c) => s + (Number(c.accepted) || 0), 0),
+    pushFailed: campaigns.reduce((s, c) => s + (Number(c.failed) || 0), 0),
+    pushClicked: campaigns.reduce((s, c) => s + (Number(c.clicked) || 0), 0),
+    recoveredLeads: campaigns.reduce((s, c) => s + (Number(c.recoveredLeads) || 0), 0),
+    recoveredOrders: campaigns.reduce((s, c) => s + (Number(c.recoveredOrders) || 0), 0),
+    recoveredRevenue: campaigns.reduce((s, c) => s + (Number(c.recoveredRevenue) || 0), 0)
+  };
 }
 
 function logAudit(adminEmail, action, entityType, entityId, before, after, result) {
@@ -846,27 +898,60 @@ const LEAD_HEADERS = [
   "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId"
 ];
 const LEAD_ABANDON_STATUSES = ["PAYMENT_ABANDONED", "COD_REQUESTED", "CALLBACK_REQUESTED"];
+
+// ══════════════ Web Push (HS-20260819-03) ══════════════
+const PUSH_SUB_HEADERS = [
+  "subscriptionId", "visitorId", "endpoint", "p256dh", "authKey", "permissionStatus",
+  "subscriptionStatus", "createdAt", "updatedAt", "lastSeenAt", "browserInfo", "deviceInfo",
+  "utmSource", "lastPushAt", "clickCount", "linkedLeadId", "linkedOrderId"
+];
+const PUSH_CAMPAIGN_HEADERS = [
+  "campaignId", "title", "body", "targetUrl", "imageUrl", "audience", "offerType", "status",
+  "createdAt", "scheduledAt", "sentAt", "expiryAt", "attempted", "accepted", "failed", "clicked",
+  "recoveredLeads", "recoveredOrders", "recoveredRevenue", "createdBy"
+];
+const PUSH_EVENT_HEADERS = ["timestamp", "visitorId", "campaignId", "eventType", "metadata"];
+const PUSH_EVENT_TYPES = [
+  "prompt_view", "soft_accept_click", "soft_close", "native_granted", "native_denied",
+  "native_default", "subscribed", "unsubscribed", "notification_click"
+];
+const PUSH_CAMPAIGN_STATUSES = ["Draft", "Scheduled", "Sending", "Sent", "Paused", "Failed", "Expired"];
+const PUSH_AUDIENCES = [
+  "all_active", "cart_abandoned", "lead_not_converted", "cod_requested",
+  "interest_vegetables", "interest_flowers", "interest_mix", "interest_fertilizer", "previous_buyers"
+];
 // Public Pixel/Dataset ID -- not a secret, already shipped client-side in
 // js/config.js. Only the CAPI access token (Script Property) is sensitive.
 const META_PIXEL_ID = "1467679375059082";
 
-function ensureLeadsSheet() {
+function ensureLeadsSheet() { return ensureSheetWithHeaders("Leads", LEAD_HEADERS); }
+
+// Generic self-healing sheet helper, reused by Leads and the Push* sheets
+// (HS-20260819-03) -- creates the tab with its header row on first use so
+// no manual Sheet migration is ever required.
+function ensureSheetWithHeaders(title, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName("Leads");
+  let sheet = ss.getSheetByName(title);
   if (!sheet) {
-    sheet = ss.insertSheet("Leads");
-    sheet.appendRow(LEAD_HEADERS);
+    sheet = ss.insertSheet(title);
+    sheet.appendRow(headers);
   }
   return sheet;
 }
 
-function findLeadRow(sheet, leadId) {
+function findLeadRow(sheet, leadId) { return findRowById(sheet, "leadId", leadId); }
+
+// Generic linear scan by ID column -- fine at the row counts these sheets
+// realistically reach (subscriptions/leads/campaigns), consistent with the
+// existing findOrderById pattern elsewhere in this file.
+function findRowById(sheet, idColumn, idValue) {
   const rows = sheet.getDataRange().getValues();
   if (rows.length < 2) return null;
   const headers = rows[0];
-  const idCol = headers.indexOf("leadId");
+  const idCol = headers.indexOf(idColumn);
+  if (idCol < 0) return null;
   for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][idCol]) === leadId) return { rowIndex: i + 1, headers: headers, row: rows[i] };
+    if (String(rows[i][idCol]) === idValue) return { rowIndex: i + 1, headers: headers, row: rows[i] };
   }
   return null;
 }
@@ -972,6 +1057,7 @@ function saveLead(payload) {
       eventSourceUrl: optionalText(payload.pageUrl, "Page URL", 300) || "https://www.hojaseeds.pk/"
     });
   }
+  try { attributePushConversion(payload.visitorId, "lead", leadId); } catch (e) { console.error(e); }
   return { ok: true, leadId: leadId, status: status, isNew: isNew, capi: capi.ok };
 }
 
@@ -1031,6 +1117,8 @@ function convertLeadOnOrder(leadId, order, payload) {
     }
   }
 
+  try { attributePushConversion(payload && payload.visitorId, "order", order.orderId, order.total); } catch (e) { console.error(e); }
+
   sendMetaCapiEvent("Purchase", "ORDER-" + order.orderId, {
     ph: [sha256Hex(order.customer.phone)],
     country: [sha256Hex("pk")],
@@ -1080,6 +1168,212 @@ function sendMetaCapiEvent(eventName, eventId, userData, customData) {
     console.error("Meta CAPI send failed: " + error);
     return { ok: false, error: String(error && error.message || error) };
   }
+}
+
+// Subscription is upserted by visitorId -- one row per browser/device, not
+// per subscribe attempt. Never blocks on Sheet contention as badly as an
+// order write would: this is best-effort telemetry the storefront must
+// never depend on to keep working.
+function savePushSubscription(payload) {
+  const visitorId = requiredText(payload.visitorId, "Visitor ID", 16, 100);
+  if (!/^[A-Za-z0-9_-]+$/.test(visitorId)) throw new OrderError("INVALID_VISITOR_ID", "The visitor session ID is invalid.");
+  const permissionStatus = String(payload.permissionStatus || "default");
+  if (["default", "granted", "denied"].indexOf(permissionStatus) === -1) throw new OrderError("INVALID_PERMISSION_STATUS", "Unknown permission status.");
+  const sub = payload.subscription || {};
+  const endpoint = optionalText(sub.endpoint, "Push endpoint", 500);
+  const p256dh = optionalText(sub.p256dh, "Push key", 300);
+  const authKey = optionalText(sub.auth, "Push auth secret", 300);
+  // subscriptionStatus is derived server-side, never trusted from the
+  // client: a real endpoint means active; denied permission always means
+  // unsubscribed; granted-with-no-endpoint (no VAPID key configured yet,
+  // or the subscribe call itself failed) is recorded honestly as
+  // "unavailable" rather than faked as active.
+  const subscriptionStatus = permissionStatus === "denied" ? "unsubscribed"
+    : (endpoint ? "active" : (permissionStatus === "granted" ? "unavailable" : "none"));
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return { ok: true, saved: false };
+  try {
+    const sheet = ensureSheetWithHeaders("PushSubscriptions", PUSH_SUB_HEADERS);
+    const existing = findRowById(sheet, "visitorId", visitorId);
+    const now = new Date().toISOString();
+    const browserInfo = optionalText(payload.browserInfo, "Browser info", 100);
+    const deviceInfo = optionalText(payload.deviceInfo, "Device info", 100);
+    const utmSource = optionalText(payload.utmSource, "UTM source", 200);
+    if (existing) {
+      const h = existing.headers;
+      const row = existing.row;
+      const values = [[
+        row[h.indexOf("subscriptionId")] || ("sub-" + visitorId), visitorId,
+        endpoint || row[h.indexOf("endpoint")], p256dh || row[h.indexOf("p256dh")], authKey || row[h.indexOf("authKey")],
+        permissionStatus, subscriptionStatus, row[h.indexOf("createdAt")], now, now,
+        browserInfo || row[h.indexOf("browserInfo")], deviceInfo || row[h.indexOf("deviceInfo")],
+        utmSource || row[h.indexOf("utmSource")], row[h.indexOf("lastPushAt")], row[h.indexOf("clickCount")] || 0,
+        row[h.indexOf("linkedLeadId")], row[h.indexOf("linkedOrderId")]
+      ]];
+      sheet.getRange(existing.rowIndex, 1, 1, PUSH_SUB_HEADERS.length).setValues(values);
+    } else {
+      sheet.appendRow([
+        "sub-" + visitorId, visitorId, endpoint, p256dh, authKey, permissionStatus, subscriptionStatus,
+        now, now, now, browserInfo, deviceInfo, utmSource, "", 0, "", ""
+      ]);
+    }
+    return { ok: true, saved: true, subscriptionStatus: subscriptionStatus };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Lightweight, best-effort lifecycle telemetry (prompt shown/closed,
+// native permission result, notification click). Never throws in a way
+// that could surface to the customer -- caller (frontend or the service
+// worker) always treats this as fire-and-forget.
+function logPushEvent(payload) {
+  const visitorId = requiredText(payload.visitorId, "Visitor ID", 16, 100);
+  const eventType = String(payload.eventType || "");
+  if (PUSH_EVENT_TYPES.indexOf(eventType) === -1) throw new OrderError("INVALID_PUSH_EVENT", "Unknown push event type.");
+  const campaignId = optionalText(payload.campaignId, "Campaign ID", 100);
+  const metadata = optionalText(JSON.stringify(payload.metadata || {}), "Event metadata", 500);
+  const sheet = ensureSheetWithHeaders("PushEvents", PUSH_EVENT_HEADERS);
+  sheet.appendRow([new Date().toISOString(), visitorId, campaignId, eventType, safeSheetText(metadata)]);
+
+  if (eventType === "notification_click" && campaignId) {
+    try { incrementCampaignCounter(campaignId, "clicked"); } catch (e) { console.error(e); }
+    try { linkClickToSubscription(visitorId, campaignId); } catch (e) { console.error(e); }
+  }
+  return { ok: true };
+}
+
+function linkClickToSubscription(visitorId, campaignId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushSubscriptions");
+  if (!sheet) return;
+  const existing = findRowById(sheet, "visitorId", visitorId);
+  if (!existing) return;
+  const clickCol = existing.headers.indexOf("clickCount") + 1;
+  const current = Number(existing.row[clickCol - 1]) || 0;
+  sheet.getRange(existing.rowIndex, clickCol).setValue(current + 1);
+}
+
+function incrementCampaignCounter(campaignId, field) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushCampaigns");
+  if (!sheet) return;
+  const existing = findRowById(sheet, "campaignId", campaignId);
+  if (!existing) return;
+  const col = existing.headers.indexOf(field) + 1;
+  if (col <= 0) return;
+  const current = Number(existing.row[col - 1]) || 0;
+  sheet.getRange(existing.rowIndex, col).setValue(current + 1);
+}
+
+function incrementCampaignRevenue(campaignId, amount) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushCampaigns");
+  if (!sheet) return;
+  const existing = findRowById(sheet, "campaignId", campaignId);
+  if (!existing) return;
+  const col = existing.headers.indexOf("recoveredRevenue") + 1;
+  if (col <= 0) return;
+  const current = Number(existing.row[col - 1]) || 0;
+  sheet.getRange(existing.rowIndex, col).setValue(current + (Number(amount) || 0));
+}
+
+// Click -> recovered Lead/Order attribution (HS-20260819-03), 72h default
+// window: finds this visitor's most recent notification_click, credits
+// that campaign, and links the subscription row. Entirely best-effort --
+// wrapped by every caller so it can never affect a Lead/Order outcome.
+const PUSH_ATTRIBUTION_WINDOW_MS = 72 * 60 * 60 * 1000;
+function attributePushConversion(visitorId, kind, refId, revenue) {
+  if (!visitorId || !/^[A-Za-z0-9_-]+$/.test(String(visitorId))) return;
+  const eventsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushEvents");
+  if (!eventsSheet) return;
+  const rows = eventsSheet.getDataRange().getValues();
+  if (rows.length < 2) return;
+  const headers = rows[0];
+  const tsCol = headers.indexOf("timestamp"), vCol = headers.indexOf("visitorId"), typeCol = headers.indexOf("eventType"), campCol = headers.indexOf("campaignId");
+  const now = Date.now();
+  let campaignId = "", latestTs = 0;
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][vCol]) !== visitorId || String(rows[i][typeCol]) !== "notification_click") continue;
+    const ts = new Date(rows[i][tsCol]).getTime();
+    if (now - ts > PUSH_ATTRIBUTION_WINDOW_MS) continue;
+    if (ts > latestTs) { latestTs = ts; campaignId = String(rows[i][campCol] || ""); }
+  }
+  if (!campaignId) return;
+  if (kind === "lead") incrementCampaignCounter(campaignId, "recoveredLeads");
+  else if (kind === "order") { incrementCampaignCounter(campaignId, "recoveredOrders"); incrementCampaignRevenue(campaignId, revenue); }
+  const subSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PushSubscriptions");
+  if (!subSheet) return;
+  const existing = findRowById(subSheet, "visitorId", visitorId);
+  if (!existing) return;
+  const col = existing.headers.indexOf(kind === "lead" ? "linkedLeadId" : "linkedOrderId") + 1;
+  if (col > 0) subSheet.getRange(existing.rowIndex, col).setValue(safeSheetText(refId));
+}
+
+// Admin-authored campaigns only (requireAdmin already checked by the
+// caller in doPost). Sanitizes title/body to plain text -- a push
+// notification body is rendered as text by the OS notification UI, not
+// HTML, so stripping tags here also prevents any stored-injection concern
+// in the Admin campaign table.
+function stripTags(value) { return String(value == null ? "" : value).replace(/<[^>]*>/g, ""); }
+
+function savePushCampaign(campaign, adminEmail) {
+  if (!campaign || typeof campaign !== "object") throw new OrderError("INVALID_CAMPAIGN", "Campaign data is invalid.");
+  const title = requiredText(stripTags(campaign.title), "Notification title", 3, 65);
+  const body = requiredText(stripTags(campaign.body), "Message", 3, 200);
+  const targetUrl = requiredText(campaign.targetUrl, "Target URL", 4, 300);
+  if (!/^https:\/\/(www\.)?hojaseeds\.pk\//.test(targetUrl)) throw new OrderError("INVALID_TARGET_URL", "Target URL must be a hojaseeds.pk page.");
+  const audience = String(campaign.audience || "all_active");
+  if (PUSH_AUDIENCES.indexOf(audience) === -1) throw new OrderError("INVALID_AUDIENCE", "Unknown audience segment.");
+  const offerType = optionalText(campaign.offerType, "Offer type", 40);
+  const imageUrl = optionalText(campaign.imageUrl, "Image URL", 300);
+  const status = ["Draft", "Scheduled"].indexOf(campaign.status) !== -1 ? campaign.status : "Draft";
+  const scheduledAt = optionalText(campaign.scheduledAt, "Scheduled time", 40);
+  const expiryAt = optionalText(campaign.expiryAt, "Expiry time", 40);
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new OrderError("PUSH_BUSY", "Please try again in a moment.");
+  try {
+    const sheet = ensureSheetWithHeaders("PushCampaigns", PUSH_CAMPAIGN_HEADERS);
+    const now = new Date().toISOString();
+    const campaignId = optionalText(campaign.campaignId, "Campaign ID", 100);
+    const existing = campaignId ? findRowById(sheet, "campaignId", campaignId) : null;
+    if (existing) {
+      const h = existing.headers, row = existing.row;
+      sheet.getRange(existing.rowIndex, 1, 1, PUSH_CAMPAIGN_HEADERS.length).setValues([[
+        campaignId, safeSheetText(title), safeSheetText(body), targetUrl, imageUrl, audience, offerType, status,
+        row[h.indexOf("createdAt")], scheduledAt, row[h.indexOf("sentAt")], expiryAt,
+        row[h.indexOf("attempted")] || 0, row[h.indexOf("accepted")] || 0, row[h.indexOf("failed")] || 0, row[h.indexOf("clicked")] || 0,
+        row[h.indexOf("recoveredLeads")] || 0, row[h.indexOf("recoveredOrders")] || 0, row[h.indexOf("recoveredRevenue")] || 0,
+        row[h.indexOf("createdBy")] || safeSheetText(adminEmail)
+      ]]);
+      return { ok: true, campaignId: campaignId, status: status };
+    }
+    const newId = "camp-" + Utilities.getUuid().replace(/-/g, "").slice(0, 16);
+    sheet.appendRow([
+      newId, safeSheetText(title), safeSheetText(body), targetUrl, imageUrl, audience, offerType, status,
+      now, scheduledAt, "", expiryAt, 0, 0, 0, 0, 0, 0, 0, safeSheetText(adminEmail)
+    ]);
+    return { ok: true, campaignId: newId, status: status };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Fails closed, honestly: without a configured Web Push private key this
+// project cannot sign/encrypt a real push payload (RFC 8291), so it never
+// pretends to send. Returns a clear, actionable error instead of silently
+// marking the campaign failed -- the admin can retry once a provider is
+// configured, with the campaign left exactly as it was.
+function sendPushCampaign(campaignId, adminEmail) {
+  const id = requiredText(campaignId, "Campaign ID", 8, 100);
+  const vapidPrivateKey = PropertiesService.getScriptProperties().getProperty("VAPID_PRIVATE_KEY");
+  if (!vapidPrivateKey) {
+    throw new OrderError("PUSH_PROVIDER_NOT_CONFIGURED", "No Web Push provider is configured yet (VAPID_PRIVATE_KEY is not set in Script Properties). The campaign was not sent or marked failed -- configure the provider and try again.");
+  }
+  // A real send implementation (Web Push RFC 8291 aes128gcm encryption +
+  // VAPID JWT signing) is intentionally not implemented in Apps Script --
+  // see docs/PROJECT_STATE.md for the exact reason and the recommended
+  // path (a small Cloudflare Worker using a standard web-push library).
+  throw new OrderError("PUSH_SEND_NOT_IMPLEMENTED", "A Web Push provider key is configured, but the send path is not yet implemented. See docs/PROJECT_STATE.md.");
 }
 
 function sha256Hex(value) {

@@ -59,4 +59,13 @@ const CONFIG = {
   // fire, nothing breaks). Fill in your real IDs to turn tracking on.
   GA4_MEASUREMENT_ID: "G-LRMW9NMGW5", // Hoja Seeds GA4 property (owner-verified, HS-20260819-01)
   META_PIXEL_ID: "1467679375059082",  // Hoja Seeds Meta Pixel/Dataset (owner-verified, HS-20260819-01)
+
+  // Web Push (HS-20260819-03) — leave blank to keep the whole feature
+  // inert (no service worker registration attempted, no permission UI
+  // shown, no subscription created). This is the VAPID *public* key only
+  // — safe to publish, it's what PushManager.subscribe() sends to the
+  // browser's push service. The matching private key never goes here —
+  // see docs/PROJECT_STATE.md for where it belongs and how to generate
+  // both (e.g. `npx web-push generate-vapid-keys`).
+  VAPID_PUBLIC_KEY: "",
 };
