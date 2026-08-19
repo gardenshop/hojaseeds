@@ -16,7 +16,11 @@ self.addEventListener("push", event => {
     icon: data.icon || "/assets/logo/hoja-seeds-logo@256.png",
     badge: "/assets/logo/hoja-seeds-favicon-64.png",
     image: data.image || undefined,
-    data: { targetUrl: data.targetUrl || "https://www.hojaseeds.pk/", campaignId: data.campaignId || "", visitorId: data.visitorId || "" },
+    // webhookUrl must be copied through here too -- notificationclick can
+    // only read it back from notification.data, never from the original
+    // push event (HS-20260819-12: this was the exact reason a real,
+    // visually-confirmed click never got recorded server-side).
+    data: { targetUrl: data.targetUrl || "https://www.hojaseeds.pk/", campaignId: data.campaignId || "", visitorId: data.visitorId || "", webhookUrl: data.webhookUrl || "" },
     tag: data.campaignId || undefined
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -40,9 +44,9 @@ self.addEventListener("notificationclick", event => {
       await self.clients.openWindow(targetUrl);
     }
     // Best-effort click telemetry -- never blocks navigation. The service
-    // worker has no access to CONFIG.SHEET_WEBHOOK_URL, so a real send
-    // implementation must embed it in the push payload as
-    // notification.data.webhookUrl for this to actually report clicks.
+    // worker has no access to CONFIG.SHEET_WEBHOOK_URL directly, so
+    // sendPushCampaign/pushTestSend embed it per-notification as
+    // payload.webhookUrl, copied through into notification.data above.
     try {
       const hookUrl = (event.notification.data && event.notification.data.webhookUrl) || null;
       if (hookUrl && visitorId) {
