@@ -6,6 +6,36 @@ into each request.
 
 ---
 
+## PUSH: OWNER CONFIRMED VISUAL+CLICK; FOUND & FIXED CLICK-RECORDING BUG (HS-20260819-12 continued)
+
+- **Owner confirmed, in response to the one sanctioned question:**
+  "Yes, it appeared and clicking opened Hoja." The notification displayed
+  correctly and the click navigated to the right page — the actual
+  customer-facing behavior was never broken.
+- **But server-side click recording was broken — found and fixed.**
+  `PushEvents`/`PushCampaigns.clicked`/subscription `clickCount` all
+  still read 0 after the owner's confirmed real click. Root cause found
+  by code inspection (not guessed): `push-sw.js`'s `push` event handler
+  never copied `webhookUrl` from the incoming push payload into
+  `notification.data` — so by the time `notificationclick` fired,
+  `event.notification.data.webhookUrl` was always empty and the
+  click-telemetry POST never ran, even though `sendPushCampaign`/
+  `pushTestSend` have embedded `webhookUrl` in every outgoing payload
+  since HS-06. **This is a real, provable bug, not a config issue.**
+  One-line fix: add `webhookUrl` to the `data` object built in the `push`
+  handler. Deployed to production, confirmed live.
+- **Not yet re-verified with a fresh click** (existing browser SW
+  registrations only pick up this update on their next check-for-update
+  cycle, not instantly) — this is the one remaining tiny step before a
+  full freeze: send one more test notification and click it once to
+  confirm `clicked`/`clickCount` now increments for real.
+- **Files changed:** `push-sw.js` only. `node --check` clean; all 7
+  `npm test` files still pass; zero regression elsewhere.
+- **Push Growth Module: ~99.8%, still NOT frozen** — pending one final
+  confirming click after the fix.
+
+---
+
 ## PUSH: SECRET CORRECTED — REAL SEND ACCEPTED, VISUAL CONFIRMATION PENDING (HS-20260819-12)
 
 - **The owner corrected `PUSH_SERVER_SECRET`.** Confirmed with real
