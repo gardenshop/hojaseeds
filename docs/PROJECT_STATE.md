@@ -6,6 +6,116 @@ into each request.
 
 ---
 
+## WEB PUSH GROWTH MODULE (HS-20260819-03) — POST-LAUNCH, ADDITIVE ONLY
+
+- **Push provider:** none configured yet — architecture-complete,
+  intentionally **fail-closed**, per this task's own explicit instruction
+  ("do not fake successful sending"). No VAPID keypair was generated or
+  stored this session (generating one is free/no external account, but a
+  private key handled through this chat transcript would violate "never
+  in docs/logs" in spirit — the safer, equally-valid choice is to leave
+  both blank and document the exact steps). **To activate:** generate a
+  VAPID keypair (e.g. `npx web-push generate-vapid-keys`), put the
+  **public** key in `js/config.js` `CONFIG.VAPID_PUBLIC_KEY` (not a
+  secret — it's what `PushManager.subscribe()` sends to the browser's own
+  push service), and set `VAPID_PRIVATE_KEY` (+ optionally `VAPID_SUBJECT`,
+  a `mailto:` contact) in Apps Script **Script Properties only** — same
+  pattern as `META_CAPI_ACCESS_TOKEN`. Real *sending* (RFC 8291
+  aes128gcm payload encryption + VAPID JWT signing) is **not implemented**
+  even once a key exists — Apps Script has no native EC/AES-GCM primitives
+  for it, and hand-rolling that crypto was judged too high-risk for this
+  scope; `sendPushCampaign()` reports `PUSH_SEND_NOT_IMPLEMENTED` even
+  with a key present. Recommended path if/when real sending is wanted: a
+  small Cloudflare Worker using a standard `web-push` library, reading the
+  same subscription rows via a new Admin-authenticated read, called from
+  `pushCampaignSend`.
+- **Service worker:** new `push-sw.js` (site-root scope, `/push-sw.js`) —
+  `push` → `showNotification`, `notificationclick` → focus/open the
+  correct Hoja URL + best-effort click telemetry. No caching/offline
+  logic at all, so it cannot affect any other page's loading behavior.
+- **Secure secret location:** Apps Script Script Properties
+  (`VAPID_PRIVATE_KEY`) — never frontend, never Git, never docs/logs (this
+  entry documents the *field name* and *where it goes*, never a value).
+- **First prompt delay:** 3-5s (randomized) after Home content is
+  visible — verified live: card absent before, present after, with **zero**
+  automatic `Notification.requestPermission()` calls (confirmed via a
+  wrapped/instrumented call in the verification browser run, both locally
+  and on production). **Prompt copy:** exact spec copy (🌱 Hoja Seeds
+  Special Offers / 🎁🚚🌿✨ / "Get useful seasonal alerts..."). **Maybe
+  Later:** NO (verified absent from the DOM). **Close X:** present,
+  records `soft_close` and starts the 3-day cross-visit cooldown.
+  **Second opportunity:** desktop exit-intent (mouse leaves toward the
+  browser chrome after real interaction) + a 45s mobile-safe inactivity
+  fallback — capped at exactly 2 soft prompts per visit, never uses
+  `beforeunload`. **Native prompt trigger:** the CTA click handler only —
+  verified this is the *only* code path that calls
+  `Notification.requestPermission()`.
+- **Data model (additive, self-healing sheets, schema_version 6):**
+  `PushSubscriptions` (upsert by visitorId — one row per browser/device;
+  `subscriptionStatus` always computed server-side from
+  permission+endpoint, never trusted from the client), `PushCampaigns`
+  (Draft/Scheduled/Sending/Sent/Paused/Failed/Expired; title/body stripped
+  of HTML on save — closes a stored-injection path since notification
+  bodies render as plain OS text anyway), `PushEvents` (lifecycle
+  telemetry: prompt_view/soft_accept_click/soft_close/native_granted/
+  native_denied/native_default/subscribed/unsubscribed/notification_click).
+  Verified live: `PushSubscriptions`/`PushEvents` self-healed on first use
+  (`sheets:verify`: `exists:false`→`exists:true, missing:[]`);
+  `PushCampaigns` will self-heal identically on first real Admin campaign
+  save (same `ensureSheetWithHeaders` mechanism, already proven twice by
+  Leads and the other two Push sheets — not separately live-tested since
+  it requires a live Admin auth token this session didn't have).
+- **Admin Notification Center** (Super-Admin-only, same Google-auth
+  boundary as every other `adminRead`/write action): opt-in funnel
+  dashboard (eligible visitors, impressions, enable clicks, granted/
+  denied/default, active/unsubscribed/expired, opt-in rate — computed as
+  granted ÷ prompt impressions), a campaign manager (the 6 spec'd
+  templates — Gift Seeds/Free Delivery/Seasonal/New Arrivals/Saved Cart/
+  COD — a live title/body preview, Draft save, Send), and a subscriber
+  table (status/visitor/permission/dates/device/source/clicks/linked
+  Lead/Order, filterable) that **never** receives the raw push
+  endpoint/keys from the backend (`readPushSubscriptionsSafe` strips them
+  before the Admin response is even built — not just hidden in the UI).
+  Push metrics are explicitly labeled **"Accepted by push service"**, not
+  "Delivered" — no provider delivery receipt exists, and the dashboard
+  copy says so.
+- **Click/recovery attribution:** a campaign's `targetUrl` may carry
+  `?hs_view=cart` (etc.) for the SPA to deep-link straight to the relevant
+  page on click (new, minimal `hs_view` bootstrap check in `js/app.js`,
+  restricted to safe state-independent views). `attributePushConversion()`
+  (72h default window) credits the visitor's most recent
+  `notification_click` campaign's `recoveredLeads`/`recoveredOrders`/
+  `recoveredRevenue` (full order total, same convention as CAPI Purchase)
+  when that same visitorId later becomes a Lead or completes an Order —
+  wired into the existing `saveLead`/`submitOrder` success paths, wrapped
+  so it can never affect a Lead or Order outcome either way. Test-verified
+  for both Lead and Order (COD) conversion crediting.
+- **Cart/COD recovery:** unchanged — this module only *links back* to the
+  existing Cart/Payment/COD-Mix-Pack-conversion/draft-restore flows via
+  `targetUrl` deep-linking; it never changes products, payment method, or
+  totals itself (campaign save validates `targetUrl` must be a
+  `hojaseeds.pk` page and body/title are plain text only).
+- **Analytics:** push lifecycle events stay internal/Admin-only via
+  `PushEvents` — no new Meta events were added; Meta Lead/Purchase remain
+  exactly as built in HS-20260819-02 (primary optimization = Lead,
+  Purchase = downstream quality signal). No GA4 `push_*` custom events
+  were added this session (optional per spec; can be added later without
+  any architecture change if wanted).
+- **Security:** `VAPID_PRIVATE_KEY` server-side only; no public endpoint
+  ever returns a push endpoint or subscription keys; campaign title/body
+  sanitized (HTML stripped) against stored injection; `pushCampaignSave`/
+  `pushCampaignSend` both require the same `requireAdmin()` Google-auth
+  check as price/settings updates.
+- `node --check` (app.js, admin.js), `npm test` (7 files, all pass),
+  `npm run sheets:verify` all pass. Verified live in production: first
+  soft-prompt card appears correctly timed with zero premature native
+  permission calls, `push.js`/`push-sw.js` both 200, zero console errors,
+  zero layout overflow. `pushSubscription`/`pushEvent` verified live
+  (self-healed sheets, correct `subscriptionStatus` derivation). No
+  change to products/prices/delivery fees/payment rules/idempotency/
+  LockService/CAPI Lead-Purchase/Apps Script identity/Sheet ID/load-test
+  isolation/R2/Cloudflare project/visual storefront baseline.
+
 ## GROWTH FUNNEL MODULE (HS-20260819-02) — POST-LAUNCH, ADDITIVE ONLY
 
 - **Lead-first checkout funnel + Meta CAPI + COD/abandonment recovery.**
