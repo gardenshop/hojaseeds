@@ -62,6 +62,8 @@ function doPost(e) {
     ensureAdminProperties();
     const payload = JSON.parse(e.postData.contents);
     if (payload.type === "order") return jsonResponse(submitOrder(payload));
+    if (payload.type === "saveLead") return jsonResponse(saveLead(payload));
+    if (payload.type === "updateLeadStatus") return jsonResponse(updateLeadStatus(payload));
     if (payload.type === "contact") logContact(payload);
     else if (payload.type === "adminRead") { requireAdmin(payload); return jsonResponse(readAdminResource(payload.resource, payload.limit)); }
     else if (payload.type === "priceUpdate") { const adminEmail = requireAdmin(payload); updateProducts(payload.updates, adminEmail); }
@@ -236,6 +238,12 @@ function submitOrder(payload) {
       }
     } else {
       logOrder(order);
+      // Best-effort only, after the order is durably written: link the
+      // checkout Lead (if any) to this order and fire the server-side Meta
+      // CAPI Purchase. Neither can ever fail the order itself -- both are
+      // wrapped so a Sheet/network hiccup here never turns a successful
+      // order into a failed checkout (HS-20260819-02).
+      try { convertLeadOnOrder(payload.leadId, order, payload); } catch (growthError) { console.error(growthError); }
     }
     delete order.idempotencyFingerprint;
     return order;
@@ -629,6 +637,7 @@ function readAdminResource(resource, limit) {
   if (resource === "audit") return { ok: true, resource: resource, items: readAdminRows("AuditLog", boundedLimit) };
   if (resource === "settings") return { ok: true, resource: resource, settings: getSettings() };
   if (resource === "dashboard") return { ok: true, resource: resource, summary: buildAdminDashboard(boundedLimit) };
+  if (resource === "leads") return { ok: true, resource: resource, items: readAdminRows("Leads", boundedLimit) };
   throw new OrderError("INVALID_ADMIN_READ", "The requested admin resource is not available.");
 }
 
@@ -824,6 +833,258 @@ function logContact(c) {
   const phone = normalizePakistanMobile(c.phone);
   const message = requiredText(c.message, "Contact message", 1, 1000);
   sheet.appendRow([new Date().toISOString(), safeSheetText(name), safeSheetText(phone), safeSheetText(message)]);
+}
+
+// ══════════════ Checkout Leads + Meta CAPI (HS-20260819-02) ══════════════
+// Post-launch conversion module, entirely additive: a new "Leads" sheet
+// (self-healing -- created with headers on first use so no manual Sheet
+// migration is required) plus server-side Meta Conversions API calls for
+// Lead and Purchase. Never touches Orders/OrderItems/pricing/idempotency.
+const LEAD_HEADERS = [
+  "leadId", "createdAt", "updatedAt", "status", "fullName", "phone", "address",
+  "city", "postalCode", "notes", "cartJson", "itemsSubtotal", "estimatedOrderTotal",
+  "eligiblePaymentModes", "utmSource", "fbp", "fbc", "lastStep", "abandonReason", "convertedOrderId"
+];
+const LEAD_ABANDON_STATUSES = ["PAYMENT_ABANDONED", "COD_REQUESTED", "CALLBACK_REQUESTED"];
+// Public Pixel/Dataset ID -- not a secret, already shipped client-side in
+// js/config.js. Only the CAPI access token (Script Property) is sensitive.
+const META_PIXEL_ID = "1467679375059082";
+
+function ensureLeadsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Leads");
+  if (!sheet) {
+    sheet = ss.insertSheet("Leads");
+    sheet.appendRow(LEAD_HEADERS);
+  }
+  return sheet;
+}
+
+function findLeadRow(sheet, leadId) {
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  const headers = rows[0];
+  const idCol = headers.indexOf("leadId");
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][idCol]) === leadId) return { rowIndex: i + 1, headers: headers, row: rows[i] };
+  }
+  return null;
+}
+
+// Lead is intentionally lenient about cart contents (a customer may reach
+// Confirm Delivery with any cart state) -- unlike buildAuthoritativeOrder,
+// an invalid/empty item is skipped rather than rejected, since a Lead must
+// never block on catalog drift. Only real contact-detail validation
+// (reused from the exact same order-validation helpers) can fail this.
+function saveLead(payload) {
+  const leadId = requiredText(payload.leadId, "Lead ID", 16, 100);
+  if (!/^[A-Za-z0-9_-]+$/.test(leadId)) throw new OrderError("INVALID_LEAD_ID", "The checkout session ID is invalid.");
+
+  const customerInput = payload.customer || {};
+  const fullName = requiredText(customerInput.name, "Name", 2, 80);
+  const phone = normalizePakistanMobile(customerInput.phone);
+  const address = requiredText(customerInput.address, "Address", 10, 300);
+  const city = requiredText(customerInput.city, "City", 2, 80);
+  const postal = optionalText(customerInput.postal, "Postal code", 20);
+  const notes = optionalText(customerInput.notes, "Order notes", 500);
+
+  const products = getProducts();
+  const productsById = {};
+  products.forEach(p => productsById[String(p.id)] = p);
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const cartLines = [];
+  let itemsSubtotal = 0;
+  items.forEach(item => {
+    const product = item && productsById[String(item.productId)];
+    const quantity = Number(item && item.quantity);
+    if (!product || !Number.isInteger(quantity) || quantity <= 0) return; // skip silently, never block a Lead
+    const unitPrice = Number(product.price) || 0;
+    itemsSubtotal += unitPrice * quantity;
+    cartLines.push({ productId: String(product.id), quantity: quantity, unitPrice: unitPrice });
+  });
+  const cartPolicy = cartLines.length ? cartPaymentPolicy(cartLines.map(l => ({ productId: l.productId }))) : "";
+  let settings;
+  try { settings = getOrderSettings(); } catch (e) { settings = ORDER_DEFAULT_RULES; }
+  const estimatedDeliveryFee = cartPolicy === "cod" ? Number(settings.COD_DELIVERY_FEE) || 0
+    : (itemsSubtotal >= Number(settings.FREE_DELIVERY_THRESHOLD) ? 0 : Number(settings.ADVANCE_DELIVERY_FEE) || 0);
+  const estimatedOrderTotal = itemsSubtotal + estimatedDeliveryFee;
+  const eligiblePaymentModes = cartPolicy === "advance_only" ? "Advance Payment"
+    : cartPolicy === "advance_or_split" ? "Advance Payment, Split Payment"
+    : "Cash on Delivery, Advance Payment, Split Payment";
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new OrderError("LEAD_BUSY", "Please try again in a moment.");
+  let isNew = true;
+  let status = "NEW";
+  try {
+    const sheet = ensureLeadsSheet();
+    const existing = findLeadRow(sheet, leadId);
+    const now = new Date().toISOString();
+    if (existing) {
+      isNew = false;
+      // A duplicate Confirm Delivery updates the same row -- never
+      // downgrades a further-along status (e.g. a stray resubmit after the
+      // customer already converted to an order keeps ORDER_CONVERTED).
+      const currentStatus = String(existing.row[existing.headers.indexOf("status")] || "NEW");
+      status = (currentStatus === "ORDER_CONVERTED") ? currentStatus : "NEW";
+      const values = [[
+        leadId, existing.row[existing.headers.indexOf("createdAt")], now, status,
+        safeSheetText(fullName), safeSheetText(phone), safeSheetText(address), safeSheetText(city),
+        safeSheetText(postal), safeSheetText(notes), JSON.stringify(cartLines), itemsSubtotal, estimatedOrderTotal,
+        eligiblePaymentModes, safeSheetText(optionalText(payload.utmSource, "UTM source", 200)),
+        safeSheetText(optionalText(payload.fbp, "fbp", 200)), safeSheetText(optionalText(payload.fbc, "fbc", 200)),
+        "delivery", existing.row[existing.headers.indexOf("abandonReason")], existing.row[existing.headers.indexOf("convertedOrderId")]
+      ]];
+      sheet.getRange(existing.rowIndex, 1, 1, LEAD_HEADERS.length).setValues(values);
+    } else {
+      sheet.appendRow([
+        leadId, now, now, status,
+        safeSheetText(fullName), safeSheetText(phone), safeSheetText(address), safeSheetText(city),
+        safeSheetText(postal), safeSheetText(notes), JSON.stringify(cartLines), itemsSubtotal, estimatedOrderTotal,
+        eligiblePaymentModes, safeSheetText(optionalText(payload.utmSource, "UTM source", 200)),
+        safeSheetText(optionalText(payload.fbp, "fbp", 200)), safeSheetText(optionalText(payload.fbc, "fbc", 200)),
+        "delivery", "", ""
+      ]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+
+  // CAPI Lead fires only after the row is durably committed, and only on
+  // genuinely new leads (a duplicate Confirm Delivery reuses the same
+  // event_id anyway, so Meta dedupes it even if this were called again --
+  // but skipping it here avoids the extra API call on every keystroke-free
+  // resubmit).
+  let capi = { ok: false, skipped: true };
+  if (isNew) {
+    capi = sendMetaCapiEvent("Lead", "LEAD-" + leadId, {
+      ph: [sha256Hex(phone)],
+      ct: city ? [sha256Hex(city.toLowerCase())] : undefined,
+      country: [sha256Hex("pk")],
+      client_user_agent: optionalText(payload.userAgent, "User agent", 300) || undefined,
+      fbp: optionalText(payload.fbp, "fbp", 200) || undefined,
+      fbc: optionalText(payload.fbc, "fbc", 200) || undefined
+    }, {
+      currency: "PKR",
+      value: itemsSubtotal,
+      content_ids: cartLines.map(l => l.productId),
+      num_items: cartLines.length,
+      eventSourceUrl: optionalText(payload.pageUrl, "Page URL", 300) || "https://www.hojaseeds.pk/"
+    });
+  }
+  return { ok: true, leadId: leadId, status: status, isNew: isNew, capi: capi.ok };
+}
+
+// Best-effort, non-authenticated (same trust level as saveLead -- this is
+// abandonment telemetry, not a security boundary). Never creates a lead,
+// never throws: a missing/unknown leadId simply reports updated:false so
+// the frontend never blocks navigation on this call.
+function updateLeadStatus(payload) {
+  const leadId = requiredText(payload.leadId, "Lead ID", 16, 100);
+  const status = String(payload.status || "");
+  if (LEAD_ABANDON_STATUSES.indexOf(status) === -1) throw new OrderError("INVALID_LEAD_STATUS", "That checkout status is not recognized.");
+  const abandonReason = optionalText(payload.abandonReason, "Abandon reason", 200);
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { ok: true, updated: false };
+  try {
+    const sheet = ensureLeadsSheet();
+    const existing = findLeadRow(sheet, leadId);
+    if (!existing) return { ok: true, updated: false };
+    const statusCol = existing.headers.indexOf("status") + 1;
+    const updatedAtCol = existing.headers.indexOf("updatedAt") + 1;
+    const reasonCol = existing.headers.indexOf("abandonReason") + 1;
+    const currentStatus = String(existing.row[statusCol - 1] || "");
+    if (currentStatus !== "ORDER_CONVERTED") sheet.getRange(existing.rowIndex, statusCol).setValue(status);
+    sheet.getRange(existing.rowIndex, updatedAtCol).setValue(new Date().toISOString());
+    if (abandonReason) sheet.getRange(existing.rowIndex, reasonCol).setValue(safeSheetText(abandonReason));
+    return { ok: true, updated: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Called from submitOrder() only after logOrder() has durably succeeded.
+// Best-effort: any failure here is caught by the caller and never affects
+// the order response already returned to the customer.
+function convertLeadOnOrder(leadId, order, payload) {
+  if (leadId) {
+    const cleanLeadId = String(leadId);
+    if (/^[A-Za-z0-9_-]{16,100}$/.test(cleanLeadId)) {
+      const lock = LockService.getScriptLock();
+      if (lock.tryLock(15000)) {
+        try {
+          const sheet = ensureLeadsSheet();
+          const existing = findLeadRow(sheet, cleanLeadId);
+          if (existing) {
+            const statusCol = existing.headers.indexOf("status") + 1;
+            const updatedAtCol = existing.headers.indexOf("updatedAt") + 1;
+            const convertedCol = existing.headers.indexOf("convertedOrderId") + 1;
+            sheet.getRange(existing.rowIndex, statusCol).setValue("ORDER_CONVERTED");
+            sheet.getRange(existing.rowIndex, updatedAtCol).setValue(new Date().toISOString());
+            sheet.getRange(existing.rowIndex, convertedCol).setValue(safeSheetText(order.orderId));
+          }
+        } finally {
+          lock.releaseLock();
+        }
+      }
+    }
+  }
+
+  sendMetaCapiEvent("Purchase", "ORDER-" + order.orderId, {
+    ph: [sha256Hex(order.customer.phone)],
+    country: [sha256Hex("pk")],
+    client_user_agent: optionalText(payload && payload.userAgent, "User agent", 300) || undefined,
+    fbp: optionalText(payload && payload.fbp, "fbp", 200) || undefined,
+    fbc: optionalText(payload && payload.fbc, "fbc", 200) || undefined
+  }, {
+    currency: "PKR",
+    value: order.total, // full confirmed order total -- never payNow, for COD/Advance/Split alike
+    content_ids: order.items.map(i => i.productId),
+    content_type: "product",
+    num_items: order.items.length,
+    eventSourceUrl: optionalText(payload && payload.pageUrl, "Page URL", 300) || "https://www.hojaseeds.pk/"
+  });
+}
+
+// Fails closed for analytics only: a missing token, network error, or
+// non-2xx response is swallowed and reported back as {ok:false} -- it
+// never throws, so it can never block lead/order creation.
+function sendMetaCapiEvent(eventName, eventId, userData, customData) {
+  const token = PropertiesService.getScriptProperties().getProperty("META_CAPI_ACCESS_TOKEN");
+  if (!token) return { ok: false, skipped: true };
+  try {
+    const cleanUserData = {};
+    Object.keys(userData || {}).forEach(key => { if (userData[key] !== undefined) cleanUserData[key] = userData[key]; });
+    const eventSourceUrl = customData.eventSourceUrl;
+    const cleanCustomData = Object.assign({}, customData);
+    delete cleanCustomData.eventSourceUrl;
+    const body = {
+      data: [{
+        event_name: eventName,
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: eventId,
+        action_source: "website",
+        event_source_url: eventSourceUrl,
+        user_data: cleanUserData,
+        custom_data: cleanCustomData
+      }]
+    };
+    const response = UrlFetchApp.fetch(
+      "https://graph.facebook.com/v21.0/" + META_PIXEL_ID + "/events?access_token=" + encodeURIComponent(token),
+      { method: "post", contentType: "application/json", payload: JSON.stringify(body), muteHttpExceptions: true }
+    );
+    const code = response.getResponseCode();
+    return { ok: code >= 200 && code < 300, status: code };
+  } catch (error) {
+    console.error("Meta CAPI send failed: " + error);
+    return { ok: false, error: String(error && error.message || error) };
+  }
+}
+
+function sha256Hex(value) {
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""), Utilities.Charset.UTF_8);
+  return digest.map(b => ((b < 0 ? b + 256 : b).toString(16)).padStart(2, "0")).join("");
 }
 
 function jsonResponse(obj) {

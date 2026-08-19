@@ -292,6 +292,65 @@ const Cart = {
 };
 
 // ---- Toast ----
+// ---- Checkout Leads (HS-20260819-02, post-launch growth funnel) ----
+// A persistent per-checkout leadId (reused for the whole session, not
+// regenerated per request) lets the server upsert one Leads row instead of
+// duplicating it on every Confirm Delivery resubmit, and lets the Meta
+// Pixel/CAPI Lead events share one event_id for dedup. Entirely additive:
+// never touches Cart/Orders/idempotency.
+const Leads = {
+  KEY: "hoja_lead_id",
+  id() {
+    let id;
+    try { id = localStorage.getItem(this.KEY); } catch { id = null; }
+    if (!id) {
+      id = "lead-" + createIdempotencyKey();
+      try { localStorage.setItem(this.KEY, id); } catch { /* ignore storage errors */ }
+    }
+    return id;
+  },
+  cookie(name) {
+    const match = String(document.cookie || "").match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return match ? decodeURIComponent(match[1]) : "";
+  },
+  // Fires on a valid Confirm Delivery submission, before Payment. Never
+  // blocks checkout: any failure resolves to null and the caller proceeds
+  // to Payment regardless -- only the Lead-specific analytics events are
+  // skipped when this doesn't confirm success.
+  async save(delivery) {
+    if (!CONFIG.SHEET_WEBHOOK_URL) return null;
+    try {
+      const res = await fetch(CONFIG.SHEET_WEBHOOK_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "saveLead",
+          leadId: this.id(),
+          customer: delivery,
+          items: Cart.flatLines().map(l => ({ productId: l.p.id, quantity: l.qty })),
+          fbp: this.cookie("_fbp"),
+          fbc: this.cookie("_fbc"),
+          userAgent: (typeof navigator !== "undefined" && navigator.userAgent) || "",
+          pageUrl: location.href,
+          utmSource: new URLSearchParams(location.search).get("utm_source") || ""
+        })
+      });
+      return await res.json();
+    } catch (e) { console.warn("Lead save failed, checkout continues:", e); return null; }
+  },
+  // Abandonment-reason telemetry -- best-effort, non-blocking, never fires
+  // another Meta Lead event.
+  async updateStatus(status, abandonReason) {
+    if (!CONFIG.SHEET_WEBHOOK_URL) return null;
+    try {
+      const res = await fetch(CONFIG.SHEET_WEBHOOK_URL, {
+        method: "POST",
+        body: JSON.stringify({ type: "updateLeadStatus", leadId: this.id(), status, abandonReason: abandonReason || "" })
+      });
+      return await res.json();
+    } catch (e) { console.warn("Lead status update failed:", e); return null; }
+  }
+};
+
 const Toast = {
   show(msg) {
     const t = document.getElementById("toast");
@@ -356,6 +415,15 @@ const Analytics = {
   addShippingInfo(lines, subtotal) {
     if (this.hasGA()) gtag("event", "add_shipping_info", { currency: "PKR", value: subtotal, items: lines.map(l => this.gaItem(l.p, l.qty)) });
   },
+  // Primary Meta campaign-optimization signal (HS-20260819-02): fires only
+  // after the checkout Lead is confirmed saved server-side -- never on
+  // form validation alone. One event per leadId (the caller only invokes
+  // this on a genuinely new/confirmed save); LEAD-<leadId> is shared with
+  // the server-side CAPI Lead call for Pixel/CAPI dedup.
+  generateLead(leadId, lines, subtotal) {
+    if (this.hasGA()) gtag("event", "generate_lead", { currency: "PKR", value: subtotal, items: lines.map(l => this.gaItem(l.p, l.qty)) });
+    if (this.hasMeta()) fbq("track", "Lead", { currency: "PKR", value: subtotal, content_ids: lines.map(l => l.p.id), content_type: "product" }, { eventID: "LEAD-" + leadId });
+  },
   addPaymentInfo(lines, subtotal, paymentMethod) {
     if (this.hasGA()) gtag("event", "add_payment_info", { currency: "PKR", value: subtotal, payment_type: paymentMethod, items: lines.map(l => this.gaItem(l.p, l.qty)) });
     if (this.hasMeta()) fbq("track", "AddPaymentInfo", { value: subtotal, currency: "PKR", contents: lines.map(l => ({ id: l.p.id, quantity: l.qty })) });
@@ -367,7 +435,7 @@ const Analytics = {
     });
     if (this.hasMeta()) fbq("track", "Purchase",
       { value: payload.total, currency: "PKR", contents: lines.map(l => ({ id: l.p.id, quantity: l.qty })), content_type: "product" },
-      { eventID: orderId }
+      { eventID: "ORDER-" + orderId }
     );
   }
 };
@@ -950,7 +1018,7 @@ const Views = {
     }
   },
 
-  confirmDelivery(e) {
+  async confirmDelivery(e) {
     e.preventDefault();
     const delivery = {
       name: document.getElementById("o-name").value.trim(),
@@ -974,7 +1042,26 @@ const Views = {
     }
     this._order = this._order || {};
     this._order.delivery = delivery;
+
+    // Save the checkout Lead server-side BEFORE Payment (HS-20260819-02).
+    // This never blocks checkout: a save failure still lets the customer
+    // continue to Payment, it just skips the Lead-specific analytics below
+    // (which must only fire once the details are confirmed saved).
+    const submitBtn = document.getElementById("deliverySubmitBtn");
+    const stickyBtn = document.getElementById("sbAction");
+    if (submitBtn) submitBtn.disabled = true;
+    if (stickyBtn) stickyBtn.disabled = true;
+    let leadResult = null;
+    try { leadResult = await Leads.save(delivery); }
+    finally {
+      if (submitBtn) submitBtn.disabled = false;
+      if (stickyBtn) stickyBtn.disabled = false;
+    }
+
     Analytics.addShippingInfo(Cart.flatLines(), Cart.totalAmount());
+    if (leadResult && leadResult.ok) {
+      Analytics.generateLead(Leads.id(), Cart.flatLines(), Cart.totalAmount());
+    }
     Router.go("payment");
   },
 
@@ -1049,6 +1136,7 @@ const Views = {
             <div class="form-card">
               <h3>Payment Method</h3>
               ${restrictedNote}
+              ${codAllowed ? `<div class="cod-recovery-hint"><span>💵 Cash on Delivery is available for this order.</span><button type="button" class="btn-text-secondary" onclick="Views.selectPay('payCOD','payAdvance,paySplit')">Use Cash on Delivery</button></div>` : ""}
               <div class="pay-options">
                 ${codAllowed ? `
                 <label class="pay-option premium-cod-card" id="payCOD">
@@ -1112,6 +1200,19 @@ const Views = {
             <button type="button" class="btn-text-secondary" onclick="Router.go('delivery')">← Back to Delivery</button>
             <button type="button" class="btn-text-tertiary" onclick="Router.go(Router.lastCategory)">Continue Shopping</button>
           </div>
+          <details class="payment-recovery">
+            <summary>Can't complete payment right now?</summary>
+            <div class="payment-recovery-chips">
+              ${[
+                ["Prefer Cash on Delivery", "COD_REQUESTED"],
+                ["Advance payment is difficult", "PAYMENT_ABANDONED"],
+                ["Payment method unavailable", "PAYMENT_ABANDONED"],
+                ["Delivery charge", "PAYMENT_ABANDONED"],
+                ["Need more time", "PAYMENT_ABANDONED"],
+                ["Call/WhatsApp me", "CALLBACK_REQUESTED"]
+              ].map(([label, status]) => `<button type="button" class="payment-recovery-chip" onclick="Views.saveAbandonReason(this,'${status}','${label}')">${label}</button>`).join("")}
+            </div>
+          </details>
         </form>
       </section>`;
 
@@ -1154,6 +1255,15 @@ const Views = {
       Toast.show("Your saved custom order was restored.");
       Router.go("cart");
     }
+  },
+
+  // One-tap payment-abandonment reason (HS-20260819-02). Non-blocking,
+  // non-aggressive: saves best-effort against the checkout Lead and never
+  // navigates away or fires another Meta Lead event.
+  saveAbandonReason(btn, status, label) {
+    if (btn) { btn.disabled = true; btn.classList.add("selected"); }
+    Leads.updateStatus(status, label);
+    Toast.show("Got it — we've saved your preference.");
   },
 
   paymentDisplaySettings() {
@@ -1321,7 +1431,16 @@ const Views = {
         advanceMethod: requiresAdvanceChannel ? document.getElementById("o-advance-method").value : "",
         transactionReference
       },
-      items: lines.map(line => ({ productId: line.p.id, quantity: line.qty }))
+      items: lines.map(line => ({ productId: line.p.id, quantity: line.qty })),
+      // Growth-funnel context only (HS-20260819-02): lets the server link
+      // this order back to its checkout Lead and fire Meta CAPI Purchase
+      // with real match data. Never read/used by pricing, validation, or
+      // idempotency -- purely additive fields.
+      leadId: Leads.id(),
+      fbp: Leads.cookie("_fbp"),
+      fbc: Leads.cookie("_fbc"),
+      userAgent: (typeof navigator !== "undefined" && navigator.userAgent) || "",
+      pageUrl: location.href
     };
     const requestSignature = JSON.stringify(request);
     if (!this._order.idempotencyKey || this._order.idempotencyRequestSignature !== requestSignature) {

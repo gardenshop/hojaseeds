@@ -13,9 +13,11 @@ const Admin = {
   activeTab: "dashboard",
   tabs: [
     ["dashboard", "Dashboard"], ["products", "Products"], ["orders", "Orders"],
-    ["customers", "Customers"], ["delivery", "Delivery & Payments"], ["analytics", "Analytics"],
+    ["customers", "Customers"], ["leads", "Checkout Leads"], ["delivery", "Delivery & Payments"], ["analytics", "Analytics"],
     ["settings", "Store Settings"], ["audit", "Audit Log"]
   ],
+  leadFilter: "all",
+  leads: [],
 
   login(response) {
     if (!response || !response.credential) return this.showError("Google sign-in did not return a credential.");
@@ -116,7 +118,8 @@ const Admin = {
       read("dashboard", result => this.renderDashboard(result.summary || {}), ["dashboardContent"]),
       read("orders", result => { this.renderOrders(result.items || []); this.renderCustomers(result.items || []); }, ["ordersContent", "customersContent"]),
       read("contacts", result => this.renderContacts(result.items || []), []),
-      read("audit", result => this.renderAudit(result.items || []), ["auditContent"])
+      read("audit", result => this.renderAudit(result.items || []), ["auditContent"]),
+      read("leads", result => this.renderLeads(result.items || []), ["leadsContent"])
     ]);
   },
 
@@ -163,6 +166,25 @@ const Admin = {
   },
 
   renderContacts(contacts) { this.contacts = contacts; },
+
+  // Checkout Leads (HS-20260819-02) — read-only growth-funnel view, same
+  // Super-Admin auth boundary as every other adminRead resource. Never
+  // exposes anything beyond what the Leads sheet itself stores (no CAPI
+  // token, no order internals).
+  renderLeads(leads) {
+    this.leads = leads;
+    const filters = [
+      ["all", "All"], ["NEW", "New"], ["PAYMENT_ABANDONED", "Payment Abandoned"],
+      ["COD_REQUESTED", "COD Requested"], ["CALLBACK_REQUESTED", "Callback Requested"], ["ORDER_CONVERTED", "Converted"]
+    ];
+    const filterBar = document.getElementById("leadFilters");
+    if (filterBar) {
+      filterBar.innerHTML = filters.map(([id, label]) => `<button class="admin-tab ${id === this.leadFilter ? "active" : ""}" type="button" data-lead-filter="${id}">${label}</button>`).join("");
+      filterBar.querySelectorAll("[data-lead-filter]").forEach(button => button.addEventListener("click", () => { this.leadFilter = button.dataset.leadFilter; this.renderLeads(this.leads); }));
+    }
+    const rows = this.leadFilter === "all" ? leads : leads.filter(l => (l.status || "NEW") === this.leadFilter);
+    document.getElementById("leadsContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Lead</th><th>Phone</th><th>City</th><th>Cart value</th><th>Last step</th><th>Reason</th><th>Status</th><th>Created</th><th>Converted Order</th></tr></thead><tbody>${rows.map(l => `<tr><td>${escapeHTML(l.fullName)}</td><td>${escapeHTML(l.phone)}</td><td>${escapeHTML(l.city)}</td><td>Rs. ${escapeHTML(l.estimatedOrderTotal)}</td><td>${escapeHTML(l.lastStep)}</td><td>${escapeHTML(l.abandonReason)}</td><td>${escapeHTML(l.status || "NEW")}</td><td>${escapeHTML(l.createdAt)}</td><td>${escapeHTML(l.convertedOrderId)}</td></tr>`).join("") || `<tr><td colspan="9">No leads yet.</td></tr>`}</tbody></table></div>`;
+  },
   renderAudit(items) {
     document.getElementById("auditContent").innerHTML = `<div class="admin-data-card"><table class="admin-data-table"><thead><tr><th>Timestamp</th><th>Admin</th><th>Action</th><th>Entity</th><th>Result</th></tr></thead><tbody>${items.map(item => `<tr><td>${escapeHTML(item.timestamp)}</td><td>${escapeHTML(item.admin_email)}</td><td>${escapeHTML(item.action)}</td><td>${escapeHTML(item.entity_type)}: ${escapeHTML(item.entity_id)}</td><td>${escapeHTML(item.result)}</td></tr>`).join("") || `<tr><td colspan="5">No audit entries yet.</td></tr>`}</tbody></table></div>`;
   },

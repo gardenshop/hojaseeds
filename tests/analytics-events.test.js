@@ -97,7 +97,7 @@ function product(overrides = {}) {
     assert.strictEqual(gaPurchase[2].currency, "PKR");
     const metaPurchase = calls.meta.find(c => c[0] === "track" && c[1] === "Purchase");
     assert.strictEqual(metaPurchase[2].value, scenario.total, `${scenario.paymentMethod}: Meta Purchase value must be the full confirmed order total`);
-    assert.strictEqual(metaPurchase[3].eventID, "HOJA-TEST-1", "Meta eventID matches the server order ID for dedup");
+    assert.strictEqual(metaPurchase[3].eventID, "ORDER-HOJA-TEST-1", "Meta eventID = ORDER-<orderId>, matching the server CAPI Purchase event_id for Pixel/CAPI dedup");
   }
 })();
 
@@ -117,9 +117,23 @@ function product(overrides = {}) {
   });
 })();
 
+(function generateLeadFiresGaAndMetaWithLeadPrefixedEventId() {
+  const { Analytics, calls } = createSandbox();
+  const lines = [{ p: product(), qty: 2, line: 370 }];
+  Analytics.generateLead("lead-abc123", lines, 370);
+  const gaLead = calls.ga.find(c => c[1] === "generate_lead");
+  assert.ok(gaLead, "GA4 generate_lead fires");
+  assert.strictEqual(gaLead[2].value, 370);
+  assert.strictEqual(gaLead[2].currency, "PKR");
+  const metaLead = calls.meta.find(c => c[0] === "track" && c[1] === "Lead");
+  assert.ok(metaLead, "Meta Lead fires");
+  assert.strictEqual(metaLead[3].eventID, "LEAD-lead-abc123", "Meta eventID = LEAD-<leadId>, matching the server CAPI Lead event_id for dedup");
+})();
+
 (function noopWhenIdsBlank() {
   const { Analytics, calls } = createSandbox({ GA4_MEASUREMENT_ID: "", META_PIXEL_ID: "" });
   Analytics.purchase("HOJA-TEST-3", { total: 100, deliveryFee: 0 }, [{ p: product(), qty: 1, line: 100 }]);
+  Analytics.generateLead("lead-blank", [{ p: product(), qty: 1, line: 100 }], 100);
   assert.strictEqual(calls.ga.length, 0, "fail-closed: no GA network call with a blank Measurement ID");
   assert.strictEqual(calls.meta.length, 0, "fail-closed: no Meta network call with a blank Pixel ID");
 })();

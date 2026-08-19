@@ -406,6 +406,18 @@ button{font-family:inherit;cursor:pointer;}
 
 /* Cart-based payment-policy matrix (HS-20260817-04) */
 .pay-cod-banner{display:flex;align-items:flex-start;gap:10px;background:#e2eedd;border:1px solid #bfdcb2;border-radius:10px;padding:12px 14px;margin-bottom:16px;}
+
+/* Payment abandonment recovery (HS-20260819-02): compact, opt-in, never an
+   exit popup -- a one-click COD hint plus a collapsed one-tap reason list. */
+.cod-recovery-hint{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:var(--sage);border:1px solid var(--kraft-dark);border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:.82rem;color:var(--ink-soft);}
+.payment-recovery{margin-top:10px;font-size:.82rem;}
+.payment-recovery summary{cursor:pointer;color:var(--ink-soft);font-weight:600;list-style:none;}
+.payment-recovery summary::-webkit-details-marker{display:none;}
+.payment-recovery summary::before{content:"+ ";}
+.payment-recovery[open] summary::before{content:"- ";}
+.payment-recovery-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.payment-recovery-chip{border:1px solid var(--kraft-dark);background:var(--kraft);color:var(--ink);border-radius:999px;padding:7px 11px;font-size:.76rem;font-weight:600;}
+.payment-recovery-chip:disabled,.payment-recovery-chip.selected{opacity:.6;background:var(--sage);}
 .pay-cod-banner-icon{flex:none;width:26px;height:26px;border-radius:50%;background:var(--leaf);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;}
 .pay-cod-banner strong{display:block;color:var(--leaf-dark);font-size:.94rem;}
 .pay-cod-banner p{margin:2px 0 0;font-size:.82rem;color:#4d5a45;}
