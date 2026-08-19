@@ -181,7 +181,14 @@ const PushGrowth = {
       return;
     }
     try {
-      const reg = await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+      await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
+      // register() can resolve while the worker is still "installing" --
+      // pushManager.subscribe() requires an ACTIVE worker, so on a fresh
+      // (first-ever) registration this raced and threw "no active Service
+      // Worker" (HS-20260819-08: this was the actual reason zero real
+      // subscriptions ever reached production). .ready resolves only once
+      // a worker has activated for this scope.
+      const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(CONFIG.VAPID_PUBLIC_KEY)

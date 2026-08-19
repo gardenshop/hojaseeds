@@ -6,6 +6,73 @@ into each request.
 
 ---
 
+## WEB PUSH: ROOT CAUSE FOUND + FIXED — REAL SUBSCRIBER PROVEN LIVE (HS-20260819-08)
+
+- **Root cause of "no notification / 0 attempted/accepted/failed", found by
+  direct read-only inspection of the live Sheet (not guessed):**
+  `PushSubscriptions` had exactly one row, `subscriptionStatus: "unavailable"`
+  (an old HS-03 test artifact) — **zero active subscribers ever existed**.
+  `computeEligibleSubscriptions` correctly found nobody eligible, so any
+  Send Campaign attempt legitimately did nothing and finalized at
+  `0 attempted / 0 accepted / 0 failed` — this was the system behaving
+  correctly on an empty subscriber list, not a send-path bug. Confirmed:
+  a Draft campaign in the live sheet had independently flipped to
+  `Completed (0/0/0)` between two reads this session, matching exactly
+  what the task reported the owner observed when they tried sending.
+- **Why nobody could ever subscribe (the actual bug, now fixed):**
+  `PushGrowth.subscribe()` in `js/push.js` called
+  `reg.pushManager.subscribe()` immediately after
+  `navigator.serviceWorker.register()`, without waiting for the worker to
+  reach the `activated` state. `register()` can resolve while the worker
+  is still `installing` — `pushManager.subscribe()` requires an *active*
+  worker, so on a fresh (first-ever, uncached) registration this raced and
+  threw `AbortError: ... no active Service Worker`, silently caught and
+  logged as a denied-looking `reportSubscription("granted", null)`. Fixed
+  by awaiting `navigator.serviceWorker.ready` before subscribing.
+- **Fix verified for real, end-to-end, on production**, driving the actual
+  site (no bypass): real Chrome (not headless-default Chromium — see
+  HS-06 note on API-key requirements) → `https://www.hojaseeds.pk/` → the
+  real 3-5s soft-prompt appeared with the exact spec copy → real click on
+  "Enable Free Offer Alerts" → real native permission grant → real
+  `PushManager.subscribe()` against real FCM → **real row saved to the
+  live `PushSubscriptions` sheet with `subscriptionStatus: "active"`**
+  (visitor `c2c1a940-...`, confirmed via direct Sheet read).
+- **Real send re-confirmed against this real production subscription:**
+  the deployed Worker (unchanged) built a VAPID JWT + RFC 8291 payload for
+  this subscription's real endpoint and FCM again responded
+  **HTTP 201 Created**. As in HS-06/07, headless Chrome has no OS surface
+  to render a system notification, so `getNotifications()` came back
+  empty — **push accepted by the service; manual visual confirmation
+  still required** in a real desktop session (this was a direct
+  Worker-to-FCM test, not routed through `pushTestSend`, so it does not by
+  itself prove Apps Script's own `PUSH_WORKER_URL`/`PUSH_SERVER_SECRET`
+  Script Properties are set — that still needs the owner's admin sign-in,
+  same limitation as HS-07).
+- **Apps Script Script Properties:** still not verifiable by the agent
+  (no non-admin-authenticated way exists to read them, and the agent
+  correctly cannot perform the owner's Google sign-in). If the task's
+  "property KEYS already exist" report is accurate, the owner may have
+  added the key *names* without pasting a value, or with a stale value —
+  cannot be distinguished from here without an admin-authenticated read.
+  Recommend: sign in to `admin.html`, open Notifications, and use **Send
+  Test Notification** against the now-real active test subscriber
+  (`c2c1a940-...`, or a fresh one from the owner's own browser) — a
+  `PUSH_PROVIDER_NOT_CONFIGURED` error there means the properties are
+  genuinely still empty/wrong; a `pushStatus: "accepted"` result (this
+  task's report will then show real numbers instead of 0/0/0) means they
+  are correct and the module is done.
+- **Test-data note:** `PushSubscriptions` now additionally carries a
+  handful of `unavailable`-status rows from this session's diagnostic
+  runs (real permission grants without the SW-ready fix, from before the
+  fix was deployed) plus one genuinely `active` row — all clearly
+  synthetic test visitor IDs, no real customer data, left in place
+  (consistent with how every other test artifact in this Sheet has been
+  handled throughout this project).
+- **Files changed:** `js/push.js` only (the `serviceWorker.ready` fix).
+  Zero changes to Apps Script, the Worker, checkout, or business rules.
+
+---
+
 ## WEB PUSH ACTIVATION — OPERATOR STEP STILL REQUIRED (HS-20260819-07)
 
 - **Worker secret rotated and confirmed live:** the original
