@@ -6,6 +6,40 @@ into each request.
 
 ---
 
+## PUSH: SECRET MISMATCH NOW PROVEN, NOT JUST SUSPECTED (HS-20260819-11)
+
+- **AUTH_FAILED confirmed with real evidence.** The owner retried sending
+  (twice, via Send Campaign against the same `all_active` campaign,
+  4 total attempts across both) since HS-10. HS-09's new safe
+  failure-code system, now live, recorded the exact reason for real:
+  `{"httpStatus":401,"code":"AUTH_FAILED"}` on every attempt (read
+  directly from the live `PushEvents` sheet — no PII/secret values
+  involved in that read). **This definitively confirms** — no longer
+  "most probable," now proven — that Apps Script's `PUSH_SERVER_SECRET`
+  Script Property does not match the Worker's actual secret.
+- **No code changed this task.** Full regression re-run clean; live
+  production checkout/Admin re-verified unaffected.
+- **The agent did not attempt any Script Property write this task**, per
+  this task's explicit instruction and the prior task's own conclusion
+  that this path is closed for an agent in this environment.
+- **Note for the owner:** the two Send Campaign attempts that produced
+  this evidence used the `all_active` audience rather than a single Test
+  Send — because both failed with 0 accepted, no real notification
+  reached any customer, so no harm was done, but the recommended flow
+  going forward is still Send Test Notification to one subscriber, not
+  Send Campaign, until the secret is confirmed fixed.
+- **Exact remaining step (unchanged, now with proof behind it):** open
+  Apps Script → Project Settings → Script Properties → re-paste the
+  correct `PUSH_SERVER_SECRET` value into the **existing** property (do
+  not create a duplicate key) → Save → Send Test Notification to one
+  subscriber → expect `accepted:1/failed:0`. If `AUTH_FAILED` still
+  appears after that, the pasted value doesn't match what's on the Worker
+  — re-copy character-for-character from the source file, no typos/extra
+  whitespace.
+- **Push Growth Module remains ~99%, NOT frozen.**
+
+---
+
 ## PUSH: FINAL BLOCKER IS A ONE-TIME HUMAN STEP (HS-20260819-10)
 
 - **No code or config changed this task.** Verified (read-only): Worker
