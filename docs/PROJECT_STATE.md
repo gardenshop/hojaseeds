@@ -6,6 +6,40 @@ into each request.
 
 ---
 
+## PUSH: SECRET CORRECTED — REAL SEND ACCEPTED, VISUAL CONFIRMATION PENDING (HS-20260819-12)
+
+- **The owner corrected `PUSH_SERVER_SECRET`.** Confirmed with real
+  evidence, read directly from the live `PushEvents`/`PushCampaigns`
+  sheets (no code changed by the agent, no Script Property write
+  attempted): the same campaign (`camp-59dfb42cf4334bf5`) was resent by
+  `gisupp@gmail.com` (proves real Admin sign-in works) and this time both
+  real subscriptions got `push_sent` with
+  `{"httpStatus":200,"code":"ACCEPTED"}`. **The Apps Script ↔ Worker
+  authentication mismatch is fixed.**
+- Campaign cumulative counters now read `attempted:6 / accepted:2 /
+  failed:4 / status: Partially Failed` — the 4 failed are the preserved
+  historical `AUTH_FAILED` attempts from before the fix (kept for audit,
+  per protected scope — never rewritten), the 2 accepted are the real
+  post-fix send. Read in isolation, the corrected round is exactly
+  `accepted:2 / failed:0`.
+- **Still open: visual confirmation.** `clicked: 0` on the campaign and
+  `clickCount: 0` on both subscriptions — no notification click recorded
+  yet. The agent cannot mechanically observe an OS-level system
+  notification in this environment (no GUI/headless-Chrome limitation,
+  documented since HS-06). Per this task's own instruction, this is the
+  one point where the owner is asked directly rather than the agent
+  guessing or claiming a fake pass.
+- **No code changed, no deployment made this task** (nothing needed to
+  change — the fix was entirely the owner's Script Property correction).
+  Full regression re-run clean; production checkout/Admin re-verified.
+- **Push Growth Module: ~99.5%, still NOT frozen** — pending only the
+  owner's visual/click confirmation. If YES: freeze at 100% next task (no
+  further engineering required, just the docs update). If NO: diagnose
+  from there (e.g., check push-sw.js registration on the owner's actual
+  browser, OS notification settings/Focus Assist) rather than assuming.
+
+---
+
 ## PUSH: SECRET MISMATCH NOW PROVEN, NOT JUST SUSPECTED (HS-20260819-11)
 
 - **AUTH_FAILED confirmed with real evidence.** The owner retried sending
