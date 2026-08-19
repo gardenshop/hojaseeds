@@ -36,6 +36,78 @@ into each request.
 
 ---
 
+## PERMISSION PERSISTENCE + ORDER-SUBMIT HARDENING + ADMIN SEND UX (HS-20260819-13) — PROTECTED CONTRACT
+
+- **Repeated push permission — real root cause + real bug, both fixed:**
+  1. **Proven with a direct `curl -I`**: `hojaseeds.pk` and
+     `www.hojaseeds.pk` both served `HTTP/1.1 200` with no redirect
+     between them. `Notification.permission`/`PushSubscription` are
+     per-origin, so a customer granted on one legitimately saw `default`
+     again on the other. Added `_redirects` (apex → www, 301) —
+     **deployed but not confirmed taking effect** after several minutes
+     of propagation; Cloudflare Pages appears not to route a
+     custom-domain-to-custom-domain redirect through `_redirects` when
+     both hostnames are attached to the *same* Pages project (a platform
+     nuance, not a code defect). **Recommended real fix, needs dashboard
+     access this session's Cloudflare API token doesn't have:** add a
+     zone-level Redirect Rule (Cloudflare dashboard → the `hojaseeds.pk`
+     zone → Rules → Redirect Rules) matching hostname `hojaseeds.pk` →
+     `https://www.hojaseeds.pk/$1` (or the simpler "Forwarding URL"
+     preset), which is the standard, reliable mechanism for this exact
+     case and doesn't depend on Pages' static `_redirects` file at all.
+  2. **Real bug found by code inspection, fixed and confirmed live:**
+     `PushGrowth.reconcile()` in `js/push.js` was nested inside the
+     `eligibleForSoftPrompt()` gate, so it **never ran once permission was
+     already "granted"** — exactly the customers who most needed
+     lastSeen/subscription kept in sync. Now runs unconditionally on
+     every load; still never shows UI, never calls
+     `Notification.requestPermission()`. New contract: granted+subscribed
+     → silent lastSeen update; granted+no subscription → silent
+     `PushManager.subscribe()` recovery (no re-prompt, permission already
+     granted); denied → status report only; default → unchanged soft
+     prompt. **Verified live with real Chrome:** grant once → 5 refreshes
+     → 0 soft-prompt reappearances, subscription reused, 0 console
+     errors.
+- **Order submission hardened against tab close/background:** a minimal,
+  non-PII pending marker (`idempotencyKey`/`paymentMethod`/timestamp only
+  — never name/phone/address/items) is saved to `localStorage` just
+  before the final POST and cleared on any definitive response, kept only
+  on a genuine timeout/network failure. `fetch` now uses `keepalive:true`
+  for the order POST when the body is safely under the ~64KiB browser
+  limit. New `checkOrderStatus` Apps Script action (read-only, no lock,
+  reuses the SAME existing deterministic-orderId idempotency mechanism —
+  no second Order API, no new duplicate-order risk) lets the next visit
+  ask whether a given `idempotencyKey` already succeeded; response is
+  deliberately minimal (`confirmed`/`orderId` only). Purchase analytics
+  now guarded by a small `localStorage` fired-log keyed by orderId so a
+  reconciliation banner or any replay can never double-fire it; the
+  reconciliation path itself deliberately never fires Purchase (the
+  status endpoint withholds value/items by design — firing with
+  fabricated data would be worse than the rare under-report).
+  **Background Sync was evaluated and deliberately not implemented** —
+  keepalive + reconciliation already cover the real risk without a
+  service-worker outbox; explicitly not a launch dependency.
+- **Admin Send UX:** every Send/Test Send/Pause/Resume action now
+  disables its own button immediately, shows `aria-busy` + a spinner
+  label, guarded by both a client-side single-flight `Set` (rapid
+  double-click / 10-rapid-click safe) and a **new server-side
+  `CacheService` lock** per campaignId in `sendPushCampaign`
+  (`PUSH_BUSY` on a concurrent call) and per-visitorId in `pushTestSend`
+  — client-side disabling alone was correctly identified as
+  insufficient. Progress text updates during a multi-batch continuation;
+  completion re-fetches/rerenders the Notifications tab via the existing
+  `loadDashboard()` (already never did a full page reload or re-login) and
+  shows a final "Campaign processed: X accepted, Y failed." summary.
+- **Tests:** new server-side concurrent-send-rejection test
+  (`push.test.js`) and a new `checkOrderStatus` suite
+  (`order-submission.test.js`: unknown key → not confirmed; real order →
+  found by the SAME key, response contains only `confirmed`/`orderId`).
+  All test files pass; `node --check` clean on `app.js`/`admin.js`/
+  `push.js`/`Code.gs`; `npm run sheets:verify` `ok:true`; live production
+  checkout re-verified unchanged.
+
+---
+
 ## PUSH: SECRET CORRECTED — REAL SEND ACCEPTED, VISUAL CONFIRMATION PENDING (HS-20260819-12)
 
 - **The owner corrected `PUSH_SERVER_SECRET`.** Confirmed with real
