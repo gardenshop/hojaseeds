@@ -6,6 +6,112 @@ into each request.
 
 ---
 
+## GROWTH FUNNEL MODULE (HS-20260819-02) — POST-LAUNCH, ADDITIVE ONLY
+
+- **Lead-first checkout funnel + Meta CAPI + COD/abandonment recovery.**
+  Approved post-launch conversion-optimization scope; core launch scope
+  (products/prices/delivery fees/payment rules/idempotency/LockService/
+  Apps Script identity/Cloudflare project) is untouched and stays frozen.
+- **Lead trigger:** a valid Confirm Delivery submission — **before**
+  Payment, matching the spec exactly. **Lead storage:** new self-healing
+  `Leads` sheet (`ensureLeadsSheet()` creates it with headers on first use;
+  no manual Sheet migration was needed — verified live via
+  `npm run sheets:verify`: `exists:false` before first use → `exists:true,
+  missing:[]` after). **Lead schema:** leadId, createdAt, updatedAt,
+  status, fullName, phone, address, city, postalCode, notes, cartJson,
+  itemsSubtotal, estimatedOrderTotal, eligiblePaymentModes, utmSource, fbp,
+  fbc, lastStep, abandonReason, convertedOrderId (`config/sheet-schema.json`
+  updated, schema_version 5). **One-lead idempotency:** `saveLead` upserts
+  by `leadId` (persistent per-checkout-session ID, `localStorage` +
+  `createIdempotencyKey()`) — duplicate Confirm Delivery updates the same
+  row and never downgrades a `status` already at `ORDER_CONVERTED`.
+  Verified live: two identical `saveLead` calls with the same leadId →
+  `isNew:true` then `isNew:false`, exactly one row.
+- **GA4 `generate_lead`:** fires only when `saveLead` confirms `ok:true`
+  (never on form validation alone). **GA4 `add_shipping_info`:** unchanged,
+  fires alongside it on the same successful submission, not duplicated on
+  the Payment page.
+- **Meta Lead Pixel:** `fbq('track','Lead', ..., {eventID:'LEAD-<leadId>'})`,
+  fires client-side only after the server confirms the save. **Meta Lead
+  CAPI:** `sendMetaCapiEvent('Lead','LEAD-<leadId>', ...)` fires
+  server-side, inside `saveLead()`, only on a genuinely new row (a
+  same-event-id dedup safety net exists on Meta's side regardless).
+  **Lead dedupe:** Pixel `eventID` and CAPI `event_id` are the identical
+  string `LEAD-<leadId>`, guaranteeing Meta's own event-dedup applies.
+- **Meta Purchase Pixel:** `Analytics.purchase`'s Meta `eventID` changed
+  from bare `orderId` to `ORDER-<orderId>` (matching the new CAPI
+  convention exactly — `tests/analytics-events.test.js` updated
+  accordingly). **Meta Purchase CAPI:** `convertLeadOnOrder()` fires
+  `sendMetaCapiEvent('Purchase','ORDER-<orderId>', ...)` from inside
+  `submitOrder()`, only after `logOrder()` has durably succeeded — never
+  on a validation/network failure, never twice on an idempotent retry
+  (verified: `tests/leads-capi.test.js` fires it exactly once across two
+  identical `submitOrder()` calls with the same idempotency key).
+  **Purchase dedupe:** unchanged contract from HS-20260818-34 — Pixel
+  fires from the frontend success branch only, CAPI fires from the backend
+  success branch only, both keyed to the same server Order ID.
+- **CAPI token storage:** `META_CAPI_ACCESS_TOKEN`, Apps Script Script
+  Properties **only** — not set this session (no real token was supplied;
+  none was invented). `sendMetaCapiEvent()` fails closed immediately
+  (`{ok:false, skipped:true}`) with no token, verified live
+  (`saveLead` response included `"capi":false`). **CAPI failure behavior:**
+  wrapped in try/catch, can never fail a lead save or an order — verified
+  by a synthetic network-throwing mock in `tests/leads-capi.test.js`.
+  **PII sent (to GA4/Meta):** NO — phone is SHA-256 hashed before CAPI
+  `user_data`, custom_data carries only currency/value/content_ids/
+  num_items; name/address/transaction reference are asserted absent in
+  both the analytics and CAPI test suites. (The Lead **save** call to
+  Hoja's own backend legitimately carries the real name/phone/address, the
+  same way Order submission always has — that data only ever reaches the
+  Leads sheet, never a third party.)
+- **COD recovery:** a compact "Prefer Cash on Delivery? → Use Cash on
+  Delivery" hint on the Payment page when the cart is already COD-eligible
+  (one click, reuses the existing `selectPay()` — no new logic).
+  **Custom → COD conversion:** the existing "Switch to a 100% COD Mix
+  Pack" flow (`codMixPackUpsellHTML`, HS-20260817-04) was already complete
+  for the non-COD-eligible case and is unchanged. **Draft restore:**
+  `Cart.saveCustomDraft`/`restoreCustomDraft`/"Restore Custom Order" —
+  unchanged, still wired on Cart and the COD-Mix-Pack upsell.
+- **Abandon reasons:** a collapsed (non-aggressive, no popup, never blocks
+  navigation), one-tap 6-chip control on the Payment page — Prefer COD /
+  Advance is difficult / Payment method unavailable / Delivery charge /
+  Need more time / Call-WhatsApp me — saves via `updateLeadStatus`, never
+  fires another Meta Lead. **Lead statuses:** NEW, PAYMENT_ABANDONED,
+  COD_REQUESTED, CALLBACK_REQUESTED, ORDER_CONVERTED. **Lead→Order
+  conversion:** `convertLeadOnOrder()` sets `status=ORDER_CONVERTED` +
+  `convertedOrderId` on the matching Lead row after a real order succeeds
+  — verified live and in `tests/leads-capi.test.js` for both COD and
+  Advance Payment.
+- **Admin Leads:** new read-only "Checkout Leads" tab (`admin.html`/
+  `js/admin.js`), same Super-Admin Google-auth boundary as every other
+  `adminRead` resource, with New/Payment Abandoned/COD Requested/Callback
+  Requested/Converted filters. No new CRM, no PII exposed beyond the
+  existing Orders/Customers tabs already show.
+- `node --check` (app.js, admin.js), `npm test` (6 files, all pass),
+  `npm run sheets:verify` all pass. Fixed two pre-existing test-harness
+  gaps this change surfaced (`document.cookie` and `navigator` undefined
+  in the Node vm sandbox) with defensive guards in `app.js` itself —
+  real-browser behavior is unaffected either way.
+- Verified live in production after deploy: `saveLead` self-healed the
+  Leads sheet and created/updated a clearly-marked test row
+  ("HS-20260819-02 TEST DO NOT CONTACT"), `updateLeadStatus` updated it,
+  `?action=products`/`settings`/`popularProducts` all still 200 anonymous
+  (one transient Apps Script congestion blip immediately after redeploy
+  cleared on retry — not a code regression). Zero first-party console
+  errors, zero overflow, on a fresh production load.
+- **Protect:** Lead trigger = server-confirmed delivery details only; one
+  Lead row per leadId; Meta **Lead** is the primary campaign-optimization
+  signal (not PageView/AddToCart/InitiateCheckout), Purchase remains the
+  downstream quality signal; Pixel/CAPI dedup via shared
+  `LEAD-<leadId>`/`ORDER-<orderId>` event IDs; Purchase stays
+  server-success-only at the full confirmed order total; no PII in any
+  analytics/CAPI payload; CAPI failure is always non-blocking; the
+  existing COD-Mix-Pack/draft-preservation flow is unchanged; core launch
+  scope (47 products, prices, delivery fees, payment rules,
+  MIN_PARTIAL_ADVANCE, SPLIT_ADVANCE_PERCENT, rounding, idempotency,
+  LockService, Sheet ID, Apps Script identity, Cloudflare project) remains
+  frozen.
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260819-01) — ANALYTICS ACTIVE
 
 - **GA4 + Meta Pixel activated with owner-supplied, verified IDs.**
