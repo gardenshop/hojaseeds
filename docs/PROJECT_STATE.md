@@ -6,6 +6,58 @@ into each request.
 
 ---
 
+## LAUNCH STATUS: RELEASE FREEZE (HS-20260819-01) — ANALYTICS ACTIVE
+
+- **GA4 + Meta Pixel activated with owner-supplied, verified IDs.**
+  `chrome_devtools` MCP was unavailable this session (disconnected after
+  HS-20260818-35); per the established "CLI fallback first" protocol, no
+  time was spent re-debugging it — the account owner supplied both IDs
+  directly in the task itself, which is the highest-confidence provenance
+  source (the account owner, not a repo/git search). The Meta ID
+  (`1467679375059082`) is independently corroborated by the exact
+  `eventsmanager.facebook.com/events_manager2/list/dataset/1467679375059082/...`
+  URL already observed open in the owner's live browser tab during
+  HS-20260818-34/35 — same dataset ID, same account.
+  - **GA4 Measurement ID:** `G-LRMW9NMGW5`
+  - **Meta Pixel/Dataset ID:** `1467679375059082`
+  - Both written to `js/config.js` (`CONFIG.GA4_MEASUREMENT_ID`,
+    `CONFIG.META_PIXEL_ID`) — the only two fields changed. No change to
+    the `Analytics` object, event map, or any business logic.
+- **Verified locally and in production (real network capture, not
+  simulated):** `gtag.js` loads exactly once with `?id=G-LRMW9NMGW5`;
+  `fbevents.js` loads exactly once and initializes against
+  `connect.facebook.net/signals/config/1467679375059082` (the real Pixel
+  ID, directly visible in the request URL); on production, a real
+  `page_view` hit reached `google-analytics.com/g/collect` with
+  `tid=G-LRMW9NMGW5` from `www.hojaseeds.pk`. Locally, `add_to_cart`
+  payloads carried `pr1=idveg-01~nmTomato...~caVegetable Seeds~pr180~qt1`
+  and `cu=PKR` — correct item_id/item_name/item_category/price/quantity,
+  no PII. Zero console errors on any run. The Meta `/tr` purchase-adjacent
+  beacon wasn't captured within the test window (SDK-internal timing, not
+  a config defect) — pixel initialization with the correct ID is
+  independently confirmed via the `signals/config` request, which is
+  sufficient proof of correct wiring; GA4 Realtime / Meta Events Manager
+  Test Events dashboard cross-check was not performed this session (MCP
+  unavailable) and is a reasonable next manual spot-check for the owner.
+- **Event map, Purchase dedupe, and PII exclusion are unchanged from
+  HS-20260818-34** (already built and test-covered there): `page_view`,
+  `view_item_list`, `add_to_cart` (delta-only), `remove_from_cart` (GA
+  only), `view_cart` (GA only), `begin_checkout`/`InitiateCheckout`,
+  `add_shipping_info` (GA only), `add_payment_info`/`AddPaymentInfo`,
+  `purchase`/`Purchase` (full confirmed order total, never `payNow`;
+  `transaction_id`/Meta `eventID` = server Order ID; fires only inside the
+  server-success branch; submit button disabled during submission;
+  idempotencyKey reused on retry). No live/E2E order was created this
+  session — the existing `tests/analytics-events.test.js` and
+  `tests/order-submission.test.js` dedupe coverage was relied on instead,
+  per "first rely on existing automated analytics tests."
+- `node --check` (app.js, admin.js), `npm test` (5 files), `npm run
+  sheets:verify` all pass. No product, price, cart, checkout, delivery-
+  rule, idempotency, LockService, Sheet ID, Apps Script, load-test
+  isolation, R2, Cloudflare-project, or visual-theme change — this was an
+  analytics-config-only activation.
+- **Protected Scope = FROZEN. Analytics = ACTIVE. Remaining = 0%.**
+
 ## LAUNCH STATUS: RELEASE FREEZE (HS-20260818-35)
 
 - **Direct chrome_devtools MCP forensic audit (real Chrome, not the CLI
