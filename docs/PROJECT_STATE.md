@@ -6,6 +6,58 @@ into each request.
 
 ---
 
+## CHECKOUT PAYMENT UX (HS-20260819-04) — PRESENTATION-ONLY, PROTECTED CONTRACT
+
+- **What changed:** `Views.payment()` / `Views.updateDeliveryFee()` /
+  `Views.selectAdvanceMethod()` in `js/app.js` only. Zero changes to
+  `paymentPreview()`, `cartPaymentPolicy()`, rounding, thresholds, COD/
+  Advance/Split eligibility rules, `MIN_PARTIAL_ADVANCE`,
+  `SPLIT_ADVANCE_PERCENT`, or any Apps Script `Code.gs` logic.
+- **Free-delivery progress placement (protected):** `#freeDeliveryProgress`
+  now lives inside `#advanceDetails`, immediately **above** the JazzCash/
+  EasyPaisa/Bank Transfer method chooser — visible only while the top-level
+  method is Advance Payment (Split shows its own unrelated "delivery
+  included" note; COD shows nothing). Do not move it back out to the
+  general form area, and do not show it for COD.
+- **Threshold source (protected):** still `Settings.get().FREE_DELIVERY_THRESHOLD`
+  read live from server Settings — never hardcoded. Remaining-amount is
+  still `max(0, threshold - itemsSubtotal)`, never computed against the
+  final order total. The message is now reactive — re-rendered from
+  `updateDeliveryFee()` on every COD/Advance/Split switch (previously
+  rendered once on initial page load only, which could go stale after a
+  method switch; this is a bugfix bundled with the UX change, not a
+  calculation change).
+- **Method chooser is collapsed by default (protected):** on entering the
+  Payment page, `selectedAdvanceMethod` starts at `""` (no channel
+  pre-selected) unless the customer already explicitly picked one earlier
+  in the same checkout session. Only the three method buttons
+  (`role="tablist"`/`role="tab"`) are visible — no account number/title, no
+  QR, no Transaction ID field, no final CTA.
+- **Single-panel disclosure (protected):** clicking a method reveals
+  exactly that method's panel (`#advanceMethodDetails`, `role="tabpanel"`)
+  plus the shared Transaction ID field and the single final CTA
+  (`#submitBtn`, text `"Confirm Order — Pay Rs. XXX Now"`). Switching
+  methods closes the previous panel, opens the new one, and **clears** any
+  already-typed reference (`#o-txn-ref`) so a reference can never be
+  submitted against the wrong channel. Never show two method panels or two
+  CTAs at once. ARIA (`aria-selected`, `aria-expanded`, `aria-controls`) is
+  kept in sync with the selected tab.
+- **COD (protected):** completely unaffected — no channel step, no
+  JazzCash/EasyPaisa/Bank/reference controls ever rendered, CTA visible
+  immediately as before.
+- **Split (protected):** same progressive-disclosure pattern for its
+  method chooser; Split's payNow/codDue arithmetic is untouched.
+- **Verified live on production** (`https://www.hojaseeds.pk/`, real cart →
+  Delivery → Payment flow, real Apps Script backend): initial Advance view
+  shows 0 selected tabs and the CTA/reference hidden; selecting JazzCash
+  reveals exactly its panel + reference + correct-amount CTA; switching to
+  Bank Transfer closes JazzCash's panel, opens Bank Transfer's, and clears
+  the typed reference; free-delivery message showed the correct
+  server-threshold-derived remaining amount. 0 console errors and 0
+  horizontal overflow confirmed at 320/390/430/768/1366.
+
+---
+
 ## WEB PUSH GROWTH MODULE (HS-20260819-03) — POST-LAUNCH, ADDITIVE ONLY
 
 - **Push provider:** none configured yet — architecture-complete,
