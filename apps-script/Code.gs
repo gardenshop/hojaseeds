@@ -1334,8 +1334,19 @@ function logPushEvent(payload) {
   sheet.appendRow([new Date().toISOString(), visitorId, campaignId, eventType, safeSheetText(metadata)]);
 
   if (eventType === "notification_click" && campaignId) {
-    try { incrementCampaignCounter(campaignId, "clicked"); } catch (e) { console.error(e); }
-    try { linkClickToSubscription(visitorId, campaignId); } catch (e) { console.error(e); }
+    // Dedupe (HS-20260819-14): one physical click must be one logical
+    // click event. A short CacheService window per (visitor, campaign)
+    // absorbs a service-worker fetch retry or a double focus/open call
+    // without a full Sheet scan -- cheap and sufficient for this volume,
+    // not meant to catch a click a full 10s+ after the first (that's a
+    // second real click).
+    const dedupeKey = "push_click_" + visitorId + "_" + campaignId;
+    const cache = CacheService.getScriptCache();
+    if (!cache.get(dedupeKey)) {
+      cache.put(dedupeKey, "1", 10);
+      try { incrementCampaignCounter(campaignId, "clicked"); } catch (e) { console.error(e); }
+      try { linkClickToSubscription(visitorId, campaignId); } catch (e) { console.error(e); }
+    }
   }
   return { ok: true };
 }

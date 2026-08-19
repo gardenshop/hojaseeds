@@ -368,6 +368,23 @@ function visitorId() { return "visitor-test-" + Math.random().toString(36).slice
   assert.strictEqual(summary.optInRate, 50);
 })();
 
+(function duplicateClickEventsDoNotDoubleCount() {
+  // HS-20260819-14: a service-worker fetch retry or double focus/open call
+  // must not double-increment clicked/clickCount for one physical click.
+  const { api, rows } = createBackend({ pushWorkerUrl: "https://worker.test/", pushServerSecret: "s3cret" });
+  const vid = visitorId();
+  api.savePushSubscription({ visitorId: vid, permissionStatus: "granted", subscription: { endpoint: "https://push.example/a", p256dh: "x".repeat(30), auth: "y".repeat(16) } });
+  const created = api.savePushCampaign({ title: "Gift Seeds", body: "Free gift seeds this week.", targetUrl: "https://www.hojaseeds.pk/", audience: "all_active" }, "admin@hojaseeds.pk");
+  api.logPushEvent({ visitorId: vid, campaignId: created.campaignId, eventType: "notification_click" });
+  api.logPushEvent({ visitorId: vid, campaignId: created.campaignId, eventType: "notification_click" }); // simulated retry
+  const campHeaders = rows.PushCampaigns[0];
+  const campRow = rows.PushCampaigns[1];
+  assert.strictEqual(campRow[campHeaders.indexOf("clicked")], 1, "clicked counter increments exactly once for two rapid identical click events");
+  const subHeaders = rows.PushSubscriptions[0];
+  const subRow = rows.PushSubscriptions[1];
+  assert.strictEqual(subRow[subHeaders.indexOf("clickCount")], 1, "subscriber clickCount also increments exactly once");
+})();
+
 (function leadConversionAttributedToRecentClick() {
   const { api, rows } = createBackend();
   const vid = visitorId();
