@@ -1105,8 +1105,12 @@ const Views = {
       { id: "EasyPaisa", label: "EasyPaisa", enabled: paymentSettings.EASYPAISA_ENABLED },
       { id: "Bank Transfer", label: "Bank Transfer", enabled: paymentSettings.BANK_ENABLED }
     ].filter(method => method.enabled);
+    // Collapsed by default (HS-20260819-04): no advance channel is
+    // pre-selected on first load of this page in a session — only a
+    // channel the customer already explicitly clicked earlier this same
+    // checkout is remembered across a back-and-forth to Delivery/Cart.
     const selectedAdvanceMethod = this._order.advanceMethod && advanceMethods.some(method => method.id === this._order.advanceMethod)
-      ? this._order.advanceMethod : advanceMethods[0]?.id || "";
+      ? this._order.advanceMethod : "";
     this._order.advanceMethod = selectedAdvanceMethod;
 
 // Restricted note: customized-collection keeps its existing strict
@@ -1169,8 +1173,6 @@ const Views = {
                 </label>` : ""}
               </div>
 
-              <div class="free-delivery-progress" id="freeDeliveryProgress"></div>
-
                ${codMixUpsell}
             </div>
             <div class="summary-card">
@@ -1183,16 +1185,17 @@ const Views = {
                <div class="summary-line" id="summaryPayNowRow"><span id="payableLabel">${payableLabelText(defaultMethod)}</span><span class="mono" id="summaryPayNow"></span></div>
                <div class="summary-line" id="summaryCodDueRow"><span>Pay on delivery</span><span class="mono" id="summaryCodDue"></span></div>
                <div class="advance-details" id="advanceDetails" style="display:${codAllowed ? "none" : "block"}">
-                 <h4>Choose how to pay the advance</h4>
+                 <div class="free-delivery-progress" id="freeDeliveryProgress"></div>
+                 <h4>Choose payment method</h4>
                  <div class="advance-method-tabs" role="tablist" aria-label="Advance payment method">
-                   ${advanceMethods.map(method => `<button type="button" class="advance-method-tab${method.id === selectedAdvanceMethod ? " selected" : ""}" data-method="${method.id}" onclick="Views.selectAdvanceMethod('${method.id}')">${method.label}</button>`).join("") || `<p class="payment-restricted-note">No advance payment method is currently enabled. Please contact the store.</p>`}
+                   ${advanceMethods.map(method => `<button type="button" class="advance-method-tab${method.id === selectedAdvanceMethod ? " selected" : ""}" data-method="${method.id}" role="tab" aria-selected="${method.id === selectedAdvanceMethod}" aria-expanded="${method.id === selectedAdvanceMethod}" aria-controls="advanceMethodDetails" onclick="Views.selectAdvanceMethod('${method.id}')">${method.label}</button>`).join("") || `<p class="payment-restricted-note">No advance payment method is currently enabled. Please contact the store.</p>`}
                  </div>
                  <input type="hidden" id="o-advance-method" value="${selectedAdvanceMethod}">
-                 <div id="advanceMethodDetails"></div>
-                 <div class="field"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
-                 <p class="advance-note">We'll confirm your payment and dispatch your order once received.</p>
+                 <div id="advanceMethodDetails" role="tabpanel"></div>
+                 <div class="field" id="advanceTxnRefField" style="display:${selectedAdvanceMethod ? "block" : "none"}"><label for="o-txn-ref">Transaction ID / reference</label><input id="o-txn-ref" placeholder="e.g. TXN123456"></div>
+                 <p class="advance-note" id="advanceNote" style="display:${selectedAdvanceMethod ? "block" : "none"}">We'll confirm your payment and dispatch your order once received.</p>
                </div>
-               <button class="inline-submit" type="submit" id="submitBtn"></button>
+               <button class="inline-submit" type="submit" id="submitBtn" style="display:${(defaultMethod === "Cash on Delivery" || selectedAdvanceMethod) ? "" : "none"}"></button>
               <p class="admin-muted" id="splitSubnote" style="text-align:center;margin-top:8px"></p>
               <div id="orderStatus"></div>
             </div>
@@ -1219,7 +1222,6 @@ const Views = {
 
     if (codAllowed) document.getElementById("payCOD").classList.add("selected");
     this.renderAdvanceMethod(selectedAdvanceMethod);
-    this.renderFreeDeliveryProgress(defaultMethod, subtotal, hasCustomized);
     this.updateDeliveryFee();
     Analytics.addPaymentInfo(lines, subtotal, defaultMethod);
   },
@@ -1275,10 +1277,28 @@ const Views = {
     const allowed = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED" };
     const settings = this.paymentDisplaySettings();
     if (!allowed[method] || !settings[allowed[method]]) return;
+    // Switching channel (e.g. JazzCash -> Bank Transfer) clears any
+    // already-typed reference -- prevents submitting the wrong channel's
+    // reference against the newly selected one.
+    if (this._order.advanceMethod && this._order.advanceMethod !== method) {
+      const ref = document.getElementById("o-txn-ref");
+      if (ref) ref.value = "";
+    }
     this._order.advanceMethod = method;
-    document.querySelectorAll(".advance-method-tab").forEach(button => button.classList.toggle("selected", button.dataset.method === method));
+    document.querySelectorAll(".advance-method-tab").forEach(button => {
+      const isSelected = button.dataset.method === method;
+      button.classList.toggle("selected", isSelected);
+      button.setAttribute("aria-selected", isSelected);
+      button.setAttribute("aria-expanded", isSelected);
+    });
     const input = document.getElementById("o-advance-method");
     if (input) input.value = method;
+    const txnField = document.getElementById("advanceTxnRefField");
+    const note = document.getElementById("advanceNote");
+    if (txnField) txnField.style.display = "block";
+    if (note) note.style.display = "block";
+    const submitBtn = document.getElementById("submitBtn");
+    if (submitBtn) submitBtn.style.display = "";
     this.renderAdvanceMethod(method);
   },
 
@@ -1349,6 +1369,7 @@ const Views = {
     document.getElementById("advanceDetails").style.display = method === "Cash on Delivery" ? "none" : "block";
     this._order.deliveryFee = preview.deliveryFee;
     this._order.total = preview.orderTotal;
+    this.renderFreeDeliveryProgress(method, subtotal, hasCustomized);
 
     const payNowRow = document.getElementById("summaryPayNowRow");
     const codDueRow = document.getElementById("summaryCodDueRow");
@@ -1357,6 +1378,15 @@ const Views = {
     const codDueEl = document.getElementById("summaryCodDue");
     const submitBtn = document.getElementById("submitBtn");
     const splitSubnote = document.getElementById("splitSubnote");
+    // Collapsed-by-default (HS-20260819-04): for Advance/Split, the final
+    // CTA and the reference/note only appear once a channel is chosen;
+    // COD has no channel step, so its CTA is always visible.
+    const channelChosen = method === "Cash on Delivery" || Boolean(this._order.advanceMethod);
+    submitBtn.style.display = channelChosen ? "" : "none";
+    const txnField = document.getElementById("advanceTxnRefField");
+    const note = document.getElementById("advanceNote");
+    if (txnField) txnField.style.display = channelChosen && method !== "Cash on Delivery" ? "block" : "none";
+    if (note) note.style.display = channelChosen && method !== "Cash on Delivery" ? "block" : "none";
     if (method === "Cash on Delivery") {
       payNowRow.style.display = "none";
       codDueRow.style.display = "flex";
