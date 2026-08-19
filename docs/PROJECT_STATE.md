@@ -36,6 +36,65 @@ into each request.
 
 ---
 
+## CLICK DEDUPE ADDED; APEX→WWW REDIRECT NEEDS DASHBOARD ACCESS (HS-20260819-14)
+
+- **Fresh real evidence confirmed the send pipeline is genuinely healthy:**
+  a real campaign (`camp-fec59efc2b6748d5`, "💵 Prefer Cash on Delivery?")
+  was sent post-HS-12/13-fixes to a genuinely new real subscriber
+  (`visitor-5d110673-...`, subscribed the same session): `attempted:1 /
+  accepted:1 / failed:0` — exactly matching this task's stated evidence.
+  `clicked:0` — no click yet.
+- **Server-side click dedupe added (protected):** `logPushEvent` now
+  wraps the `clicked` counter/`clickCount` increment in a 10s
+  `CacheService` window keyed by (visitorId, campaignId), so a
+  service-worker fetch retry or double focus/open call can never
+  double-count one physical click. Verified by a new test (two rapid
+  identical `notification_click` events → counters increment exactly
+  once).
+- **`push-sw.js` reconfirmed live and correct** (`webhookUrl:
+  data.webhookUrl` present in the deployed file) — the click-recording
+  fix from HS-12 is genuinely in production for this and every
+  subsequent send.
+- **The actual click test still requires the owner** — clicking a real OS
+  notification is not something this agent can do in this environment
+  (no GUI, no real push-service delivery surface), confirmed repeatedly
+  across HS-06/07/08/12. **Owner action:** click the notification from the
+  send above if still visible (Windows Action Center / macOS Notification
+  Center often retain it even after the toast disappears), or send one
+  more fresh test and click it. Either way, `clicked` should go `0 → 1`
+  and Admin's Notifications tab will show it after its normal
+  `loadDashboard()` refresh — no re-login needed.
+- **Apex → www canonical redirect: still not resolved, confirmed this
+  session it requires dashboard access this agent does not have.**
+  `hojaseeds.pk` still returns `HTTP 200` directly (re-confirmed via
+  `curl -I` — no change since HS-13). The `_redirects` file added in
+  HS-13 does not appear to take effect for a custom-domain-to-custom-
+  domain redirect within the same Pages project. This session's
+  Cloudflare API token scope is `zone (read)` only — no zone/Rulesets
+  write permission — confirmed via `wrangler whoami`'s own scope listing;
+  no attempt was made to extract or use the underlying token for a raw
+  API call (that would be working around a real permission boundary, not
+  a missing feature — same principle applied to Apps Script Script
+  Properties in earlier tasks).
+  **Owner action (5 minutes, Cloudflare dashboard):** the `hojaseeds.pk`
+  zone → Rules → Redirect Rules → create rule: When incoming requests
+  match "Hostname equals `hojaseeds.pk`" → Then "Dynamic" redirect to
+  Expression `concat("https://www.hojaseeds.pk", http.request.uri.path,
+  if(http.request.uri.query != "", concat("?", http.request.uri.query),
+  ""))` with status 301, "Preserve query string" enabled. (The dashboard's
+  simpler "Static" redirect preset with hostname matching also works if
+  path/query preservation options are ticked.) Never create a rule
+  redirecting `www` back to the apex — one direction only.
+- **Push Growth Module: ~99.9%, still NOT frozen** — pending the owner's
+  click confirmation. The apex→www redirect is tracked as a separate,
+  non-blocking follow-up (documented as POST-LAUNCH below) since the
+  code-level `reconcile()` fix from HS-13 already independently prevents
+  repeated prompts for any customer who stays on one canonical URL.
+- **Files changed:** `apps-script/Code.gs`, `tests/push.test.js` only. No
+  frontend deploy this task (no frontend code changed).
+
+---
+
 ## PERMISSION PERSISTENCE + ORDER-SUBMIT HARDENING + ADMIN SEND UX (HS-20260819-13) — PROTECTED CONTRACT
 
 - **Repeated push permission — real root cause + real bug, both fixed:**
