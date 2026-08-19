@@ -58,6 +58,41 @@ into each request.
 
 ---
 
+## CHECKOUT PAYMENT UX — SELECTED-METHOD-ONLY VIEW (HS-20260819-05) — PROTECTED CONTRACT
+
+- **What changed:** `Views.payment()` / `Views.selectAdvanceMethod()` in
+  `js/app.js` (adds `Views.changeAdvanceMethod()`), plus supporting CSS in
+  `css/styles.css` (`.advance-method-selected-bar`, `.advance-method-change`).
+  Zero changes to `paymentPreview()`, thresholds, rounding, or COD/Advance/
+  Split eligibility.
+- **Protected rule — before selection:** all enabled method buttons
+  (`#advanceMethodTabs`, up to JazzCash/EasyPaisa/Bank Transfer) are
+  visible; no method is pre-selected; no details/reference/CTA shown
+  (carried forward from HS-20260819-04).
+- **Protected rule — after selection:** `#advanceMethodTabs` is hidden
+  entirely (not just de-emphasized). Only `#advanceMethodSelectedBar`
+  ("Selected payment method: X" + a small, visually subordinate "Change
+  payment method" button) plus that method's own details/reference/CTA
+  remain visible. Never show two method buttons or two detail panels at
+  once.
+- **"Change payment method" (protected):** `Views.changeAdvanceMethod()`
+  clears `this._order.advanceMethod`, clears the typed transaction
+  reference, hides details/reference/CTA, and restores the full 3-button
+  chooser — same reference-clearing safety as switching methods directly.
+- **Same pattern for Advance and Split (protected):** both use the
+  identical `#advanceMethodTabs`/`#advanceMethodSelectedBar` markup and
+  `selectAdvanceMethod`/`changeAdvanceMethod` functions — Split's payNow/
+  codDue math is untouched.
+- **COD (protected):** unaffected — confirmed zero JazzCash/EasyPaisa/
+  Bank/reference controls rendered for a COD-eligible cart.
+- **Verified live on production** (real cart → Delivery → Payment, real
+  Apps Script backend): selecting JazzCash hides the other two buttons and
+  shows only the selected bar + correct-amount CTA; 0 console errors, 0
+  horizontal overflow at 320/390/430/768/1366, confirmed on production at
+  390 and 1366.
+
+---
+
 ## WEB PUSH GROWTH MODULE (HS-20260819-03) — POST-LAUNCH, ADDITIVE ONLY
 
 - **Push provider:** none configured yet — architecture-complete,
