@@ -57,6 +57,6 @@ const CONFIG = {
 
   // Analytics — leave blank to keep them off (no script loads, no events
   // fire, nothing breaks). Fill in your real IDs to turn tracking on.
-  GA4_MEASUREMENT_ID: "", // e.g. "G-XXXXXXXXXX"
-  META_PIXEL_ID: "",      // e.g. "1234567890123456"
+  GA4_MEASUREMENT_ID: "G-LRMW9NMGW5", // Hoja Seeds GA4 property (owner-verified, HS-20260819-01)
+  META_PIXEL_ID: "1467679375059082",  // Hoja Seeds Meta Pixel/Dataset (owner-verified, HS-20260819-01)
 };
