@@ -31,8 +31,9 @@ function authorizeExternalRequestScope() {
 }
 
 function doGet(e) {
-  ensureAdminProperties();
   const action = e.parameter.action;
+  if (action === "bankAlfalahListener") return handleApgListener(e); // public, unauthenticated by design -- see handleApgListener
+  ensureAdminProperties();
   if (action === "products") return jsonResponse(getProducts());
   if (action === "settings") return jsonResponse(getSettings());
   if (action === "popularProducts") return jsonResponse(getPopularProducts());
@@ -58,11 +59,18 @@ function configureAdminProperties(clientId, adminEmail) {
 }
 
 function doPost(e) {
+  // Bank Alfalah may POST its IPN callback (the registered Listener URL)
+  // rather than GET it -- checked before any JSON body parsing, since
+  // that POST's body is not our internal JSON protocol at all.
+  if (e.parameter && e.parameter.action === "bankAlfalahListener") return handleApgListener(e);
   try {
     ensureAdminProperties();
     const payload = JSON.parse(e.postData.contents);
     if (payload.type === "order") return jsonResponse(submitOrder(payload));
     if (payload.type === "orderStatus") return jsonResponse(checkOrderStatus(payload));
+    if (payload.type === "apgStartHandshake") return jsonResponse(apgStartHandshake(payload));
+    if (payload.type === "apgStartSso") return jsonResponse(apgStartSso(payload));
+    if (payload.type === "apgVerifyStatus") return jsonResponse(apgVerifyStatus(payload));
     if (payload.type === "saveLead") return jsonResponse(saveLead(payload));
     if (payload.type === "updateLeadStatus") return jsonResponse(updateLeadStatus(payload));
     if (payload.type === "pushSubscription") return jsonResponse(savePushSubscription(payload));
@@ -155,7 +163,13 @@ const ORDER_DEFAULT_RULES = {
   MIN_PARTIAL_ADVANCE: 250
 };
 const ORDER_PAYMENT_METHODS = ["Cash on Delivery", "Advance Payment", "Split Payment"];
-const ORDER_ADVANCE_METHODS = ["JazzCash", "EasyPaisa", "Bank Transfer"];
+// "Bank Alfalah APG" (HS-20260820-01) is a real online redirect gateway,
+// unlike the other three manual/offline advance methods -- it never
+// requires the customer to type a transactionReference (see
+// buildAuthoritativeOrder below), and is only offered while
+// APG_SANDBOX_MODE is on (js/config.js) + APG_ENABLED (Settings sheet),
+// both gates required before it appears in checkout at all.
+const ORDER_ADVANCE_METHODS = ["JazzCash", "EasyPaisa", "Bank Transfer", "Bank Alfalah APG"];
 
 // Cart-based payment-policy matrix (HS-20260817-04). Derived purely from the
 // existing Products `cat`/`type` columns — no new Sheet column — so it stays
@@ -200,7 +214,11 @@ const PAYMENT_DISPLAY_DEFAULTS = {
   BANK_ACCOUNT_TITLE: "Hoja Seeds",
   BANK_ACCOUNT_NUMBER: "XXXXXXXXXXXX",
   BANK_IBAN: "",
-  BANK_QR_URL: ""
+  BANK_QR_URL: "",
+  // Off by default (HS-20260820-01) -- an explicit admin opt-in on top of
+  // the frontend's own CONFIG.APG_SANDBOX_MODE build flag, so real
+  // customers can never see APG until both are turned on deliberately.
+  APG_ENABLED: false
 };
 const PAYMENT_DISPLAY_KEYS = Object.keys(PAYMENT_DISPLAY_DEFAULTS);
 const PRODUCT_TYPES = ["regular", "premium", "standard-collection", "customized-collection"];
@@ -277,6 +295,392 @@ function checkOrderStatus(payload) {
   const orderId = generateOrderId(idempotencyKey);
   const existing = findOrderById(orderId);
   return { ok: true, confirmed: Boolean(existing), orderId: existing ? orderId : null };
+}
+
+// ============================================================================
+// Bank Alfalah APG (Alfa Payment Gateway) -- HS-20260820-01
+//
+// Contract extracted from the real "APG Merchant Integration Guide v1.1"
+// PDF plus the ACTUAL executable sample code shown in the merchant
+// portal's own Sandbox -> Integration -> Page Redirection page (the PDF's
+// "see sample code attached" was never actually attached to the project
+// -- this was retrieved directly from the portal itself, not guessed).
+//
+// Two-hop redirect flow:
+//   1. Handshake: browser POSTs HS_* fields to {base}/HS/HS/HS. APG
+//      redirects the browser back to HS_ReturnURL with ?auth_token=...
+//   2. SSO: browser POSTs AuthToken + TransactionAmount/TransactionTypeId
+//      to {base}/SSO/SSO/SSO. A successful response IS a redirect to
+//      APG's own hosted checkout page (card/wallet/bank entry never
+//      touches this site).
+//   3. Customer pays on APG's page, APG redirects back to ReturnURL again.
+//   4. Authoritative status: GET {base}/HS/api/IPN/OrderStatus/{merchantId}/
+//      {storeId}/{orderId} -- ONLY this (or the listener relaying the same
+//      inquiry) may ever mark an order Paid. Return URL query params are
+//      never trusted alone.
+//
+// Hash algorithm (HS_RequestHash / RequestHash), exactly as APG's own
+// sample computes it client-side with CryptoJS -- reimplemented here in
+// pure JS server-side (Apps Script has no native AES) so the two secret
+// keys (APG_KEY1/APG_KEY2) never reach the browser:
+//   mapString = every form-input's `id=value` pair, in the SAME order the
+//     official sample's form fields appear, joined with "&", trailing "&"
+//     stripped.
+//   hash = AES-128-CBC(key=APG_KEY1 as raw UTF-8 bytes,
+//                       iv=APG_KEY2 as raw UTF-8 bytes,
+//                       padding=PKCS7)(mapString), base64-encoded.
+// Verified byte-for-byte against Node's native crypto.createCipheriv
+// ("aes-128-cbc") across several vectors (empty string, unicode, exact
+// block size) before ever being used against the real sandbox.
+// ============================================================================
+
+const APG_AES_SBOX = [0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75,0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84,0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf,0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8,0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2,0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73,0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb,0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79,0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08,0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a,0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e,0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf,0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16];
+const APG_AES_RCON = [0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36];
+
+function apgUtf8Bytes(str) {
+  const bytes = [];
+  for (let i = 0; i < str.length; i++) {
+    let code = str.codePointAt(i);
+    if (code > 0xFFFF) i++;
+    if (code < 0x80) bytes.push(code);
+    else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+    else if (code < 0x10000) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+    else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+  }
+  return bytes;
+}
+function apgAesKeyExpansion(key) {
+  const Nk = 4, Nr = 10, w = [];
+  for (let i = 0; i < Nk; i++) w.push([key[4*i], key[4*i+1], key[4*i+2], key[4*i+3]]);
+  for (let i = Nk; i < 4 * (Nr + 1); i++) {
+    let temp = w[i-1].slice();
+    if (i % Nk === 0) {
+      temp = [temp[1], temp[2], temp[3], temp[0]].map(b => APG_AES_SBOX[b]);
+      temp[0] ^= APG_AES_RCON[i/Nk - 1];
+    }
+    w.push(w[i-Nk].map((b, idx) => b ^ temp[idx]));
+  }
+  return w;
+}
+function apgAesSubBytes(s) { for (let i = 0; i < 16; i++) s[i] = APG_AES_SBOX[s[i]]; }
+function apgAesShiftRows(s) { const t = s.slice(); for (let r=1;r<4;r++) for (let c=0;c<4;c++) s[c*4+r] = t[((c+r)%4)*4+r]; }
+function apgAesMulGF(a, b) { let p=0; for (let i=0;i<8;i++){ if (b&1) p^=a; const hi=a&0x80; a=(a<<1)&0xff; if (hi) a^=0x1b; b>>=1; } return p&0xff; }
+function apgAesMixColumns(s) {
+  for (let c=0;c<4;c++) {
+    const a0=s[c*4],a1=s[c*4+1],a2=s[c*4+2],a3=s[c*4+3];
+    s[c*4]=apgAesMulGF(a0,2)^apgAesMulGF(a1,3)^a2^a3;
+    s[c*4+1]=a0^apgAesMulGF(a1,2)^apgAesMulGF(a2,3)^a3;
+    s[c*4+2]=a0^a1^apgAesMulGF(a2,2)^apgAesMulGF(a3,3);
+    s[c*4+3]=apgAesMulGF(a0,3)^a1^a2^apgAesMulGF(a3,2);
+  }
+}
+function apgAesAddRoundKey(s, w, round) { for (let c=0;c<4;c++) for (let r=0;r<4;r++) s[c*4+r] ^= w[round*4+c][r]; }
+function apgAesEncryptBlock(input, w) {
+  const s = input.slice();
+  apgAesAddRoundKey(s, w, 0);
+  for (let round = 1; round <= 9; round++) { apgAesSubBytes(s); apgAesShiftRows(s); apgAesMixColumns(s); apgAesAddRoundKey(s, w, round); }
+  apgAesSubBytes(s); apgAesShiftRows(s); apgAesAddRoundKey(s, w, 10);
+  return s;
+}
+function apgPkcs7Pad(bytes, blockSize) {
+  const padLen = blockSize - (bytes.length % blockSize);
+  const out = bytes.slice();
+  for (let i = 0; i < padLen; i++) out.push(padLen);
+  return out;
+}
+function apgBytesToBase64(bytes) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i], b1 = bytes[i+1], b2 = bytes[i+2];
+    out += chars[b0 >> 2];
+    out += chars[((b0 & 3) << 4) | (b1 === undefined ? 0 : b1 >> 4)];
+    out += b1 === undefined ? "=" : chars[((b1 & 15) << 2) | (b2 === undefined ? 0 : b2 >> 6)];
+    out += b2 === undefined ? "=" : chars[b2 & 63];
+  }
+  return out;
+}
+// Matches CryptoJS.AES.encrypt(plain, key, {iv, mode: CBC, padding: Pkcs7}).toString()
+// exactly when key/iv are both 16-char UTF-8 strings (128-bit).
+function apgAesEncryptBase64(plainText, keyStr, ivStr) {
+  const key = apgUtf8Bytes(keyStr), iv = apgUtf8Bytes(ivStr);
+  if (key.length !== 16 || iv.length !== 16) throw new OrderError("APG_NOT_CONFIGURED", "APG encryption keys are misconfigured.");
+  const w = apgAesKeyExpansion(key);
+  const padded = apgPkcs7Pad(apgUtf8Bytes(plainText), 16);
+  let prev = iv, out = [];
+  for (let off = 0; off < padded.length; off += 16) {
+    const block = padded.slice(off, off + 16);
+    const xored = block.map((b, i) => b ^ prev[i]);
+    const enc = apgAesEncryptBlock(xored, w);
+    out = out.concat(enc);
+    prev = enc;
+  }
+  return apgBytesToBase64(out);
+}
+
+// Builds the exact `id=value&id=value...` string APG's own sample builds
+// from live DOM input order, from a fixed, explicit [id, value] list --
+// deterministic server-side equivalent, no DOM involved.
+function apgMapString(pairs) {
+  return pairs.map(([id, value]) => id + "=" + value).join("&");
+}
+
+function apgConfig() {
+  const p = PropertiesService.getScriptProperties();
+  const cfg = {
+    base: p.getProperty("APG_SANDBOX_BASE") || "https://sandbox.bankalfalah.com",
+    merchantId: p.getProperty("APG_MERCHANT_ID"),
+    storeId: p.getProperty("APG_STORE_ID"),
+    merchantHash: p.getProperty("APG_MERCHANT_HASH"),
+    merchantUsername: p.getProperty("APG_MERCHANT_USERNAME"),
+    merchantPassword: p.getProperty("APG_MERCHANT_PASSWORD"),
+    key1: p.getProperty("APG_KEY1"),
+    key2: p.getProperty("APG_KEY2")
+  };
+  const required = ["merchantId", "storeId", "merchantHash", "merchantUsername", "merchantPassword", "key1", "key2"];
+  if (required.some(k => !cfg[k])) {
+    throw new OrderError("APG_NOT_CONFIGURED", "Bank Alfalah APG is not configured yet (Script Properties missing).");
+  }
+  return cfg;
+}
+
+function apgFindOrderRow(gatewayOrderId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Orders");
+  if (!sheet) return null;
+  return findRowById(sheet, "orderId", gatewayOrderId);
+}
+
+// Step 1 -- customer already has a real PENDING gateway order (created via
+// the normal submitOrder path, same idempotency/validation as every other
+// payment method). This returns the exact field set + hash the frontend
+// auto-submits as a real full-page POST to {base}/HS/HS/HS. Key1/Key2 and
+// MerchantPassword's role in the hash never leave the server -- only the
+// final computed hash does. (MerchantHash/Username/Password themselves
+// DO travel in this POST, same as APG's own official sample -- that is
+// how APG's page-redirection mode identifies the merchant; it is not a
+// gap introduced here.)
+function apgStartHandshake(payload) {
+  const orderId = requiredText(payload.orderId, "Order ID", 8, 100);
+  const found = apgFindOrderRow(orderId);
+  if (!found) throw new OrderError("ORDER_NOT_FOUND", "Order not found.");
+  const h = found.headers, row = found.row;
+  if (String(row[h.indexOf("paymentGateway")]) !== "bank_alfalah_apg") {
+    throw new OrderError("NOT_A_GATEWAY_ORDER", "This order is not a Bank Alfalah APG payment.");
+  }
+  const cfg = apgConfig();
+  const returnUrl = "https://www.hojaseeds.pk/?hs_view=payment-return";
+  const pairs = [
+    ["HS_RequestHash", ""],
+    ["HS_IsRedirectionRequest", "1"],
+    ["HS_ChannelId", "1001"],
+    ["HS_ReturnURL", returnUrl],
+    ["HS_MerchantId", cfg.merchantId],
+    ["HS_StoreId", cfg.storeId],
+    ["HS_MerchantHash", cfg.merchantHash],
+    ["HS_MerchantUsername", cfg.merchantUsername],
+    ["HS_MerchantPassword", cfg.merchantPassword],
+    ["HS_TransactionReferenceNumber", orderId]
+  ];
+  const hash = apgAesEncryptBase64(apgMapString(pairs), cfg.key1, cfg.key2);
+  const fields = {};
+  pairs.forEach(([id, value]) => { fields[id] = value; });
+  fields.HS_RequestHash = hash;
+  return { ok: true, action: cfg.base + "/HS/HS/HS", fields: fields };
+}
+
+// Step 2 -- customer's browser landed back on our Return URL with
+// ?auth_token=... after a successful handshake. This returns the fields
+// for a real full-page POST to {base}/SSO/SSO/SSO; APG's OWN successful
+// response to that POST is a redirect to its hosted checkout page. The
+// amount sent is always the server's own payNow for this order -- never
+// a client-supplied amount.
+function apgStartSso(payload) {
+  const orderId = requiredText(payload.orderId, "Order ID", 8, 100);
+  const authToken = requiredText(payload.authToken, "Auth token", 4, 4000);
+  const found = apgFindOrderRow(orderId);
+  if (!found) throw new OrderError("ORDER_NOT_FOUND", "Order not found.");
+  const h = found.headers, row = found.row;
+  if (String(row[h.indexOf("paymentGateway")]) !== "bank_alfalah_apg") {
+    throw new OrderError("NOT_A_GATEWAY_ORDER", "This order is not a Bank Alfalah APG payment.");
+  }
+  if (String(row[h.indexOf("gatewayStatus")]) !== "PENDING") {
+    throw new OrderError("GATEWAY_ORDER_NOT_PENDING", "This order is no longer awaiting payment.");
+  }
+  const amount = Number(row[h.indexOf("payNow")]);
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount)) {
+    throw new OrderError("INVALID_GATEWAY_AMOUNT", "The order amount is invalid for a gateway payment.");
+  }
+  const cfg = apgConfig();
+  const returnUrl = "https://www.hojaseeds.pk/?hs_view=payment-return";
+  const pairs = [
+    ["AuthToken", authToken],
+    ["RequestHash", ""],
+    ["ChannelId", "1001"],
+    ["Currency", "PKR"],
+    ["IsBIN", "0"],
+    ["ReturnURL", returnUrl],
+    ["MerchantId", cfg.merchantId],
+    ["StoreId", cfg.storeId],
+    ["MerchantHash", cfg.merchantHash],
+    ["MerchantUsername", cfg.merchantUsername],
+    ["MerchantPassword", cfg.merchantPassword],
+    ["TransactionTypeId", ""], // empty = let the customer choose any APG-supported method
+    ["TransactionReferenceNumber", orderId],
+    ["TransactionAmount", String(amount)]
+  ];
+  const hash = apgAesEncryptBase64(apgMapString(pairs), cfg.key1, cfg.key2);
+  const fields = {};
+  pairs.forEach(([id, value]) => { fields[id] = value; });
+  fields.RequestHash = hash;
+  return { ok: true, action: cfg.base + "/SSO/SSO/SSO", fields: fields };
+}
+
+// The one authoritative source of truth for whether an APG order is
+// actually paid. Handles the documented double-JSON-encoding quirk in
+// APG's own response (confirmed from the portal's own C# IPN sample --
+// not guessed): the raw body is a JSON STRING containing escaped JSON, so
+// backslashes are stripped and the outer wrapping quote pair removed
+// before parsing.
+function apgStatusInquiryFromUrl(url) {
+  const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (resp.getResponseCode() !== 200) return null;
+  let text = resp.getContentText();
+  text = text.split("\\").join("");
+  if (text.length >= 2 && text.charAt(0) === '"' && text.charAt(text.length - 1) === '"') {
+    text = text.substring(1, text.length - 1);
+  }
+  try { return JSON.parse(text); } catch (e) { return null; }
+}
+
+function apgStatusInquiry(gatewayOrderId) {
+  const cfg = apgConfig();
+  const url = cfg.base + "/HS/api/IPN/OrderStatus/" + encodeURIComponent(cfg.merchantId) + "/" + encodeURIComponent(cfg.storeId) + "/" + encodeURIComponent(gatewayOrderId);
+  return apgStatusInquiryFromUrl(url);
+}
+
+// Idempotent by construction (HS-20260820-01, section 7/8 of the task):
+// once an order's gatewayStatus is a TERMINAL value (PAID/FAILED/
+// CANCELLED) this is a pure no-op forever after, regardless of how many
+// times the Return page or the Listener call it for the same order. A
+// short CacheService lock closes the narrow race where both channels
+// read PENDING at nearly the same instant.
+function applyGatewayStatusUpdate(gatewayOrderId, statusData) {
+  const lockKey = "apg_status_" + gatewayOrderId;
+  const cache = CacheService.getScriptCache();
+  if (cache.get(lockKey)) return apgReadGatewayState(gatewayOrderId); // another call is mid-update; don't race it
+  cache.put(lockKey, "1", 20);
+  try {
+    const found = apgFindOrderRow(gatewayOrderId);
+    if (!found) return null;
+    const h = found.headers;
+    const currentStatus = String(found.row[h.indexOf("gatewayStatus")] || "");
+    if (["PAID", "FAILED", "CANCELLED"].indexOf(currentStatus) !== -1) {
+      return apgReadGatewayState(gatewayOrderId); // already terminal -- never overwritten
+    }
+    const rawStatus = statusData ? String(statusData.TransactionStatus || "") : "";
+    const newStatus = !statusData ? "UNKNOWN" : (rawStatus === "Paid" ? "PAID" : "FAILED");
+    const now = new Date().toISOString();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Orders");
+    setSheetField(sheet, found.rowIndex, h, "gatewayStatus", newStatus);
+    setSheetField(sheet, found.rowIndex, h, "gatewayUpdatedAt", now);
+    if (statusData && statusData.TransactionId) setSheetField(sheet, found.rowIndex, h, "gatewayTransactionId", safeSheetText(String(statusData.TransactionId)));
+    if (newStatus === "PAID") setSheetField(sheet, found.rowIndex, h, "paidAt", now);
+    return apgReadGatewayState(gatewayOrderId);
+  } finally {
+    cache.remove(lockKey);
+  }
+}
+
+function setSheetField(sheet, rowIndex, headers, key, value) {
+  const col = headers.indexOf(key);
+  if (col === -1) return; // additive column not present on a very old sheet snapshot -- skip rather than throw
+  sheet.getRange(rowIndex, col + 1).setValue(value);
+}
+
+function apgReadGatewayState(gatewayOrderId) {
+  const found = apgFindOrderRow(gatewayOrderId);
+  if (!found) return null;
+  const h = found.headers, row = found.row;
+  const paymentMethod = String(row[h.indexOf("paymentMethod")]);
+  const gatewayStatus = String(row[h.indexOf("gatewayStatus")] || "");
+  // Items included so the Return page can fire a proper item-level
+  // Purchase event once PAID -- this is the customer's own order, the
+  // same level of detail already returned to them by a normal submitOrder
+  // success response for every other payment method.
+  let items = [];
+  try { const snapshot = JSON.parse(String(row[h.indexOf("items")] || "[]")); items = Array.isArray(snapshot) ? snapshot : (snapshot.items || []); } catch (e) { items = []; }
+  return {
+    orderId: gatewayOrderId,
+    gatewayStatus: gatewayStatus,
+    paymentStatus: derivePaymentStatus(paymentMethod, gatewayStatus),
+    paymentMethod: paymentMethod,
+    advanceMethod: String(row[h.indexOf("advanceMethod")] || ""),
+    total: Number(row[h.indexOf("total")]),
+    payNow: Number(row[h.indexOf("payNow")]),
+    deliveryFee: Number(row[h.indexOf("deliveryFee")]),
+    items: items
+  };
+}
+
+// Customer-facing, called from the Return page. Re-verifies with APG
+// itself every time it's called while still PENDING (safe/idempotent --
+// see applyGatewayStatusUpdate); once terminal, returns the stored result
+// without hitting APG again. Response is deliberately minimal: no
+// name/phone/address, same principle as checkOrderStatus.
+function apgVerifyStatus(payload) {
+  const orderId = requiredText(payload.orderId, "Order ID", 8, 100);
+  const found = apgFindOrderRow(orderId);
+  if (!found) throw new OrderError("ORDER_NOT_FOUND", "Order not found.");
+  const h = found.headers, row = found.row;
+  if (String(row[h.indexOf("paymentGateway")]) !== "bank_alfalah_apg") {
+    throw new OrderError("NOT_A_GATEWAY_ORDER", "This order is not a Bank Alfalah APG payment.");
+  }
+  const currentStatus = String(row[h.indexOf("gatewayStatus")] || "");
+  if (["PAID", "FAILED", "CANCELLED"].indexOf(currentStatus) !== -1) {
+    return { ok: true, state: apgReadGatewayState(orderId) };
+  }
+  const statusData = apgStatusInquiry(orderId);
+  const state = applyGatewayStatusUpdate(orderId, statusData);
+  return { ok: true, state: state };
+}
+
+// Listener/IPN entry point (registered Listener URL, ?action=bankAlfalahListener).
+// Per the portal's own C# sample: APG POSTs with a `url` query param whose
+// value IS the ready-to-call OrderStatus inquiry URL -- we GET exactly
+// that URL (never reconstruct our own) and apply the same idempotent
+// update used by the Return page. Always responds fast with a small body;
+// never throws past this point (a listener failure must never surface as
+// an error to APG's own systems).
+function handleApgListener(e) {
+  try {
+    const rawUrl = e && e.parameter ? e.parameter.url : "";
+    if (!rawUrl) return ContentService.createTextOutput("NO_URL");
+    const statusUrl = decodeURIComponent(rawUrl);
+    if (!/^https:\/\/(sandbox|payments)\.bankalfalah\.com\//.test(statusUrl)) {
+      console.error("Listener rejected non-APG status URL");
+      return ContentService.createTextOutput("REJECTED");
+    }
+    // The inquiry URL itself ends in .../OrderStatus/{merchantId}/{storeId}/{orderId}
+    // -- check whether that order is already terminal BEFORE spending a
+    // real sandbox call, so a duplicate/repeated listener POST for an
+    // already-resolved order never re-hits APG at all, not just never
+    // re-writes the Sheet.
+    const urlOrderId = statusUrl.split("/").filter(Boolean).pop();
+    if (urlOrderId) {
+      const existing = apgFindOrderRow(urlOrderId);
+      if (existing) {
+        const existingStatus = String(existing.row[existing.headers.indexOf("gatewayStatus")] || "");
+        if (["PAID", "FAILED", "CANCELLED"].indexOf(existingStatus) !== -1) return ContentService.createTextOutput("OK");
+      }
+    }
+    const statusData = apgStatusInquiryFromUrl(statusUrl);
+    const gatewayOrderId = statusData ? String(statusData.TransactionReferenceNumber || "") : "";
+    if (gatewayOrderId) applyGatewayStatusUpdate(gatewayOrderId, statusData);
+    return ContentService.createTextOutput("OK");
+  } catch (error) {
+    console.error(error);
+    return ContentService.createTextOutput("ERROR");
+  }
 }
 
 function requireLoadTestAuthorization(payload) {
@@ -360,14 +764,23 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
 
   let advanceMethod = "";
   let transactionReference = "";
+  let paymentGateway = "";
   if (paymentMethod === "Advance Payment" || paymentMethod === "Split Payment") {
     advanceMethod = requiredText(paymentInput.advanceMethod, "Advance payment method", 3, 40);
     if (ORDER_ADVANCE_METHODS.indexOf(advanceMethod) === -1) {
       throw new OrderError("INVALID_ADVANCE_METHOD", "Choose a supported advance payment method.");
     }
-    const enabledKey = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED" }[advanceMethod];
+    const enabledKey = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED", "Bank Alfalah APG": "APG_ENABLED" }[advanceMethod];
     if (!booleanValue(settings[enabledKey])) throw new OrderError("ADVANCE_METHOD_DISABLED", "That advance payment method is not currently available.");
-    transactionReference = requiredText(paymentInput.transactionReference, "Transaction reference", 3, 100);
+    if (advanceMethod === "Bank Alfalah APG") {
+      // Real gateway redirect: there is no customer-typed reference to
+      // validate here -- the gateway transaction ID/status is filled in
+      // authoritatively later by applyGatewayStatusUpdate(), server-side
+      // only, never trusted from the browser (see docs/PROJECT_STATE.md).
+      paymentGateway = "bank_alfalah_apg";
+    } else {
+      transactionReference = requiredText(paymentInput.transactionReference, "Transaction reference", 3, 100);
+    }
   }
 
   // Delivery fee: Advance keeps the existing free-delivery-threshold benefit.
@@ -402,21 +815,28 @@ function buildAuthoritativeOrder(payload, products, settings, orderId) {
     codDue = total - payNow;
   }
 
+  const resolvedOrderId = orderId || generateOrderId(payload.idempotencyKey);
   return {
     ok: true,
-    orderId: orderId || generateOrderId(payload.idempotencyKey),
+    orderId: resolvedOrderId,
     createdAt: new Date().toISOString(),
     customer: customer,
     paymentMethod: paymentMethod,
     advanceMethod: advanceMethod,
     transactionReference: transactionReference,
-    paymentStatus: paymentMethod === "Cash on Delivery" ? "COD Due" : "Payment Verification",
+    paymentStatus: derivePaymentStatus(paymentMethod, paymentGateway ? "PENDING" : ""),
     items: orderItems,
     subtotal: subtotal,
     deliveryFee: deliveryFee,
     total: total,
     payNow: payNow,
-    codDue: codDue
+    codDue: codDue,
+    paymentGateway: paymentGateway,
+    gatewayOrderId: paymentGateway ? resolvedOrderId : "",
+    gatewayTransactionId: "",
+    gatewayStatus: paymentGateway ? "PENDING" : "",
+    gatewayUpdatedAt: "",
+    paidAt: ""
   };
 }
 
@@ -702,7 +1122,7 @@ function readAdminOrders(limit) {
       order.items = Array.isArray(snapshot) ? snapshot : snapshot.items || [];
     } catch (error) { order.items = []; }
     delete order.idempotencyFingerprint;
-    order.paymentStatus = order.paymentStatus || (order.paymentMethod === "Cash on Delivery" ? "COD Due" : "Payment Verification");
+    order.paymentStatus = derivePaymentStatus(order.paymentMethod, order.gatewayStatus || "");
     order.orderStatus = order.orderStatus || "New";
     return order;
   });
@@ -822,7 +1242,12 @@ function logOrder(o) {
     safeSheetText(o.customer.postal), safeSheetText(o.customer.notes),
     o.paymentMethod, o.advanceMethod, safeSheetText(o.transactionReference),
     JSON.stringify({ fingerprint: o.idempotencyFingerprint, items: o.items }), o.subtotal, o.deliveryFee, o.total,
-    o.payNow, o.codDue
+    o.payNow, o.codDue,
+    // Additive (HS-20260820-01, schema v8) -- empty string for every
+    // non-gateway order, exactly like payNow/codDue's own additive rollout.
+    safeSheetText(o.paymentGateway || ""), safeSheetText(o.gatewayOrderId || ""),
+    safeSheetText(o.gatewayTransactionId || ""), safeSheetText(o.gatewayStatus || ""),
+    safeSheetText(o.gatewayUpdatedAt || ""), safeSheetText(o.paidAt || "")
   ]);
 }
 
@@ -924,7 +1349,15 @@ function restoreOrder(headers, row) {
     paymentMethod: paymentMethod,
     advanceMethod: String(value("advanceMethod") || ""),
     transactionReference: restoreSheetText(value("transactionRef")),
-    paymentStatus: paymentMethod === "Cash on Delivery" ? "COD Due" : "Payment Verification",
+    // Additive columns (schema v8) -- missing entirely on pre-HS-20260820-01
+    // rows, which restoreSheetText/String both treat as "" safely.
+    paymentGateway: String(value("paymentGateway") || ""),
+    gatewayOrderId: String(value("gatewayOrderId") || ""),
+    gatewayTransactionId: restoreSheetText(value("gatewayTransactionId")),
+    gatewayStatus: String(value("gatewayStatus") || ""),
+    gatewayUpdatedAt: String(value("gatewayUpdatedAt") || ""),
+    paidAt: String(value("paidAt") || ""),
+    paymentStatus: derivePaymentStatus(paymentMethod, String(value("gatewayStatus") || "")),
     idempotencyFingerprint: fingerprint,
     items: items,
     subtotal: Number(value("subtotal")),
@@ -933,6 +1366,18 @@ function restoreOrder(headers, row) {
     payNow: payNow,
     codDue: codDue
   };
+}
+
+// A gateway order's true paymentStatus tracks gatewayStatus, not just
+// paymentMethod (HS-20260820-01) -- so an idempotent replay of an
+// already-paid APG order reports "Paid", not a stale "Payment Verification".
+function derivePaymentStatus(paymentMethod, gatewayStatus) {
+  if (paymentMethod === "Cash on Delivery") return "COD Due";
+  if (!gatewayStatus) return "Payment Verification";
+  if (gatewayStatus === "PAID") return "Paid";
+  if (gatewayStatus === "FAILED" || gatewayStatus === "CANCELLED") return "Payment Failed";
+  if (gatewayStatus === "UNKNOWN") return "Payment Verification";
+  return "Gateway Pending"; // PENDING
 }
 
 function safeSheetText(value) {

@@ -1120,7 +1120,12 @@ const Views = {
     const advanceMethods = [
       { id: "JazzCash", label: "JazzCash", enabled: paymentSettings.JAZZCASH_ENABLED },
       { id: "EasyPaisa", label: "EasyPaisa", enabled: paymentSettings.EASYPAISA_ENABLED },
-      { id: "Bank Transfer", label: "Bank Transfer", enabled: paymentSettings.BANK_ENABLED }
+      { id: "Bank Transfer", label: "Bank Transfer", enabled: paymentSettings.BANK_ENABLED },
+      // Sandbox-gated (HS-20260820-01): double gate -- CONFIG.APG_SANDBOX_MODE
+      // (frontend build flag, off before production go-live) AND the
+      // server's own APG_ENABLED Settings flag both must be on. Never
+      // shown to real customers until sandbox E2E has fully passed.
+      { id: "Bank Alfalah APG", label: "Card / Bank / Wallet (Bank Alfalah)", enabled: CONFIG.APG_SANDBOX_MODE && paymentSettings.APG_ENABLED }
     ].filter(method => method.enabled);
     // Collapsed by default (HS-20260819-04): no advance channel is
     // pre-selected on first load of this page in a session — only a
@@ -1295,9 +1300,10 @@ const Views = {
   },
 
   selectAdvanceMethod(method) {
-    const allowed = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED" };
+    const allowed = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED", "Bank Alfalah APG": "APG_ENABLED" };
     const settings = this.paymentDisplaySettings();
     if (!allowed[method] || !settings[allowed[method]]) return;
+    if (method === "Bank Alfalah APG" && !CONFIG.APG_SANDBOX_MODE) return;
     // Switching channel (e.g. JazzCash -> Bank Transfer) clears any
     // already-typed reference -- prevents submitting the wrong channel's
     // reference against the newly selected one.
@@ -1316,8 +1322,12 @@ const Views = {
     if (input) input.value = method;
     const txnField = document.getElementById("advanceTxnRefField");
     const note = document.getElementById("advanceNote");
-    if (txnField) txnField.style.display = "block";
-    if (note) note.style.display = "block";
+    const isGateway = method === "Bank Alfalah APG";
+    // APG is a real redirect gateway -- there is no customer-typed
+    // reference to collect; the server fills gatewayTransactionId in
+    // authoritatively once APG itself confirms payment.
+    if (txnField) txnField.style.display = isGateway ? "none" : "block";
+    if (note) { note.style.display = "block"; note.textContent = isGateway ? "You'll be redirected to Bank Alfalah's secure payment page to complete this payment." : "We'll confirm your payment and dispatch your order once received."; }
     const submitBtn = document.getElementById("submitBtn");
     if (submitBtn) submitBtn.style.display = "";
     // HS-20260819-05: once a channel is chosen, hide the other two method
@@ -1486,8 +1496,10 @@ const Views = {
     if (paymentMethod === "Split Payment" && this._order && this._order.splitAllowed === false) paymentMethod = "Advance Payment";
 
     const requiresAdvanceChannel = paymentMethod === "Advance Payment" || paymentMethod === "Split Payment";
-    const transactionReference = requiresAdvanceChannel ? document.getElementById("o-txn-ref").value.trim() : "";
-    if (requiresAdvanceChannel && transactionReference.length < 3) {
+    const selectedAdvanceMethod = requiresAdvanceChannel ? document.getElementById("o-advance-method").value : "";
+    const isApgGateway = selectedAdvanceMethod === "Bank Alfalah APG";
+    const transactionReference = requiresAdvanceChannel && !isApgGateway ? document.getElementById("o-txn-ref").value.trim() : "";
+    if (requiresAdvanceChannel && !isApgGateway && transactionReference.length < 3) {
       this.showOrderError(status, "Please add a valid transaction ID so we can verify the payment.");
       return;
     }
@@ -1520,7 +1532,7 @@ const Views = {
       },
       payment: {
         method: paymentMethod,
-        advanceMethod: requiresAdvanceChannel ? document.getElementById("o-advance-method").value : "",
+        advanceMethod: selectedAdvanceMethod,
         transactionReference
       },
       items: lines.map(line => ({ productId: line.p.id, quantity: line.qty })),
@@ -1550,6 +1562,25 @@ const Views = {
     PendingOrder.save(request.idempotencyKey, paymentMethod);
 
     const result = await Orders.submit(request);
+    if (result.ok && isApgGateway) {
+      // Real order already exists server-side (PENDING gateway state) --
+      // now hand off to Bank Alfalah APG. Purchase/confirmation only ever
+      // happens later, on the Return page, after authoritative server
+      // verification (HS-20260820-01) -- never here.
+      PendingOrder.clear();
+      ApgFlow.save(result.orderId);
+      Cart.clearSubmitted(result.items);
+      this._order = null;
+      const handshake = await Orders.submit({ type: "apgStartHandshake", orderId: result.orderId });
+      if (!handshake.ok) {
+        this.showOrderError(status, handshake.error?.message || "Couldn't start the Bank Alfalah payment. Please try again.");
+        inlineBtn.disabled = false;
+        if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.textContent = "Confirm & Place Order"; }
+        return;
+      }
+      submitHiddenFormAndNavigate(handshake.action, handshake.fields);
+      return;
+    }
     if (result.ok) {
       const confirmedLines = result.items.map(item => {
         const localProduct = Prices.get().find(product => product.id === item.productId) || {};
@@ -1661,6 +1692,87 @@ const Views = {
     } catch (error) {
       console.error("Confirmation page analytics failed:", error);
     }
+  },
+
+  // ── Bank Alfalah APG Return URL (HS-20260820-01) ──────────────────
+  // This page is reached twice in a normal flow: once right after the
+  // handshake (URL carries ?auth_token=...), and once again after the
+  // customer actually pays on APG's own hosted page (no auth_token, and
+  // whatever query params APG appends there are NEVER treated as proof --
+  // only the server-side status inquiry below is authoritative).
+  paymentReturn() {
+    Router.current = "payment-return";
+    document.title = "Verifying payment — Hoja Seeds";
+    this.renderPaymentReturnState("verifying", "Verifying payment…", "Please wait while we confirm your payment with Bank Alfalah.");
+
+    const flow = ApgFlow.get();
+    const authToken = new URLSearchParams(location.search).get("auth_token");
+
+    (async () => {
+      if (!flow || !flow.orderId) {
+        this.renderPaymentReturnState("unable", "Unable to verify payment", "We couldn't find a payment in progress for this browser. If you completed a payment, check Order status from the link in your confirmation, or contact us.");
+        return;
+      }
+      if (authToken) {
+        // Hop 1 -> 2: hand off to the SSO step, which is itself another
+        // real navigation (a successful SSO POST response IS a redirect
+        // to APG's hosted checkout page).
+        const sso = await Orders.submit({ type: "apgStartSso", orderId: flow.orderId, authToken });
+        if (!sso.ok) {
+          this.renderPaymentReturnState("unable", "Unable to start payment", sso.error?.message || "Please try checkout again.");
+          return;
+        }
+        submitHiddenFormAndNavigate(sso.action, sso.fields);
+        return;
+      }
+      // Hop 3: back from APG's own checkout page. Query params here
+      // (TS/RC/RD/O per APG's docs, or none at all) are NEVER trusted --
+      // only the server's own verified answer is.
+      const result = await Orders.submit({ type: "apgVerifyStatus", orderId: flow.orderId });
+      if (!result.ok) {
+        this.renderPaymentReturnState("unable", "Unable to verify payment", result.error?.message || "Please refresh this page in a moment, or contact us with your Order ID.");
+        return;
+      }
+      const state = result.state;
+      if (state.gatewayStatus === "PAID") {
+        ApgFlow.clear();
+        this.renderPaymentReturnState("success", "Payment successful", `Order ${escapeHTML(state.orderId)} — ${CONFIG.CURRENCY} ${state.payNow} received. We'll dispatch your order shortly.`, state);
+        if (!Analytics.hasFiredPurchase(state.orderId)) {
+          try {
+            const lines = (state.items || []).map(item => ({ p: { id: item.productId, name: item.name, price: item.unitPrice, cat: item.category }, qty: item.quantity }));
+            Analytics.purchase(state.orderId, { total: state.total, deliveryFee: state.deliveryFee }, lines);
+            Analytics.markPurchaseFired(state.orderId);
+          } catch (error) { console.error("APG purchase analytics failed:", error); }
+        }
+      } else if (state.gatewayStatus === "FAILED" || state.gatewayStatus === "CANCELLED") {
+        ApgFlow.clear();
+        this.renderPaymentReturnState("failed", "Payment unsuccessful", `Order ${escapeHTML(state.orderId)} was not completed. No amount was charged by Bank Alfalah, or the payment was declined/cancelled. You can try again or choose a different payment method.`);
+      } else {
+        // PENDING/UNKNOWN -- genuinely don't know yet (inquiry itself
+        // may have failed, or APG hasn't posted a final status yet).
+        // Keep ApgFlow so a manual re-check or the Listener can still
+        // resolve this without ever risking a duplicate order.
+        this.renderPaymentReturnState("unable", "Unable to verify payment yet", `We're still waiting for confirmation from Bank Alfalah for Order ${escapeHTML(state.orderId)}. This page will not mark your payment complete until it's confirmed — you can safely check again in a moment.`, state, true);
+      }
+    })().catch(error => {
+      console.error("Payment return verification failed:", error);
+      this.renderPaymentReturnState("unable", "Unable to verify payment", "Something went wrong while checking your payment. Please try again in a moment or contact us with your Order ID.");
+    });
+  },
+
+  renderPaymentReturnState(kind, title, message, state, allowRecheck) {
+    const icon = { verifying: "⏳", success: "✅", failed: "❌", unable: "⚠️" }[kind] || "⏳";
+    document.getElementById("app").innerHTML = `
+      <section class="page narrow">
+        <div class="confirm-hero">
+          <div class="confirm-icon">${icon}</div>
+          <h2>${escapeHTML(title)}</h2>
+          <p class="tagline">${message}</p>
+        </div>
+        ${allowRecheck ? `<button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:12px" onclick="Views.paymentReturn()">Check again</button>` : ""}
+        <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px" onclick="ApgFlow.clear();Router.go('vegetables')">Continue shopping</button>
+      </section>`;
+    refreshStickyBar();
   }
 };
 
@@ -1704,6 +1816,43 @@ const PendingOrder = {
     }
   }
 };
+
+// ---- Bank Alfalah APG round-trip context (HS-20260820-01) ----
+// The customer's browser leaves this site entirely for the handshake/SSO
+// hops, so orderId must survive across that real navigation -- localStorage,
+// not memory. Never stores amount/customer details, only the orderId
+// needed to ask the server (never the browser) what actually happened.
+const ApgFlow = {
+  KEY: "hoja_apg_flow",
+  save(orderId) {
+    try { localStorage.setItem(this.KEY, JSON.stringify({ orderId, ts: Date.now() })); } catch { /* ignore */ }
+  },
+  get() {
+    try { return JSON.parse(localStorage.getItem(this.KEY)); } catch { return null; }
+  },
+  clear() { try { localStorage.removeItem(this.KEY); } catch { /* ignore */ } }
+};
+
+// Real full-page POST (never fetch/XHR) -- APG's page-redirection mode
+// requires an actual browser navigation so it can, in turn, redirect the
+// browser onward (to the Return URL after handshake, or to its own hosted
+// checkout page after SSO). The hash itself was already computed
+// server-side; this only ever submits values the server returned.
+function submitHiddenFormAndNavigate(action, fields) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = action;
+  form.style.display = "none";
+  Object.entries(fields).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value == null ? "" : String(value);
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
+}
 
 // ---- Order/contact submission (Google Sheet, with local fallback log) ----
 const Orders = {
@@ -1853,6 +2002,10 @@ document.getElementById("navToggle").addEventListener("click", () => {
     const deepLinkView = new URLSearchParams(location.search).get("hs_view");
     if (["cart", "vegetables", "flowers", "mix", "fertilizer"].includes(deepLinkView)) {
       Router.go(deepLinkView);
+    } else if (deepLinkView === "payment-return") {
+      // Registered Bank Alfalah APG Return URL (HS-20260820-01) -- its own
+      // dedicated render path, not a normal category route.
+      Views.paymentReturn();
     }
   }
   // Best-effort, never blocks first paint or any of the above (HS-20260819-13).

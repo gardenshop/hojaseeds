@@ -14,6 +14,13 @@ const CONFIG = {
   // Google OAuth client have been configured.
   ADMIN_GOOGLE_CLIENT_ID: "804856718644-6eknoj1m8jcsbh5v9f6362p3gac9u5cs.apps.googleusercontent.com",
 
+  // Bank Alfalah APG (HS-20260820-01): double-gated sandbox-only flag.
+  // Even with this on, the payment tab only appears if the server's own
+  // APG_ENABLED Settings flag is ALSO on -- flip this to false (or delete
+  // it) before any real customer exposure; there is no separate
+  // production flag yet, by design, until sandbox E2E has fully passed.
+  APG_SANDBOX_MODE: true,
+
   // ── Commercial / pricing rules layer ──────────────────────────────
   // All of this is editable from Super Admin (admin.html) at runtime —
   // these are just the starting defaults. Logic that reads these lives

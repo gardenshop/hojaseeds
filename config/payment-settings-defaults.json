@@ -14,5 +14,6 @@
   "BANK_ACCOUNT_TITLE": "Hoja Seeds",
   "BANK_ACCOUNT_NUMBER": "XXXXXXXXXXXX",
   "BANK_IBAN": "",
-  "BANK_QR_URL": ""
+  "BANK_QR_URL": "",
+  "APG_ENABLED": false
 }
