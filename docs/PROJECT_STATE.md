@@ -6,6 +6,93 @@ into each request.
 
 ---
 
+## BANK ALFALAH APG SANDBOX INTEGRATION — CODE COMPLETE, CREDENTIALS PENDING (HS-20260820-01) — PROTECTED CONTRACT
+
+- **Real contract, not guessed.** Built from the actual APG Merchant
+  Integration Guide v1.1 PDF (`APG/APG Merchant Integration Guide
+  v1.1.pdf`) plus the ACTUAL executable sample code retrieved directly
+  from the live merchant portal (Sandbox → Integration → Page
+  Redirection) — the PDF's own "see sample code attached" was never
+  actually attached anywhere in the project; this was pulled from the
+  portal itself with the owner's login, not fabricated.
+- **Flow (registered, fixed, do not change casually):** Return URL
+  `https://www.hojaseeds.pk/?hs_view=payment-return`, Listener URL
+  `https://script.google.com/macros/s/AKfycbz2OLBzz6igtHiGlVmC3b4ANqmjikDbninRqYlTqiUC9a6PtnZD23bdwsWmMGd4pK0/exec?action=bankAlfalahListener`
+  — both already registered in the portal's Credentials Generator and
+  confirmed to match exactly what's in the code.
+  1. Browser POSTs `HS_*` fields (hash computed server-side) to
+     `{base}/HS/HS/HS`.
+  2. APG redirects to the Return URL with `?auth_token=...`.
+  3. Return page calls `apgStartSso`, browser POSTs `AuthToken` +
+     server-computed `TransactionAmount` to `{base}/SSO/SSO/SSO` — a
+     successful response IS a redirect to APG's own hosted checkout page
+     (card/wallet/bank entry never touches this site).
+  4. Customer pays; APG redirects back to the Return URL again.
+  5. Return page calls `apgVerifyStatus` — the ONLY authority. Return URL
+     query params are never trusted as proof of payment anywhere in this
+     flow.
+- **Hash (`HS_RequestHash`/`RequestHash`): AES-128-CBC-PKCS7** over a
+  deterministic `id=value&...` field string, base64-encoded — exactly
+  matching APG's own CryptoJS sample. Apps Script has no native AES, so
+  this is a from-scratch pure-JS AES-128 implementation in `Code.gs`,
+  **verified byte-for-byte against Node's native `crypto.createCipheriv`**
+  across empty-string/unicode/exact-block-size vectors before ever being
+  used, then re-verified against the exact copy embedded in `Code.gs`
+  itself. `APG_KEY1`/`APG_KEY2` (the AES key/iv) never leave the server;
+  `MerchantHash`/`Username`/`Password` do travel in the browser's own POST
+  to APG — that is inherent to page-redirection mode (APG's own official
+  sample does the same), not a gap introduced here.
+- **Status verification handles a real, non-obvious quirk**, confirmed
+  from the portal's own C# IPN sample (not guessed): the raw inquiry
+  response body is a JSON *string* containing escaped JSON — backslashes
+  are stripped and the outer wrapping quote pair trimmed before parsing.
+- **Idempotent by construction:** `applyGatewayStatusUpdate` is
+  permanently sticky once `PAID`/`FAILED`/`CANCELLED` — guarded by both a
+  terminal-state check and a short `CacheService` lock against a
+  Return-page/Listener race. The Listener now also skips re-fetching APG
+  entirely (not just re-writing) once an order is already terminal.
+  Reuses the exact same deterministic-orderId idempotency mechanism as
+  every other payment method — no second Order API, no new
+  duplicate-order risk.
+- **Double-gated, sandbox-only, zero customer exposure so far:**
+  `CONFIG.APG_SANDBOX_MODE` (frontend build flag) AND `APG_ENABLED`
+  (Settings sheet, defaults `false`) both must be on before the "Card /
+  Bank / Wallet (Bank Alfalah)" tab appears in checkout at all. Neither
+  has been flipped on for real customers.
+- **Purchase fires exactly once**, only after server-confirmed `PAID`,
+  reusing the HS-20260819-13 dedupe log; the reconciliation path
+  deliberately never fabricates a Purchase event without real item/value
+  data.
+- **Schema (v8):** 6 additive Orders columns (`paymentGateway`,
+  `gatewayOrderId`, `gatewayTransactionId`, `gatewayStatus`,
+  `gatewayUpdatedAt`, `paidAt`) — migrated live via `sheets-migrate.mjs`,
+  verified zero data loss across all 12 sheets afterward.
+- **Tests:** new `tests/apg.test.js` (13 cases: order creation without a
+  customer-typed reference, hash correctness re-derived independently,
+  non-gateway-order rejection, server-controlled amount never
+  client-supplied, idempotent PAID/FAILED/UNKNOWN resolution, duplicate
+  return/duplicate listener never double-process or double-fetch,
+  non-APG listener URL rejected, `APG_ENABLED` gate,
+  `APG_NOT_CONFIGURED` clean refusal). All 9 `npm test` files pass;
+  `node --check` clean; `npm run sheets:verify` clean after migration.
+- **What's still needed before any real sandbox transaction:** the 8
+  real sandbox credential values (`APG_MERCHANT_ID`, `APG_STORE_ID`,
+  `APG_MERCHANT_HASH`, `APG_MERCHANT_USERNAME`, `APG_MERCHANT_PASSWORD`,
+  `APG_KEY1`, `APG_KEY2`, `APG_SANDBOX_BASE`) must be pasted into Apps
+  Script → Project Settings → Script Properties by the owner — same
+  credential-store boundary as `PUSH_SERVER_SECRET` in earlier tasks, the
+  agent cannot write Script Properties directly. The exact ready-to-paste
+  values are saved in this machine's Claude scratchpad folder
+  (`PASTE_INTO_APPS_SCRIPT_APG_PROPERTIES.txt`), never printed in chat,
+  never committed. Once set: run the sandbox test matrix (success,
+  failure, cancel, duplicate return/listener, wrong amount, tamper) for
+  real before considering any production go-live.
+- **Files changed:** `apps-script/Code.gs`, `js/app.js`, `js/config.js`,
+  `config/sheet-schema.json`, `config/payment-settings-defaults.json`,
+  `tests/apg.test.js`, `package.json`.
+
+---
+
 ## PUSH: OWNER CONFIRMED VISUAL+CLICK; FOUND & FIXED CLICK-RECORDING BUG (HS-20260819-12 continued)
 
 - **Owner confirmed, in response to the one sanctioned question:**
