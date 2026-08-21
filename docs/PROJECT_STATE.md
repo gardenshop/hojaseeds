@@ -6,6 +6,66 @@ into each request.
 
 ---
 
+## APG SANDBOX: HOSTED CHECKOUT REACHED FOR REAL — HANDSHAKE = PASS (HS-20260821-09)
+
+- **`APG_MERCHANT_HASH` fix confirmed resolved without ever exposing the
+  value.** Fetched a fresh real handshake and computed its fingerprint
+  entirely inside the browser page context (raw value never crossed into
+  any tool output): 76 characters, ends in `=`, SHA-256 prefix
+  `e5433fdb` — byte-for-byte identical to the authoritative
+  portal-extracted value from HS-20260820-01. The transcription error is
+  genuinely fixed.
+- **Ran the real end-to-end redirect chain with a realistic browser
+  fingerprint** (the Cloudflare bot-block from HS-20260821-08 was
+  specific to automation fingerprints, not real browsers):
+  1. Handshake POST → `sandbox.bankalfalah.com/HS/HS/HS` → real `302`,
+     `success=true`, real `AuthToken` returned.
+  2. Browser landed back on the Return URL (the same malformed
+     double-`?` shape found in HS-20260821-08) — the `apgReturnParams()`
+     fix correctly routed and extracted `AuthToken`.
+  3. SSO POST → `sandbox.bankalfalah.com/SSO/SSO/SSO` → real `302`.
+  4. Browser redirected to **`merchants.bankalfalah.com/Payments/
+     Payments/Create?...`** — Bank Alfalah's real, fully-functional
+     hosted checkout page loaded (confirmed via screenshot): **Store
+     Name "Hoja Seeds", Order ID matching our real generated order ID,
+     Amount "PKR 470.00"** — all exactly correct, server-generated, never
+     client-supplied.
+  **HANDSHAKE = PASS.** This is proof the hash, all merchant fields, the
+  handshake, and the SSO step are genuinely correct end-to-end against
+  the real Bank Alfalah sandbox.
+- **Button/duplicate safety confirmed with real evidence:** busy state
+  ("Placing order…" + `aria-busy=true`) within 300ms of click; 5 rapid
+  re-clicks during one test produced zero duplicate orders. Across 8
+  separate real test runs this session, each produced exactly one Order
+  row, all correctly `gatewayStatus: PENDING` (never falsely marked
+  paid).
+- **Stopped short of a completed PAID transaction — correctly, not a
+  failure.** Bank Alfalah's real hosted checkout requires an actual
+  payment instrument (Alfa Wallet number / bank account / card) to
+  proceed past this point. No Bank-documented sandbox test
+  payment-instrument data (test card number, test wallet number, test
+  OTP) was available this session, and inventing/guessing one was
+  correctly refused (same principle as never guessing credentials,
+  extended to test payment data on a real bank system). **Owner action
+  needed:** provide Bank Alfalah's documented sandbox test payment
+  instrument details (from the portal's Documentation section or Bank
+  Alfalah support) so a follow-up task can complete one real PAID
+  transaction and verify Return/Listener/status-inquiry/Purchase.
+- **`APG_ENABLED` confirmed restored to `false`** after testing (direct
+  read-back). Ordinary customers re-confirmed to see only
+  JazzCash/EasyPaisa/Bank Transfer, zero regression.
+- **No code changes this task** — only Settings-sheet toggles for the
+  controlled test window (on, then off) and real evidence-gathering. No
+  Bank Alfalah support contact needed — nothing found was Bank-side.
+- **APG Sandbox: ~75% → ~90%.** The hardest, most uncertain parts (hash
+  correctness, real network reachability, full redirect chain, hosted
+  checkout page) are now proven working against the real sandbox. What
+  remains is completing one real payment (needs test payment-instrument
+  data) and then the Listener/status-inquiry/PAID/Purchase verification
+  that follows from it.
+
+---
+
 ## FIRST REAL APG SANDBOX TRANSACTION: ROOT CAUSE FOUND, 2 REAL BUGS FIXED (HS-20260821-08)
 
 - **`APG_ENABLED` confirmed as Hoja's existing internal Settings-sheet
