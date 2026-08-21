@@ -71,6 +71,7 @@ function doPost(e) {
     if (payload.type === "apgStartHandshake") return jsonResponse(apgStartHandshake(payload));
     if (payload.type === "apgStartSso") return jsonResponse(apgStartSso(payload));
     if (payload.type === "apgVerifyStatus") return jsonResponse(apgVerifyStatus(payload));
+    if (payload.type === "apgConfigStatus") return jsonResponse(apgConfigStatus());
     if (payload.type === "saveLead") return jsonResponse(saveLead(payload));
     if (payload.type === "leadAttribution") return jsonResponse(leadAttribution(payload));
     if (payload.type === "updateLeadStatus") return jsonResponse(updateLeadStatus(payload));
@@ -443,6 +444,18 @@ function apgConfig() {
     throw new OrderError("APG_NOT_CONFIGURED", "Bank Alfalah APG is not configured yet (Script Properties missing).");
   }
   return cfg;
+}
+
+// Presence-only diagnostic (HS-20260821-01) -- never returns a value,
+// only whether each required Script Property is set. Public (no admin
+// token needed) since it leaks nothing sensitive, matching the same
+// safety level as PUSH_PROVIDER_NOT_CONFIGURED elsewhere in this file.
+function apgConfigStatus() {
+  const p = PropertiesService.getScriptProperties();
+  const names = ["APG_SANDBOX_BASE", "APG_MERCHANT_ID", "APG_STORE_ID", "APG_MERCHANT_HASH", "APG_MERCHANT_USERNAME", "APG_MERCHANT_PASSWORD", "APG_KEY1", "APG_KEY2"];
+  const present = {};
+  names.forEach(name => { present[name] = Boolean(p.getProperty(name)); });
+  return { ok: true, present: present, allConfigured: names.every(name => present[name]) };
 }
 
 function apgFindOrderRow(gatewayOrderId) {
