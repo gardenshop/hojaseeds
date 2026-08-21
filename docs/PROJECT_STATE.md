@@ -6,6 +6,59 @@ into each request.
 
 ---
 
+## APG RUNTIME CONFIG VERIFIED CORRECT; GITHUB SECRETS ≠ APPS SCRIPT PROPERTIES (HS-20260821-02)
+
+- **`APG_SANDBOX_BASE` handling confirmed correct by inspection, matches
+  official docs exactly.** Code does `cfg.base + "/HS/HS/HS"`
+  (`apps-script/Code.gs`), with a built-in default of
+  `https://sandbox.bankalfalah.com` when the property is unset — so the
+  full staging transaction URL the code actually calls is
+  `https://sandbox.bankalfalah.com/HS/HS/HS`, exactly matching the
+  official guide. `APG_SANDBOX_BASE`, if set at all, must be the bare
+  origin only (`https://sandbox.bankalfalah.com`) — never the full path —
+  or the code would produce a duplicated `/HS/HS/HS/HS/HS/HS`. No code
+  change was needed; this was already correct.
+- **GitHub → Apps Script transfer: confirmed NOT to exist.** No
+  `.github/workflows/` directory exists in this repo at all, and no
+  deployment/bootstrap script anywhere references GitHub Secrets or
+  `APG_*`. This is not a gap to fix — GitHub Secrets are fundamentally
+  scoped to Actions runners; there is no code path that could move them
+  into Apps Script Script Properties automatically.
+- **Credential mapping table** (`gh secret list`, names only, no values):
+
+  | Runtime property | GitHub Secret | Apps Script Property | Required |
+  |---|---|---|---|
+  | `APG_SANDBOX_BASE` | YES | **NO** | Recommended (has a safe code default) |
+  | `APG_MERCHANT_ID` | YES | **NO** | YES |
+  | `APG_STORE_ID` | YES | **NO** | YES |
+  | `APG_MERCHANT_HASH` | YES | **NO** | YES |
+  | `APG_MERCHANT_USERNAME` | YES | **NO** | YES |
+  | `APG_MERCHANT_PASSWORD` | YES | **NO** | YES |
+  | `APG_KEY1` | YES | **NO** | YES |
+  | `APG_KEY2` | YES | **NO** | YES |
+  | `APG_USER_NAME` (legacy alias) | YES | N/A | NO — code never reads this name |
+  | `MERCHANT_PASSWORD` (legacy alias) | YES | N/A | NO — code never reads this name |
+
+  The owner has done the GitHub-side work correctly (all 8 real property
+  names present, added 2026-08-21). **Live `apgConfigStatus` still
+  reports all 8 `false`** — re-confirmed this session — proving the two
+  stores are genuinely disconnected, exactly as this task warned.
+- **Important practical note for the owner:** GitHub Secrets are
+  write-only for *everyone*, not just this agent — once saved, even the
+  owner cannot view them again in the GitHub UI or CLI. Re-copying them
+  "from GitHub" into Apps Script is not actually possible. The reliable
+  source is either (a) the ready-to-paste file already staged in this
+  machine's Claude scratchpad from HS-20260820-01
+  (`PASTE_INTO_APPS_SCRIPT_APG_PROPERTIES.txt`, extracted directly from
+  the live merchant portal), if the portal credentials haven't been reset
+  since, or (b) logging into the portal again and re-extracting.
+- **No code changes this task** — the only "fix" needed was confirming
+  the existing default is correct, which it already was. No real sandbox
+  test was attempted (still blocked on the same credential gate as
+  HS-20260821-01). APG Sandbox remains ~75%, unchanged, not frozen.
+
+---
+
 ## APG SANDBOX E2E: STOPPED AT CREDENTIAL GATE (HS-20260821-01)
 
 - **Checked, per this task's own explicit rule ("if credentials are
