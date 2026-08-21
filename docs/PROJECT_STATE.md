@@ -6,6 +6,34 @@ into each request.
 
 ---
 
+## APG SANDBOX E2E: STOPPED AT CREDENTIAL GATE (HS-20260821-01)
+
+- **Checked, per this task's own explicit rule ("if credentials are
+  missing: STOP implementation"), before touching anything else.** Added
+  a minimal presence-only diagnostic (`apgConfigStatus`, deployed —
+  version 35) that reports boolean present/absent for each of the 8
+  required `APG_*` Script Properties, never a value. Result: **all 8 are
+  still unset.**
+- **No real sandbox test was attempted.** No order was created, no
+  Settings flag was toggled, no live customer exposure risk was taken —
+  exactly matching the task's instruction to stop rather than guess or
+  work around a missing credential.
+- **This is the same, still-open action from HS-20260820-01**: the 8
+  ready-to-paste values remain staged in this machine's Claude scratchpad
+  folder (`PASTE_INTO_APPS_SCRIPT_APG_PROPERTIES.txt`), extracted from
+  the real merchant portal, never committed, never printed in chat.
+  **Owner action needed:** Apps Script → Project Settings → Script
+  Properties → paste all 8 (`APG_SANDBOX_BASE`, `APG_MERCHANT_ID`,
+  `APG_STORE_ID`, `APG_MERCHANT_HASH`, `APG_MERCHANT_USERNAME`,
+  `APG_MERCHANT_PASSWORD`, `APG_KEY1`, `APG_KEY2`) → Save.
+- **APG Sandbox remains ~75%, unchanged, not frozen.** Once the
+  properties are set, a follow-up task can immediately proceed with the
+  real sandbox test matrix (success/failure/cancel/duplicate/tamper) —
+  all the code, tests, and gating are already in place and unchanged.
+- **Files changed:** `apps-script/Code.gs` only (the diagnostic).
+
+---
+
 ## CONFIRM DELIVERY 5-8s STALL FIXED + ASYNC BUTTON AUDIT (HS-20260820-02) — PROTECTED CONTRACT
 
 - **Root cause proven with a real DevTools/Playwright trace on
