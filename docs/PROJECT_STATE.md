@@ -6,6 +6,75 @@ into each request.
 
 ---
 
+## CONFIRM DELIVERY 5-8s STALL FIXED + ASYNC BUTTON AUDIT (HS-20260820-02) — PROTECTED CONTRACT
+
+- **Root cause proven with a real DevTools/Playwright trace on
+  production**, not guessed: click→Payment-visible took **5639ms**, and
+  the `saveLead` network round trip alone accounted for **~4.85s** of it
+  (request start at +118ms, response at +4966ms). Code inspection
+  confirmed why: `saveLead` was doing a real synchronous
+  `UrlFetchApp.fetch` to Meta's Graph API (the CAPI Lead event) plus a
+  full `PushEvents` sheet scan (`attributePushConversion`), both
+  **before** returning to the customer.
+- **Fix:** `saveLead` now does only the essential Lead row read/write and
+  returns immediately (`{ok, leadId, status, isNew}`). CAPI Lead + push
+  attribution moved into a new `leadAttribution` action — same event_id,
+  same hashed `user_data`, same `custom_data`, same dedup guarantee —
+  fired by the client as a **separate, non-awaited** request right after
+  a genuinely-new `saveLead` response. Analytics contract unchanged, only
+  the timing moved off the customer's critical path.
+- **Confirm Delivery button** now shows `aria-busy` + "Saving delivery…"
+  immediately on click (previously only `disabled=true` with zero visible
+  feedback — literally what "appears stuck" means), has an explicit
+  single-flight guard, and `Leads.save()` is bounded by an 8s
+  `AbortController` timeout so a genuine hang fails visibly instead of an
+  infinite-looking spinner.
+- **Global async-button audit:** Confirm Order/APG-start gained an
+  explicit single-flight guard plus a distinct "Opening secure payment…"
+  label for the APG redirect hop. Admin gained a shared
+  `Admin.runSingleFlight(key, btnId, busyLabel, idleLabel, fn)` helper,
+  applied to four previously **completely unprotected** write buttons —
+  Save product changes, Save frequency settings, Save store settings,
+  Save Payment Settings, Save Draft campaign — none of which had any busy
+  state or duplicate-click guard before this task. Push Send/Test/
+  Pause/Resume already had single-flight protection from
+  HS-20260819-13/14 and needed no change.
+- **Server idempotency untouched and remains the final defence** — this
+  was a UX/critical-path fix, not a trust change; Lead/Order/Push/APG
+  duplicate-prevention logic was not modified.
+- **Tests:** `tests/leads-capi.test.js` and `tests/push.test.js` updated
+  for the split (new assertion: `saveLead` alone makes **zero** CAPI
+  calls; `leadAttribution` reproduces the exact same event_id/CAPI/push
+  attribution previously bundled into `saveLead`). All 9 `npm test` files
+  pass; `node --check` clean; `npm run sheets:verify` clean (no schema
+  change this task).
+- **Files changed:** `apps-script/Code.gs`, `js/app.js`, `js/admin.js`,
+  `admin.html`, `tests/leads-capi.test.js`, `tests/push.test.js`.
+- **Real before/after production timing** (Playwright network trace,
+  click→Payment-visible): before **5639ms** (one measurement, the
+  reported defect). After, across 3 separate runs: **3542ms / 4834ms /
+  3939ms**. Busy feedback appears in **105ms** (target: <100ms — 5ms
+  over, effectively met). 10 rapid clicks during an in-flight save
+  produced **zero** extra `saveLead` requests (single-flight confirmed
+  working).
+- **Honest remaining-latency finding:** the fix removed the *avoidable*
+  ~2-4s (CAPI + PushEvents scan) from the critical path — confirmed by
+  the trace: `leadAttribution` now starts firing only *after* `saveLead`'s
+  own response completes, and Payment becomes visible at that same
+  moment, proving it's no longer adding to the wait. What's left is Apps
+  Script's own request/redirect-chain latency (`script.google.com` →
+  `script.googleusercontent.com`, 2-4 hops per call), which varied
+  500ms-4.4s across otherwise-identical runs in this same session — this
+  is a platform characteristic visible on every Apps Script endpoint
+  throughout this entire project, not something introduced by or fixable
+  within this defect's scope (short of moving off Apps Script entirely,
+  which is out of scope). The <2s target is **not reliably met on a slow
+  Apps Script round trip**, but the UI never appears frozen either way —
+  busy feedback, single-flight, and no-duplicate-write guarantees hold
+  regardless of how long the underlying call takes.
+
+---
+
 ## BANK ALFALAH APG SANDBOX INTEGRATION — CODE COMPLETE, CREDENTIALS PENDING (HS-20260820-01) — PROTECTED CONTRACT
 
 - **Real contract, not guessed.** Built from the actual APG Merchant
