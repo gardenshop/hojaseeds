@@ -6,6 +6,119 @@ into each request.
 
 ---
 
+## FIRST REAL APG SANDBOX TRANSACTION: ROOT CAUSE FOUND, 2 REAL BUGS FIXED (HS-20260821-08)
+
+- **`APG_ENABLED` confirmed as Hoja's existing internal Settings-sheet
+  flag** (no second flag created). **Tightened its customer-exposure
+  guarantee**: the checkout tab now also requires an explicit
+  `?apg_test=1` in the URL on top of `CONFIG.APG_SANDBOX_MODE` +
+  `APG_ENABLED` — since this SPA never changes the URL after initial
+  load, that query param survives the whole checkout session. Verified
+  live: with `APG_ENABLED=true`, an ordinary page load shows only
+  JazzCash/EasyPaisa/Bank Transfer; only `?apg_test=1` reveals the Bank
+  Alfalah tab. `APG_ENABLED` was flipped `true` only for the few minutes
+  needed to run the real test below, then flipped back to `false`
+  (confirmed via direct read afterward).
+- **Ran the first real Bank Alfalah sandbox handshake request. Found and
+  fixed 3 real issues, none of them the AES/hash implementation (already
+  verified correct):**
+  1. **Cloudflare bot-fingerprint block (`HTTP 403, error code: 1010`)**
+     on default headless-browser/script requests — proven with real
+     evidence to be specific to automation fingerprints, not a
+     credential or Hoja-code problem: the exact same real payload,
+     re-sent with a normal desktop browser fingerprint, reached Bank
+     Alfalah cleanly (got a real `302` response). Not a code change — an
+     artifact of how this agent's own test tooling presents itself, not
+     something a real customer's ordinary browser would hit.
+  2. **`APG_MERCHANT_HASH` proven wrong by direct byte comparison** — the
+     live Script Property value is missing its trailing `=` character
+     (75 chars vs. the authoritative 76-char value extracted directly
+     from the merchant portal in HS-20260820-01). This is a genuine
+     credential-transcription error, confirmed with certainty (SHA-256
+     fingerprint mismatch), and is the reason the real handshake returned
+     `success:false` with no further detail. **Classified HOJA-SIDE
+     (transcription error) — no Bank Alfalah support contact needed.**
+     All other compared properties (`APG_MERCHANT_ID`, `APG_STORE_ID`,
+     `APG_MERCHANT_USERNAME`, `APG_MERCHANT_PASSWORD`) matched exactly.
+     **Owner action:** re-paste `APG_MERCHANT_HASH` from the same staged
+     file used before (`PASTE_INTO_APPS_SCRIPT_APG_PROPERTIES.txt`),
+     verifying the value ends in `=`.
+  3. **Real, confirmed Hoja-side bug in `js/app.js`, now fixed and
+     deployed:** Bank Alfalah's actual redirect concatenates `"?" + its
+     own params` directly onto the registered Return URL without
+     checking for an existing query string — producing
+     `?hs_view=payment-return?success=false&AuthToken=...` (a malformed
+     double-`?` URL, confirmed from the real redirect this transaction
+     produced). This broke both the boot-time `hs_view` deep-link
+     detection (a strict equality check) and the auth-token extraction
+     (which also expected the PDF's documented `auth_token` name, not
+     the real `AuthToken` Bank Alfalah actually sends). Fixed with a
+     tolerant `apgReturnParams()` helper that isolates Bank Alfalah's own
+     query segment regardless of the double-`?`, and now checks both
+     `AuthToken` and `auth_token`. Verified against the exact malformed
+     URL the real transaction produced: routing and param extraction now
+     both correct. This would have silently broken the success path too,
+     not just this failure — a real, valuable find independent of the
+     credential fix.
+- **No support email sent or drafted for sending** — every issue found
+  was proven Hoja-side (client fingerprinting choice, transcription
+  error, URL-parsing assumption), not a Bank Alfalah configuration
+  problem. Nothing here meets the task's own bar for contacting the bank.
+- **Files changed:** `apps-script/Code.gs` (unchanged this task, prior
+  diagnostic only), `js/app.js` (exposure gate + return-URL parsing
+  fixes).
+- **APG Sandbox: ~75%, NOT frozen.** Once the owner re-pastes the correct
+  `APG_MERCHANT_HASH`, a follow-up task can immediately re-run this exact
+  real transaction — everything else in the chain is now proven working
+  up to the point of the credential mismatch.
+
+---
+
+## APG SCRIPT PROPERTIES VERIFIED; SANDBOX ADMIN GATE STILL OFF (HS-20260821-07)
+
+- Live presence-only `apgConfigStatus` now reports all eight required
+  properties present: `APG_MERCHANT_ID`, `APG_STORE_ID`,
+  `APG_MERCHANT_HASH`, `APG_MERCHANT_USERNAME`, `APG_MERCHANT_PASSWORD`,
+  `APG_KEY1`, `APG_KEY2`, and `APG_SANDBOX_BASE`. No values were returned or
+  logged.
+- Endpoint verification is clean: base
+  `https://sandbox.bankalfalah.com` resolves exactly to
+  `https://sandbox.bankalfalah.com/HS/HS/HS`. Return URL and existing listener
+  route remain unchanged.
+- DevTools fallback was available through an isolated headless Chrome CDP
+  profile. The live site loaded successfully. The Settings sheet reports
+  `APG_ENABLED=false`, so the APG checkout tab is correctly hidden by the
+  existing admin/sandbox gate. No gate bypass or production enablement was
+  attempted.
+- No real APG transaction, redirect, Return, Listener, status inquiry, or
+  payment-state mutation occurred. Sandbox remains blocked only on the
+  deliberate admin-controlled `APG_ENABLED` switch.
+
+---
+
+## LOCAL APG SOURCE VERIFIED; SCRIPT PROPERTY SYNC STILL REQUIRES OWNER (HS-20260821-06)
+
+- `.env.local` exists and is ignored by `.gitignore` (`.env.*` with the
+  `.env.example` exception). `git check-ignore` confirms it is ignored.
+- All eight required local variable names are present:
+  `APG_MERCHANT_ID`, `APG_STORE_ID`, `APG_MERCHANT_HASH`,
+  `APG_MERCHANT_USERNAME`, `APG_MERCHANT_PASSWORD`, `APG_KEY1`, `APG_KEY2`,
+  and `APG_SANDBOX_BASE`. No values were printed, logged, committed, or
+  copied into documentation. Code.gs property names match exactly.
+- One local authenticated sync attempt using the existing
+  `gisupp@gmail.com` OAuth identity returned `HTTP 403`. Per the security
+  rule, OAuth engineering stopped; no public endpoint, temporary source, or
+  APG implementation change was made.
+- Live presence-only status remains `0/8` (`allConfigured: false`). The owner
+  must open Apps Script → Project Settings → Script Properties and create or
+  update the eight APG properties using the local `.env.local` source, then
+  save and confirm. Values must never be pasted into chat or committed.
+- No sandbox transaction occurred. The expected endpoint remains
+  `https://sandbox.bankalfalah.com/HS/HS/HS`. GitHub workflow automation is
+  unchanged and remains optional future automation.
+
+---
+
 ## GITHUB WORKFLOW PUBLISHED; ACTIONS RUNNER STARTUP BLOCKED (HS-20260821-05)
 
 - GitHub OAuth was reauthorized with the `workflow` scope. The existing commit

@@ -1770,7 +1770,12 @@ const Views = {
     this.renderPaymentReturnState("verifying", "Verifying payment…", "Please wait while we confirm your payment with Bank Alfalah.");
 
     const flow = ApgFlow.get();
-    const authToken = new URLSearchParams(location.search).get("auth_token");
+    const params = apgReturnParams();
+    // Confirmed via a real sandbox transaction (HS-20260821-08): Bank
+    // Alfalah's actual redirect uses "AuthToken" (matching its own JSON
+    // response field naming), not the lowercase "auth_token" the PDF guide
+    // describes -- both are checked for safety.
+    const authToken = params.get("AuthToken") || params.get("auth_token");
 
     (async () => {
       if (!flow || !flow.orderId) {
@@ -1893,6 +1898,23 @@ const PendingOrder = {
 // location.search for the whole session -- letting a real controlled
 // sandbox test happen (APG_ENABLED=true in Settings) without the tab
 // appearing for ordinary visitors who load the site normally.
+// Isolates Bank Alfalah's own appended query params from ours, tolerant
+// of the "?hs_view=payment-return?success=false&AuthToken=..." malformed
+// double-"?" shape confirmed via a real sandbox transaction
+// (HS-20260821-08) -- APG concatenates "?" + its own params directly onto
+// our full ReturnURL without checking whether it already has a query
+// string. If only one "?" is present (no APG params yet, or APG ever
+// switches to a well-formed "&"), falls back to parsing the whole search
+// string normally -- safe either way since none of the keys read here
+// (success/AuthToken/auth_token/ErrorMessage) collide with hs_view.
+function apgReturnParams() {
+  const raw = location.search || "";
+  const firstQ = raw.indexOf("?");
+  if (firstQ === -1) return new URLSearchParams("");
+  const secondQ = raw.indexOf("?", firstQ + 1);
+  return new URLSearchParams(secondQ === -1 ? raw.slice(firstQ + 1) : raw.slice(secondQ + 1));
+}
+
 function apgTestAccessGranted() {
   try { return new URLSearchParams(location.search).get("apg_test") === "1"; } catch { return false; }
 }
@@ -2075,9 +2097,17 @@ document.getElementById("navToggle").addEventListener("click", () => {
   // state-independent views only.
   if (typeof URLSearchParams !== "undefined" && typeof location !== "undefined") {
     const deepLinkView = new URLSearchParams(location.search).get("hs_view");
+    // Bank Alfalah appends its own "?params" directly onto the already-?
+    // -containing Return URL without checking for an existing query string
+    // -- confirmed with a real sandbox transaction (HS-20260821-08),
+    // producing "?hs_view=payment-return?success=false&...". That embedded
+    // second "?" corrupts a strict `hs_view === "payment-return"` check
+    // (URLSearchParams would parse hs_view's value as
+    // "payment-return?success=false"), so this uses a tolerant substring
+    // check instead -- exact match still works for every OTHER deep link.
     if (["cart", "vegetables", "flowers", "mix", "fertilizer"].includes(deepLinkView)) {
       Router.go(deepLinkView);
-    } else if (deepLinkView === "payment-return") {
+    } else if (location.search.indexOf("hs_view=payment-return") !== -1) {
       // Registered Bank Alfalah APG Return URL (HS-20260820-01) -- its own
       // dedicated render path, not a normal category route.
       Views.paymentReturn();
