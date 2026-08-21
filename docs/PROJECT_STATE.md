@@ -6,6 +6,99 @@ into each request.
 
 ---
 
+## APG PAUSED PENDING BANK RESPONSE — CODE FROZEN, LAUNCH NOT BLOCKED (HS-20260821-12)
+
+- **APG payment path: VERIFIED and frozen — no further changes without
+  new proof of a regression.** Page Redirection (ChannelId 1001),
+  handshake, AES/hash, SSO, hosted checkout, and Return parsing are all
+  proven correct with two real completed sandbox payments (Bank
+  transaction IDs `344409383448` and `350718941234`, both PKR 470.00,
+  both confirmed `Paid` by Bank Alfalah's own status response when
+  queried from a browser/external network).
+- **APG IPN = EXTERNAL BANK BLOCKER, not a Hoja defect.** The exact same
+  OrderStatus URL that returns `ResponseCode=00`/`TransactionStatus=Paid`
+  from a browser or external network fails at the **connection level**
+  ("Address unavailable", no HTTP response at all) specifically from
+  Google Apps Script's server-side network. The Listener endpoint itself
+  returns `HTTP 200 OK`. This is classified **BANK CONFIGURATION / IPN
+  CONNECTIVITY**, not a code, hash, or architecture problem — confirmed
+  by elimination in HS-20260821-10.
+- **Support email sent** to Bank Alfalah (updated draft on disk,
+  `docs/apg-support-email-draft.md`, includes Merchant/Store ID, both
+  real Order IDs and transaction IDs, the Listener URL, and the exact
+  non-secret failure signature — no credentials). Awaiting Bank response.
+- **`APG_ENABLED` reconfirmed `false`** this session (direct Settings-sheet
+  read). Ordinary customers see only JazzCash/EasyPaisa/Bank Transfer;
+  the `?apg_test=1` gate remains the only way to ever reveal the tab, and
+  it stays unused while `APG_ENABLED` is off either way. Production APG
+  was never enabled.
+- **Zero regression, verified live:** Advance/Split cart (individually
+  selected vegetables) correctly shows JazzCash/EasyPaisa/Bank
+  Transfer/Split with the right totals (Rs. 470) and no APG tab; a Mix
+  Pack cart (COD-eligible) correctly reaches Payment with Cash on
+  Delivery + Advance Payment options and `codAllowed:true`. (An initial
+  test run under-waited for the known variable Apps Script round-trip
+  latency from HS-20260820-02 and looked like a false regression — a
+  longer wait confirmed everything is correct; not a real issue.)
+- **No code changed this task** — this was a verification/documentation
+  task only, per its own explicit instruction not to touch the proven
+  APG path.
+- **Website is launch-ready without APG.** COD, JazzCash, EasyPaisa, Bank
+  Transfer, Advance, and Split all work correctly and are unaffected by
+  APG's paused state; APG remains an additive, currently-invisible
+  payment option, not a dependency for launch.
+- **Next APG task (only after a real Bank response, no speculative
+  changes before then):** apply whatever whitelist/config change the
+  Bank specifies → re-run one real sandbox payment → confirm
+  Listener/IPN + status inquiry now succeed from Apps Script → Order
+  reaches PAID → exactly one Purchase → duplicate/failure checks → THEN
+  APG Sandbox = 100%, freeze.
+- **APG Sandbox stays at ~90%** — the floor this task was told to
+  preserve, not reduced.
+
+---
+
+## APG OFFICIAL-DOCS AUDIT + DIFFERENTIAL IPN EVIDENCE (HS-20260821-11)
+
+- **Integration channel protected:** Hoja intentionally uses **Page Redirection,
+  ChannelId 1001**. The official guide requires `POST /HS/HS/HS`, then
+  `POST /SSO/SSO/SSO` with ChannelId 1001, followed by APG hosted checkout.
+  API Testing is a separate alternative using ChannelId 1002 and `HSAPI`,
+  `DoTran`, and `ProTran`; Hoja does not mix or require that flow.
+- **Official flow comparison:** Handshake PASS; AuthToken/SSO PASS; hosted
+  checkout PASS; two real sandbox card payments PASS; Return PASS with the
+  documented `O` Order ID mapping. Return `TS`/`RC` values are not trusted as
+  payment proof. Only the documented OrderStatus response may authorize PAID.
+- **Controlled status evidence for both real orders:** external/browser
+  requests and local requests to the exact documented URLs returned HTTP 200
+  JSON with `ResponseCode=00`, matching MerchantId/StoreId/Order ID/amount,
+  `TransactionStatus=Paid`, and transaction IDs `344409383448` and
+  `350718941234`. Order amounts were PKR 470.00. This is direct Bank status
+  evidence; the authenticated Merchant Portal dashboard was not available in
+  this execution, so no new portal screenshot/record was claimed.
+- **Apps Script differential:** the same exact OrderStatus URL from Apps Script
+  still fails with `Address unavailable` (no HTTP response). The deployed
+  Listener endpoint itself returns HTTP 200 `OK`, but a controlled Listener
+  probe leaves Hoja at `gatewayStatus=UNKNOWN` with the same safe diagnostic;
+  it does not prove that APG sent a real callback. No APG-origin POST delivery
+  was observable in the available Apps Script logs/events.
+- **Listener contract:** official guide says APG POSTs the configured Listener
+  with `url=<OrderStatus URL>` and the merchant GETs that URL. Hoja implements
+  exactly that contract and does not require APG to POST transaction details.
+  The registered Return URL and Listener URL remain unchanged and were already
+  confirmed against Hoja in prior authenticated portal evidence.
+- **Whitelist status:** the official guide explicitly requires the configured
+  IPN/Listener details to be shared with the APG Business Owner for Bank
+  Alfalah network whitelisting. No independent evidence confirms Hoja's
+  Listener/Apps Script outbound path is whitelisted. Classification:
+  **BANK CONFIGURATION ACTION REQUIRED**.
+- **No code fix was needed:** response parsing and safe UNKNOWN handling are
+  correct. Do not switch to API 1002 or alter Listener architecture. Support
+  draft updated with the differential evidence and whitelist questions; it is
+  not sent automatically.
+
+---
+
 ## REAL APG SANDBOX PAYMENT COMPLETED TWICE — AUTHORITATIVE VERIFICATION BLOCKED (HS-20260821-10) — NOT FROZEN
 
 - **Two real, complete Bank Alfalah sandbox payments succeeded**, using
