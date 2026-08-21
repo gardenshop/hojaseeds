@@ -6,6 +6,28 @@ into each request.
 
 ---
 
+## GITHUB WORKFLOW PUBLISHED; ACTIONS RUNNER STARTUP BLOCKED (HS-20260821-05)
+
+- GitHub OAuth was reauthorized with the `workflow` scope. The existing commit
+  `dceb145` was pushed to `main`; no duplicate workflow commit was created.
+- The workflow is visible and active as `Sync APG secrets to Apps Script`.
+  Required OAuth/APG secret names are present by name only, including
+  `GOOGLE_OAUTH_CLIENT_SECRET`.
+- Manual dispatch run `32473057977` failed before any workflow step executed.
+  The job has an empty step list and no logs. Repository Actions are enabled,
+  but the repository reports zero available runners. Therefore neither the
+  harmless `scripts.run` preflight nor APG secret sync ran, and no APG value
+  entered the workflow process.
+- Apps Script project/deployment state is unchanged: version 36 remains the
+  API-executable deployment with `access: MYSELF`. The linked Apps Script GCP
+  project number still cannot be obtained through the available Apps Script
+  REST metadata; it must be compared manually in Project Settings with OAuth
+  project `1072944905499`. No relink was attempted.
+- No sandbox transaction occurred. APG implementation and protected checkout,
+  lead, order, push, admin, R2, and Cloudflare behavior remain unchanged.
+
+---
+
 ## EXECUTION API 403 RECHECKED; GITHUB REFRESH CREDENTIAL INCOMPLETE (HS-20260821-04)
 
 - **OAuth identity verified without exposing credentials:** the refreshed
