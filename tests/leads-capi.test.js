@@ -82,7 +82,7 @@ function createBackend({ capiToken = "TEST_TOKEN", capiStatus = 200, capiThrows 
     }
   });
   const code = fs.readFileSync(path.join(root, "apps-script", "Code.gs"), "utf8");
-  vm.runInContext(`${code}\nthis.__api = { saveLead, updateLeadStatus, submitOrder, OrderError };`, context);
+  vm.runInContext(`${code}\nthis.__api = { saveLead, leadAttribution, updateLeadStatus, submitOrder, OrderError };`, context);
   return { api: context.__api, rows, capiCalls, getLockCount: () => lockCount };
 }
 
@@ -119,8 +119,17 @@ function leadPayload(overrides = {}) {
 })();
 
 (function leadPixelAndCapiShareSameEventId() {
+  // HS-20260820-02: CAPI now fires from the separate leadAttribution call
+  // (fired by the client, non-awaited, right after a genuinely-new
+  // saveLead response) -- saveLead itself makes zero CAPI calls, which is
+  // exactly the point: the customer's Confirm Delivery click no longer
+  // waits on Meta's Graph API at all.
   const { api, capiCalls } = createBackend();
-  api.saveLead(leadPayload());
+  const payload = leadPayload();
+  const saved = api.saveLead(payload);
+  assert.strictEqual(capiCalls.length, 0, "saveLead itself must not call CAPI -- that would put it back in the critical path");
+  assert.strictEqual(saved.isNew, true);
+  api.leadAttribution(payload);
   assert.strictEqual(capiCalls.length, 1);
   assert.strictEqual(capiCalls[0].body.data[0].event_id, "LEAD-lead-test-0000000000001", "PAY-LEAD-D: CAPI event_id matches the LEAD-<leadId> convention the Pixel call must also use");
   assert.strictEqual(capiCalls[0].body.data[0].event_name, "Lead");
@@ -136,14 +145,21 @@ function leadPayload(overrides = {}) {
 
 (function capiFailureDoesNotFailLeadSave() {
   const { api, rows } = createBackend({ capiThrows: true });
-  const result = api.saveLead(leadPayload());
+  const payload = leadPayload();
+  const result = api.saveLead(payload);
   assert.strictEqual(result.ok, true, "PAY-LEAD-F: CAPI network failure never fails the lead save");
   assert.strictEqual(rows.Leads.length, 2);
+  // The separate, non-awaited leadAttribution call must also never throw
+  // past a CAPI network failure -- it runs fire-and-forget from the
+  // client with no error surface for the customer to see.
+  assert.doesNotThrow(() => api.leadAttribution(payload), "leadAttribution must swallow a CAPI failure, not throw");
 })();
 
 (function noPiiInCapiCustomData() {
   const { capiCalls, api } = createBackend();
-  api.saveLead(leadPayload());
+  const payload = leadPayload();
+  api.saveLead(payload);
+  api.leadAttribution(payload);
   const custom = JSON.stringify(capiCalls[0].body.data[0].custom_data).toLowerCase();
   ["ali khan", "house 1", "03001234567"].forEach(pii => assert.ok(!custom.includes(pii), "PII must never appear in CAPI custom_data: " + pii));
   const userData = capiCalls[0].body.data[0].user_data;

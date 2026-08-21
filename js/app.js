@@ -313,30 +313,56 @@ const Leads = {
     const match = String(document.cookie || "").match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
     return match ? decodeURIComponent(match[1]) : "";
   },
+  // Shared with both save() and sendAttribution() so the two requests'
+  // customer/items/attribution fields never drift apart.
+  requestFields(delivery) {
+    return {
+      leadId: this.id(),
+      visitorId: (typeof PushGrowth !== "undefined" && PushGrowth.visitorId()) || "",
+      customer: delivery,
+      items: Cart.flatLines().map(l => ({ productId: l.p.id, quantity: l.qty })),
+      fbp: this.cookie("_fbp"),
+      fbc: this.cookie("_fbc"),
+      userAgent: (typeof navigator !== "undefined" && navigator.userAgent) || "",
+      pageUrl: location.href,
+      utmSource: new URLSearchParams(location.search).get("utm_source") || ""
+    };
+  },
   // Fires on a valid Confirm Delivery submission, before Payment. Never
   // blocks checkout: any failure resolves to null and the caller proceeds
-  // to Payment regardless -- only the Lead-specific analytics events are
-  // skipped when this doesn't confirm success.
+  // to Payment regardless. HS-20260820-02: bounded with an 8s timeout
+  // (this call now only does the essential Lead write server-side, so a
+  // real response is expected in well under that -- a hang past 8s means
+  // something is genuinely wrong, not just slow, and must fail visibly
+  // rather than leave the button looking stuck forever) -- CAPI/push
+  // attribution moved to the separate, non-awaited sendAttribution() call
+  // below, so this response no longer waits on them.
   async save(delivery) {
     if (!CONFIG.SHEET_WEBHOOK_URL) return null;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     try {
       const res = await fetch(CONFIG.SHEET_WEBHOOK_URL, {
         method: "POST",
-        body: JSON.stringify({
-          type: "saveLead",
-          leadId: this.id(),
-          visitorId: (typeof PushGrowth !== "undefined" && PushGrowth.visitorId()) || "",
-          customer: delivery,
-          items: Cart.flatLines().map(l => ({ productId: l.p.id, quantity: l.qty })),
-          fbp: this.cookie("_fbp"),
-          fbc: this.cookie("_fbc"),
-          userAgent: (typeof navigator !== "undefined" && navigator.userAgent) || "",
-          pageUrl: location.href,
-          utmSource: new URLSearchParams(location.search).get("utm_source") || ""
-        })
+        body: JSON.stringify({ type: "saveLead", ...this.requestFields(delivery) }),
+        signal: controller.signal
       });
       return await res.json();
     } catch (e) { console.warn("Lead save failed, checkout continues:", e); return null; }
+    finally { clearTimeout(timeout); }
+  },
+  // Non-awaited by design (HS-20260820-02) -- CAPI Lead + push
+  // attribution, fired right after a successful, genuinely-new saveLead
+  // response. Never blocks Payment navigation; any failure here is
+  // invisible to the customer, matching the previous best-effort contract.
+  sendAttribution(delivery) {
+    if (!CONFIG.SHEET_WEBHOOK_URL) return;
+    try {
+      fetch(CONFIG.SHEET_WEBHOOK_URL, {
+        method: "POST",
+        body: JSON.stringify({ type: "leadAttribution", ...this.requestFields(delivery) })
+      }).catch(() => {});
+    } catch { /* best-effort only */ }
   },
   // Abandonment-reason telemetry -- best-effort, non-blocking, never fires
   // another Meta Lead event.
@@ -1058,6 +1084,12 @@ const Views = {
       document.getElementById("deliveryStatus").innerHTML = `<div class="order-status err">Please correct the highlighted delivery details.</div>`;
       return;
     }
+    // Single-flight guard (HS-20260820-02): a rapid double-click on
+    // Confirm Delivery must never start a second saveLead request while
+    // the first is still in flight.
+    if (this._confirmingDelivery) return;
+    this._confirmingDelivery = true;
+
     this._order = this._order || {};
     this._order.delivery = delivery;
 
@@ -1065,20 +1097,31 @@ const Views = {
     // This never blocks checkout: a save failure still lets the customer
     // continue to Payment, it just skips the Lead-specific analytics below
     // (which must only fire once the details are confirmed saved).
+    // HS-20260820-02: immediate visible busy state (previously only
+    // `disabled` with no label/spinner change -- DevTools-traced evidence
+    // showed the button silently doing nothing for ~5.6s, which is
+    // exactly what "appears stuck" means from the customer's side).
     const submitBtn = document.getElementById("deliverySubmitBtn");
     const stickyBtn = document.getElementById("sbAction");
-    if (submitBtn) submitBtn.disabled = true;
-    if (stickyBtn) stickyBtn.disabled = true;
+    const originalSubmitLabel = submitBtn ? submitBtn.textContent : "";
+    const originalStickyLabel = stickyBtn ? stickyBtn.textContent : "";
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.setAttribute("aria-busy", "true"); submitBtn.textContent = "Saving delivery…"; }
+    if (stickyBtn) { stickyBtn.disabled = true; stickyBtn.setAttribute("aria-busy", "true"); stickyBtn.textContent = "Saving delivery…"; }
     let leadResult = null;
     try { leadResult = await Leads.save(delivery); }
     finally {
-      if (submitBtn) submitBtn.disabled = false;
-      if (stickyBtn) stickyBtn.disabled = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.removeAttribute("aria-busy"); submitBtn.textContent = originalSubmitLabel; }
+      if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.removeAttribute("aria-busy"); stickyBtn.textContent = originalStickyLabel; }
+      this._confirmingDelivery = false;
     }
 
     Analytics.addShippingInfo(Cart.flatLines(), Cart.totalAmount());
     if (leadResult && leadResult.ok) {
       Analytics.generateLead(Leads.id(), Cart.flatLines(), Cart.totalAmount());
+      // Fire-and-forget (HS-20260820-02): CAPI Lead + push attribution no
+      // longer block this navigation -- same "only on a genuinely new
+      // lead" gate the server used to apply internally.
+      if (leadResult.isNew) Leads.sendAttribution(delivery);
     }
     Router.go("payment");
   },
@@ -1487,6 +1530,9 @@ const Views = {
 
   async submitOrder(e) {
     e.preventDefault();
+    // Single-flight guard (HS-20260820-02), on top of the button-disable
+    // below -- explicit belt-and-suspenders against a rapid-click burst.
+    if (this._submittingOrder) return;
     const status = document.getElementById("orderStatus");
     let paymentMethod = document.querySelector('input[name="pay"]:checked').value;
     // Defensive safety net only — COD/Split radios simply aren't rendered
@@ -1512,11 +1558,13 @@ const Views = {
       return;
     }
 
+    this._submittingOrder = true;
     const inlineBtn = document.getElementById("submitBtn");
     const stickyBtn = document.getElementById("sbAction");
     inlineBtn.disabled = true;
+    inlineBtn.setAttribute("aria-busy", "true");
     inlineBtn.textContent = "Placing order…";
-    if (stickyBtn) { stickyBtn.disabled = true; stickyBtn.textContent = "Placing order…"; }
+    if (stickyBtn) { stickyBtn.disabled = true; stickyBtn.setAttribute("aria-busy", "true"); stickyBtn.textContent = "Placing order…"; }
 
     const lines = Cart.flatLines();
     const delivery = this._order.delivery;
@@ -1573,11 +1621,19 @@ const Views = {
       this._order = null;
       const handshake = await Orders.submit({ type: "apgStartHandshake", orderId: result.orderId });
       if (!handshake.ok) {
+        this._submittingOrder = false;
         this.showOrderError(status, handshake.error?.message || "Couldn't start the Bank Alfalah payment. Please try again.");
         inlineBtn.disabled = false;
-        if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.textContent = "Confirm & Place Order"; }
+        inlineBtn.removeAttribute("aria-busy");
+        if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.removeAttribute("aria-busy"); stickyBtn.textContent = "Confirm & Place Order"; }
         return;
       }
+      // Section 8: distinct label for the redirect hop -- the button stays
+      // busy/disabled through the real navigation away from this site, so
+      // _submittingOrder is deliberately NOT reset here (there is no "back
+      // to idle" state before the page unloads).
+      inlineBtn.textContent = "Opening secure payment…";
+      if (stickyBtn) stickyBtn.textContent = "Opening secure payment…";
       submitHiddenFormAndNavigate(handshake.action, handshake.fields);
       return;
     }
@@ -1612,9 +1668,11 @@ const Views = {
       if (result.error?.code !== "ORDER_TIMEOUT" && result.error?.code !== "ORDER_NETWORK_ERROR") PendingOrder.clear();
       this.showOrderError(status, result.error?.message || "Couldn't place the order. Please try again shortly.");
       inlineBtn.disabled = false;
+      inlineBtn.removeAttribute("aria-busy");
       this.updateDeliveryFee(); // restores the method-specific submit-button copy
-      if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.textContent = "Confirm & Place Order"; }
+      if (stickyBtn) { stickyBtn.disabled = false; stickyBtn.removeAttribute("aria-busy"); stickyBtn.textContent = "Confirm & Place Order"; }
     }
+    this._submittingOrder = false;
   },
 
   showOrderError(status, message) {

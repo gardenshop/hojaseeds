@@ -72,6 +72,7 @@ function doPost(e) {
     if (payload.type === "apgStartSso") return jsonResponse(apgStartSso(payload));
     if (payload.type === "apgVerifyStatus") return jsonResponse(apgVerifyStatus(payload));
     if (payload.type === "saveLead") return jsonResponse(saveLead(payload));
+    if (payload.type === "leadAttribution") return jsonResponse(leadAttribution(payload));
     if (payload.type === "updateLeadStatus") return jsonResponse(updateLeadStatus(payload));
     if (payload.type === "pushSubscription") return jsonResponse(savePushSubscription(payload));
     if (payload.type === "pushEvent") return jsonResponse(logPushEvent(payload));
@@ -1576,30 +1577,71 @@ function saveLead(payload) {
     lock.releaseLock();
   }
 
-  // CAPI Lead fires only after the row is durably committed, and only on
-  // genuinely new leads (a duplicate Confirm Delivery reuses the same
-  // event_id anyway, so Meta dedupes it even if this were called again --
-  // but skipping it here avoids the extra API call on every keystroke-free
-  // resubmit).
-  let capi = { ok: false, skipped: true };
-  if (isNew) {
-    capi = sendMetaCapiEvent("Lead", "LEAD-" + leadId, {
-      ph: [sha256Hex(phone)],
-      ct: city ? [sha256Hex(city.toLowerCase())] : undefined,
-      country: [sha256Hex("pk")],
-      client_user_agent: optionalText(payload.userAgent, "User agent", 300) || undefined,
-      fbp: optionalText(payload.fbp, "fbp", 200) || undefined,
-      fbc: optionalText(payload.fbc, "fbc", 200) || undefined
-    }, {
-      currency: "PKR",
-      value: itemsSubtotal,
-      content_ids: cartLines.map(l => l.productId),
-      num_items: cartLines.length,
-      eventSourceUrl: optionalText(payload.pageUrl, "Page URL", 300) || "https://www.hojaseeds.pk/"
-    });
-  }
+  // HS-20260820-02: CAPI Lead + push attribution moved OUT of this
+  // response's critical path -- DevTools-traced evidence showed this
+  // single saveLead round trip taking ~4.85s of the customer's ~5.6s
+  // "stuck" Confirm Delivery click, and code inspection confirmed why:
+  // sendMetaCapiEvent is a real synchronous UrlFetchApp.fetch to Meta's
+  // Graph API (1-4s+ from Apps Script's network stack), plus
+  // attributePushConversion did a full PushEvents sheet scan, both
+  // previously running before this function could return at all. The
+  // Lead row itself is already durably committed above by this point --
+  // everything below is genuinely non-critical attribution/analytics
+  // work with no bearing on whether the customer can proceed to Payment.
+  // The client now fires this as a separate, non-awaited follow-up
+  // request (type: "leadAttribution") right after receiving THIS
+  // response, so the customer's wait is only ever for the essential
+  // write. Same CAPI contract, same event_id, same dedup guarantee --
+  // only the timing changed, never weakened.
+  return { ok: true, leadId: leadId, status: status, isNew: isNew };
+}
+
+// The CAPI Lead event + push attribution, split out of saveLead
+// (HS-20260820-02) so the customer's Confirm Delivery click never waits
+// on them. Fired by the client as a separate, non-awaited request
+// immediately after a successful saveLead response -- never blocks
+// checkout, never re-validates/re-writes the Lead row itself (that
+// already happened, durably, in saveLead). Recomputes cartLines/
+// itemsSubtotal from the same items+products inputs since this is a
+// fresh request with no server-side memory of the prior call.
+function leadAttribution(payload) {
+  const leadId = requiredText(payload.leadId, "Lead ID", 16, 100);
+  if (!/^[A-Za-z0-9_-]+$/.test(leadId)) throw new OrderError("INVALID_LEAD_ID", "The checkout session ID is invalid.");
+  const customerInput = payload.customer || {};
+  let phone = "", city = "";
+  try { phone = normalizePakistanMobile(customerInput.phone); } catch (e) { /* best-effort -- CAPI just omits ph */ }
+  try { city = requiredText(customerInput.city, "City", 2, 80); } catch (e) { city = ""; }
+
+  const products = getProducts();
+  const productsById = {};
+  products.forEach(p => productsById[String(p.id)] = p);
+  const items = Array.isArray(payload.items) ? payload.items : [];
+  const cartLines = [];
+  let itemsSubtotal = 0;
+  items.forEach(item => {
+    const product = item && productsById[String(item.productId)];
+    const quantity = Number(item && item.quantity);
+    if (!product || !Number.isInteger(quantity) || quantity <= 0) return;
+    itemsSubtotal += (Number(product.price) || 0) * quantity;
+    cartLines.push({ productId: String(product.id) });
+  });
+
+  const capi = phone ? sendMetaCapiEvent("Lead", "LEAD-" + leadId, {
+    ph: [sha256Hex(phone)],
+    ct: city ? [sha256Hex(city.toLowerCase())] : undefined,
+    country: [sha256Hex("pk")],
+    client_user_agent: optionalText(payload.userAgent, "User agent", 300) || undefined,
+    fbp: optionalText(payload.fbp, "fbp", 200) || undefined,
+    fbc: optionalText(payload.fbc, "fbc", 200) || undefined
+  }, {
+    currency: "PKR",
+    value: itemsSubtotal,
+    content_ids: cartLines.map(l => l.productId),
+    num_items: cartLines.length,
+    eventSourceUrl: optionalText(payload.pageUrl, "Page URL", 300) || "https://www.hojaseeds.pk/"
+  }) : { ok: false, skipped: true };
   try { attributePushConversion(payload.visitorId, "lead", leadId); } catch (e) { console.error(e); }
-  return { ok: true, leadId: leadId, status: status, isNew: isNew, capi: capi.ok };
+  return { ok: true, capi: capi.ok };
 }
 
 // Best-effort, non-authenticated (same trust level as saveLead -- this is

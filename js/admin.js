@@ -26,6 +26,26 @@ const Admin = {
 
   SESSION_KEY: "hoja_admin_id_token", // sessionStorage: cleared on tab close, survives an ordinary refresh
 
+  // Shared single-flight/busy-button helper (HS-20260820-02) -- every
+  // Admin action that writes to the server should route through this
+  // rather than repeat the same disable/label/guard boilerplate. `key`
+  // scopes the in-flight flag so unrelated buttons never block each
+  // other; `btnId` gets aria-busy + a temporary label; `fn` does the
+  // actual authorizedPost + whatever follow-up rendering it needs.
+  _inFlight: {},
+  async runSingleFlight(key, btnId, busyLabel, idleLabel, fn) {
+    if (this._inFlight[key]) return;
+    this._inFlight[key] = true;
+    const btn = btnId ? document.getElementById(btnId) : null;
+    if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = busyLabel; }
+    try {
+      await fn();
+    } finally {
+      this._inFlight[key] = false;
+      if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = idleLabel; }
+    }
+  },
+
   login(response) {
     if (!response || !response.credential) return this.showError("Google sign-in did not return a credential.");
     this.idToken = response.credential;
@@ -289,7 +309,7 @@ const Admin = {
         <div class="field"><label for="ps-quiet-end">Quiet hours end</label><input type="time" id="ps-quiet-end" value="${r.QUIET_HOURS_END ?? "08:00"}" class="mono"></div>
       </div>
       <p class="admin-muted">Timezone is fixed to Asia/Karachi. A campaign send during quiet hours sends nothing at all rather than sending late.</p>
-      <button class="btn btn-primary" onclick="Admin.savePushSettings()">Save frequency settings</button>
+      <button class="btn btn-primary" id="savePushSettingsBtn" onclick="Admin.savePushSettings()">Save frequency settings</button>
       <span class="save-note" id="pushSettingsSaveNote"></span>
     `;
   },
@@ -302,11 +322,13 @@ const Admin = {
       QUIET_HOURS_END: document.getElementById("ps-quiet-end").value || "08:00"
     };
     const note = document.getElementById("pushSettingsSaveNote");
-    try {
-      await this.authorizedPost({ type: "settingsUpdate", rules });
-      this.liveSettings = { ...(this.liveSettings || {}), ...rules };
-      note.textContent = "Saved and authorized by the server.";
-    } catch (e) { note.textContent = e.message; }
+    await this.runSingleFlight("savePushSettings", "savePushSettingsBtn", "Saving…", "Save frequency settings", async () => {
+      try {
+        await this.authorizedPost({ type: "settingsUpdate", rules });
+        this.liveSettings = { ...(this.liveSettings || {}), ...rules };
+        note.textContent = "Saved and authorized by the server.";
+      } catch (e) { note.textContent = e.message; }
+    });
     setTimeout(() => note.textContent = "", 4000);
   },
 
@@ -449,22 +471,24 @@ const Admin = {
 
   async saveCampaignDraft() {
     const note = document.getElementById("pcSaveNote");
-    try {
-      const campaign = {
-        campaignId: this.editingCampaignId,
-        title: document.getElementById("pcTitle").value,
-        body: document.getElementById("pcBody").value,
-        targetUrl: document.getElementById("pcUrl").value,
-        audience: document.getElementById("pcAudience").value,
-        offerType: document.getElementById("pcOffer").value,
-        status: "Draft"
-      };
-      const result = await this.authorizedPost({ type: "pushCampaignSave", campaign });
-      note.textContent = `Saved (${result.status}).`;
-      await this.loadDashboard();
-    } catch (error) {
-      note.textContent = error.message;
-    }
+    await this.runSingleFlight("saveCampaignDraft", "pcSaveDraft", "Saving…", "Save Draft", async () => {
+      try {
+        const campaign = {
+          campaignId: this.editingCampaignId,
+          title: document.getElementById("pcTitle").value,
+          body: document.getElementById("pcBody").value,
+          targetUrl: document.getElementById("pcUrl").value,
+          audience: document.getElementById("pcAudience").value,
+          offerType: document.getElementById("pcOffer").value,
+          status: "Draft"
+        };
+        const result = await this.authorizedPost({ type: "pushCampaignSave", campaign });
+        if (note) note.textContent = `Saved (${result.status}).`;
+        await this.loadDashboard();
+      } catch (error) {
+        if (note) note.textContent = error.message;
+      }
+    });
   },
 
   // A campaign larger than one Apps Script batch (PUSH_SEND_BATCH_SIZE)
@@ -542,7 +566,7 @@ const Admin = {
       <label style="display:flex;align-items:center;gap:8px;font-weight:500;padding:11px 12px;border:1px solid var(--kraft-dark);border-radius:8px;background:var(--paper);margin-bottom:14px">
         <input type="checkbox" id="r-customized-advance" checked disabled> Customized-collection orders always require 100% advance (no COD)
       </label>
-      <button class="btn btn-primary" onclick="Admin.saveRules()">Save store settings</button>
+      <button class="btn btn-primary" id="saveRulesBtn" onclick="Admin.saveRules()">Save store settings</button>
       <span class="save-note" id="rulesSaveNote"></span>
       <h3 class="payment-settings-heading">Payment method display</h3>
       <div class="payment-settings-grid">
@@ -556,7 +580,7 @@ const Admin = {
           ["BANK_NAME", "Bank name"], ["BANK_ACCOUNT_TITLE", "Account title"], ["BANK_ACCOUNT_NUMBER", "Account number"], ["BANK_IBAN", "IBAN"], ["BANK_QR_URL", "QR / barcode image URL"]
         ])}
       </div>
-      <button class="btn btn-primary" onclick="Admin.savePaymentSettings()">Save Payment Settings</button>
+      <button class="btn btn-primary" id="savePaymentSettingsBtn" onclick="Admin.savePaymentSettings()">Save Payment Settings</button>
       <span class="save-note" id="paymentSaveNote"></span>
     `;
   },
@@ -577,11 +601,13 @@ const Admin = {
       CUSTOMIZED_REQUIRES_FULL_ADVANCE: true,
     };
     const note = document.getElementById("rulesSaveNote");
-    try {
-      await this.authorizedPost({ type: "settingsUpdate", rules });
-      localStorage.setItem(this.RULES_KEY, JSON.stringify(rules));
-      note.textContent = "Saved and authorized by the server.";
-    } catch (e) { note.textContent = e.message; }
+    await this.runSingleFlight("saveRules", "saveRulesBtn", "Saving…", "Save store settings", async () => {
+      try {
+        await this.authorizedPost({ type: "settingsUpdate", rules });
+        localStorage.setItem(this.RULES_KEY, JSON.stringify(rules));
+        note.textContent = "Saved and authorized by the server.";
+      } catch (e) { note.textContent = e.message; }
+    });
     setTimeout(() => note.textContent = "", 4000);
   },
 
@@ -594,13 +620,16 @@ const Admin = {
       settings[key] = el.type === "checkbox" ? el.checked : el.value.trim();
     });
     const note = document.getElementById("paymentSaveNote");
-    try {
-      await this.authorizedPost({ type: "settingsUpdate", rules: settings });
-      this.liveSettings = { ...(this.liveSettings || {}), ...settings };
-      this.renderRules();
-      note.textContent = "Payment settings saved and authorized by the server.";
-    } catch (e) { note.textContent = e.message; }
-    setTimeout(() => { if (note) note.textContent = ""; }, 5000);
+    await this.runSingleFlight("savePaymentSettings", "savePaymentSettingsBtn", "Saving…", "Save Payment Settings", async () => {
+      try {
+        await this.authorizedPost({ type: "settingsUpdate", rules: settings });
+        this.liveSettings = { ...(this.liveSettings || {}), ...settings };
+        this.renderRules();
+        const freshNote = document.getElementById("paymentSaveNote");
+        if (freshNote) freshNote.textContent = "Payment settings saved and authorized by the server.";
+      } catch (e) { if (note) note.textContent = e.message; }
+    });
+    setTimeout(() => { const n = document.getElementById("paymentSaveNote"); if (n) n.textContent = ""; }, 5000);
   },
 
   // ── Per-product price + type ──────────────────────────────
@@ -633,6 +662,13 @@ const Admin = {
   },
 
   async saveAll() {
+    // Single-flight + immediate busy state (HS-20260820-02) -- this was
+    // previously an unprotected write: no button disable, no guard, so a
+    // rapid double-click could fire two concurrent priceUpdate requests.
+    if (this._savingProducts) return;
+    this._savingProducts = true;
+    const btn = document.getElementById("saveProductsBtn");
+    if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = "Saving…"; }
     const ov = {};
     DEFAULT_PRODUCTS.forEach(p => {
       const priceVal = parseInt(document.getElementById(`price-${p.id}`).value, 10);
@@ -653,6 +689,10 @@ const Admin = {
       localStorage.setItem(this.OV_KEY, JSON.stringify(ov));
       note.textContent = "Saved and authorized by the server.";
     } catch (e) { note.textContent = e.message; }
+    finally {
+      this._savingProducts = false;
+      if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Save product changes"; }
+    }
     setTimeout(() => note.textContent = "", 4000);
   }
 };

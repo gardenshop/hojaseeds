@@ -91,7 +91,7 @@ function createBackend({ pushWorkerUrl = null, pushServerSecret = null, fetchAll
     }
   });
   const code = fs.readFileSync(path.join(root, "apps-script", "Code.gs"), "utf8");
-  vm.runInContext(`${code}\nthis.__api = { savePushSubscription, logPushEvent, savePushCampaign, sendPushCampaign, pushTestSend, setPushCampaignPause, computeEligibleSubscriptions, buildPushDashboard, readPushSubscriptionsSafe, saveLead, submitOrder, updateSettings, getSettings, classifyWorkerResponse, OrderError };`, context);
+  vm.runInContext(`${code}\nthis.__api = { savePushSubscription, logPushEvent, savePushCampaign, sendPushCampaign, pushTestSend, setPushCampaignPause, computeEligibleSubscriptions, buildPushDashboard, readPushSubscriptionsSafe, saveLead, leadAttribution, submitOrder, updateSettings, getSettings, classifyWorkerResponse, OrderError };`, context);
   return { api: context.__api, rows, cacheMap };
 }
 
@@ -391,11 +391,17 @@ function visitorId() { return "visitor-test-" + Math.random().toString(36).slice
   const created = api.savePushCampaign({ title: "Gift Seeds", body: "Free gift seeds this week.", targetUrl: "https://www.hojaseeds.pk/", audience: "all_active" }, "admin@hojaseeds.pk");
   api.logPushEvent({ visitorId: vid, campaignId: created.campaignId, eventType: "notification_click" });
   api.savePushSubscription({ visitorId: vid, permissionStatus: "granted", subscription: { endpoint: "https://push.example/a" } });
-  api.saveLead({
+  const leadPayload = {
     leadId: "lead-attrib-test-000000001", visitorId: vid,
     customer: { name: "Ali Khan", phone: "03001234567", address: "House 1, Street 2, Sector A", city: "Lahore", postal: "", notes: "" },
     items: [{ productId: "veg-01", quantity: 1 }]
-  });
+  };
+  api.saveLead(leadPayload);
+  // HS-20260820-02: push attribution moved into the separate
+  // leadAttribution call (fired by the client, non-awaited, right after
+  // a genuinely-new saveLead response) -- same end result, just no
+  // longer part of the customer's Confirm Delivery wait.
+  api.leadAttribution(leadPayload);
   const campHeaders = rows.PushCampaigns[0];
   const campRow = rows.PushCampaigns[1];
   assert.strictEqual(campRow[campHeaders.indexOf("recoveredLeads")], 1, "recovered Lead credited to the clicked campaign");
