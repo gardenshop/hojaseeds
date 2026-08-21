@@ -591,8 +591,22 @@ function apgStartSso(payload) {
 // not guessed): the raw body is a JSON STRING containing escaped JSON, so
 // backslashes are stripped and the outer wrapping quote pair removed
 // before parsing.
-function apgStatusInquiryFromUrl(url) {
-  const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+// HS-20260821-10: UrlFetchApp.fetch itself can throw a genuine exception
+// (DNS/timeout/connection failure) which muteHttpExceptions does NOT
+// suppress -- that only covers HTTP-level 4xx/5xx responses. Previously
+// uncaught here, this could crash the whole apgVerifyStatus/listener call
+// with an opaque SERVER_ERROR instead of the safe UNKNOWN state a real
+// but transient inquiry failure should produce.
+function apgStatusInquiryFromUrl(url, diag) {
+  let resp;
+  try {
+    resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  } catch (e) {
+    console.error("APG status inquiry fetch failed: " + e);
+    if (diag) diag.error = String(e && e.message || e).slice(0, 200);
+    return null;
+  }
+  if (diag) diag.httpStatus = resp.getResponseCode();
   if (resp.getResponseCode() !== 200) return null;
   let text = resp.getContentText();
   text = text.split("\\").join("");
@@ -602,10 +616,10 @@ function apgStatusInquiryFromUrl(url) {
   try { return JSON.parse(text); } catch (e) { return null; }
 }
 
-function apgStatusInquiry(gatewayOrderId) {
+function apgStatusInquiry(gatewayOrderId, diag) {
   const cfg = apgConfig();
   const url = cfg.base + "/HS/api/IPN/OrderStatus/" + encodeURIComponent(cfg.merchantId) + "/" + encodeURIComponent(cfg.storeId) + "/" + encodeURIComponent(gatewayOrderId);
-  return apgStatusInquiryFromUrl(url);
+  return apgStatusInquiryFromUrl(url, diag);
 }
 
 // Idempotent by construction (HS-20260820-01, section 7/8 of the task):
@@ -689,8 +703,16 @@ function apgVerifyStatus(payload) {
   if (["PAID", "FAILED", "CANCELLED"].indexOf(currentStatus) !== -1) {
     return { ok: true, state: apgReadGatewayState(orderId) };
   }
-  const statusData = apgStatusInquiry(orderId);
+  const diag = {};
+  const statusData = apgStatusInquiry(orderId, diag);
   const state = applyGatewayStatusUpdate(orderId, statusData);
+  // Safe diagnostic (HTTP status/short error only, never a value/secret)
+  // surfaced ONLY while still unresolved -- lets Admin/DevTools see WHY an
+  // inquiry didn't resolve instead of a silent UNKNOWN, same principle as
+  // the push AUTH_FAILED/EXPIRED_SUBSCRIPTION codes elsewhere in this file.
+  if (state && state.gatewayStatus === "UNKNOWN" && (diag.httpStatus || diag.error)) {
+    state.inquiryDiagnostic = diag.error ? ("fetch_error: " + diag.error) : ("http_" + diag.httpStatus);
+  }
   return { ok: true, state: state };
 }
 

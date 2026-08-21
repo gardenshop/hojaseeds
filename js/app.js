@@ -2098,16 +2098,21 @@ document.getElementById("navToggle").addEventListener("click", () => {
   if (typeof URLSearchParams !== "undefined" && typeof location !== "undefined") {
     const deepLinkView = new URLSearchParams(location.search).get("hs_view");
     // Bank Alfalah appends its own "?params" directly onto the already-?
-    // -containing Return URL without checking for an existing query string
-    // -- confirmed with a real sandbox transaction (HS-20260821-08),
-    // producing "?hs_view=payment-return?success=false&...". That embedded
-    // second "?" corrupts a strict `hs_view === "payment-return"` check
-    // (URLSearchParams would parse hs_view's value as
-    // "payment-return?success=false"), so this uses a tolerant substring
-    // check instead -- exact match still works for every OTHER deep link.
+    // -containing Return URL without checking for an existing query
+    // string, and the exact shape varies by hop -- confirmed with TWO
+    // different real sandbox transactions: the auth_token hop produces
+    // "?hs_view=payment-return?success=false&...", but the final
+    // post-payment redirect (HS-20260821-10, a real completed payment)
+    // produces "?hs_view?RC=00&RD=PS&TS=P&O=..." -- Bank Alfalah drops
+    // the "=payment-return" value entirely on that hop, so even the
+    // broader HS-20260821-08 substring check ("hs_view=payment-return")
+    // missed this one. Checking for the bare "hs_view" substring is safe
+    // here specifically because this is the fallback branch AFTER the
+    // exact-match category check above already failed -- it can never
+    // misroute a legitimate ?hs_view=cart/vegetables/etc. deep link.
     if (["cart", "vegetables", "flowers", "mix", "fertilizer"].includes(deepLinkView)) {
       Router.go(deepLinkView);
-    } else if (location.search.indexOf("hs_view=payment-return") !== -1) {
+    } else if (location.search.indexOf("hs_view") !== -1) {
       // Registered Bank Alfalah APG Return URL (HS-20260820-01) -- its own
       // dedicated render path, not a normal category route.
       Views.paymentReturn();
