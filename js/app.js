@@ -1164,11 +1164,17 @@ const Views = {
       { id: "JazzCash", label: "JazzCash", enabled: paymentSettings.JAZZCASH_ENABLED },
       { id: "EasyPaisa", label: "EasyPaisa", enabled: paymentSettings.EASYPAISA_ENABLED },
       { id: "Bank Transfer", label: "Bank Transfer", enabled: paymentSettings.BANK_ENABLED },
-      // Sandbox-gated (HS-20260820-01): double gate -- CONFIG.APG_SANDBOX_MODE
-      // (frontend build flag, off before production go-live) AND the
-      // server's own APG_ENABLED Settings flag both must be on. Never
-      // shown to real customers until sandbox E2E has fully passed.
-      { id: "Bank Alfalah APG", label: "Card / Bank / Wallet (Bank Alfalah)", enabled: CONFIG.APG_SANDBOX_MODE && paymentSettings.APG_ENABLED }
+      // Triple-gated (HS-20260820-01, tightened HS-20260821-08):
+      // CONFIG.APG_SANDBOX_MODE (frontend build flag) AND the server's
+      // own APG_ENABLED Settings flag AND an explicit ?apg_test=1 in the
+      // URL must ALL be true. The third gate exists specifically so
+      // APG_ENABLED can be turned on for a real controlled sandbox test
+      // without instantly exposing the tab to every ordinary visitor
+      // browsing the live site at that moment -- only someone who was
+      // given the test link sees it. Never shown to real customers until
+      // sandbox E2E has fully passed and this gate is deliberately
+      // relaxed.
+      { id: "Bank Alfalah APG", label: "Card / Bank / Wallet (Bank Alfalah)", enabled: CONFIG.APG_SANDBOX_MODE && paymentSettings.APG_ENABLED && apgTestAccessGranted() }
     ].filter(method => method.enabled);
     // Collapsed by default (HS-20260819-04): no advance channel is
     // pre-selected on first load of this page in a session — only a
@@ -1346,7 +1352,7 @@ const Views = {
     const allowed = { JazzCash: "JAZZCASH_ENABLED", EasyPaisa: "EASYPAISA_ENABLED", "Bank Transfer": "BANK_ENABLED", "Bank Alfalah APG": "APG_ENABLED" };
     const settings = this.paymentDisplaySettings();
     if (!allowed[method] || !settings[allowed[method]]) return;
-    if (method === "Bank Alfalah APG" && !CONFIG.APG_SANDBOX_MODE) return;
+    if (method === "Bank Alfalah APG" && (!CONFIG.APG_SANDBOX_MODE || !apgTestAccessGranted())) return;
     // Switching channel (e.g. JazzCash -> Bank Transfer) clears any
     // already-typed reference -- prevents submitting the wrong channel's
     // reference against the newly selected one.
@@ -1880,6 +1886,17 @@ const PendingOrder = {
 // hops, so orderId must survive across that real navigation -- localStorage,
 // not memory. Never stores amount/customer details, only the orderId
 // needed to ask the server (never the browser) what actually happened.
+// HS-20260821-08: explicit test-access gate, checked ON TOP OF
+// CONFIG.APG_SANDBOX_MODE + Settings.APG_ENABLED. This SPA never changes
+// the URL after initial load (no pushState/hash routing), so a
+// ?apg_test=1 present when the page first loads stays readable via
+// location.search for the whole session -- letting a real controlled
+// sandbox test happen (APG_ENABLED=true in Settings) without the tab
+// appearing for ordinary visitors who load the site normally.
+function apgTestAccessGranted() {
+  try { return new URLSearchParams(location.search).get("apg_test") === "1"; } catch { return false; }
+}
+
 const ApgFlow = {
   KEY: "hoja_apg_flow",
   save(orderId) {
