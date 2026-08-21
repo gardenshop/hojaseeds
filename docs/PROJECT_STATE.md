@@ -6,6 +6,64 @@ into each request.
 
 ---
 
+## REAL APG SANDBOX PAYMENT COMPLETED TWICE — AUTHORITATIVE VERIFICATION BLOCKED (HS-20260821-10) — NOT FROZEN
+
+- **Two real, complete Bank Alfalah sandbox payments succeeded**, using
+  the official sample credit card (`5440123456789012`, exp `01/30`, CVV
+  `119`), driven entirely through the real hosted checkout UI: both
+  reached a genuine "TRANSACTION SUCCESSFUL" page with real Bank
+  transaction IDs (`344409383448`, `350718941234`). No OTP step was
+  required for this sandbox card. The second run additionally observed
+  the real auto-redirect back to the registered Return URL after ~10s.
+- **Found and fixed a real Hoja-side bug from that new evidence:** the
+  final post-payment redirect has a THIRD, different malformed shape —
+  `?hs_view?RC=00&RD=PS&TS=P&O=<orderId>` (Bank Alfalah drops the
+  `=payment-return` value entirely on this specific hop) — which the
+  HS-20260821-08 fix's substring check didn't match. Broadened to a bare
+  `hs_view` substring check (safe: it's the fallback branch after the
+  exact category-view match already failed), verified against the real
+  captured URL, deployed.
+- **Found a separate, likely Bank-side network restriction:**
+  `apgVerifyStatus`'s own server-side status inquiry
+  (`UrlFetchApp.fetch` from Apps Script to `sandbox.bankalfalah.com/HS/
+  api/IPN/OrderStatus/...`) fails reproducibly with **"Address
+  unavailable"** — a connection-level failure, not an HTTP error
+  response. The same domain's other endpoints are reachable from a real
+  browser (proven by the two successful payments above), and Meta's CAPI
+  (a different destination, same `UrlFetchApp` mechanism) has worked
+  reliably throughout this entire project — narrowing this specifically
+  to Bank Alfalah's status-inquiry endpoint rejecting connections from
+  Apps Script's server-side network. Hardened
+  `apgStatusInquiryFromUrl` to catch this exception safely (previously an
+  uncaught crash → opaque `SERVER_ERROR`; now correctly resolves to
+  `UNKNOWN`, never falsely `PAID`) and added a safe, secret-free
+  `inquiryDiagnostic` field surfaced only while unresolved.
+- **Practical consequence: the Listener also could not complete its own
+  status inquiry for the same reason** (it calls the same function), so
+  neither channel could authoritatively confirm either real payment as
+  `PAID` this session — both orders correctly remain `UNKNOWN`/`PENDING`
+  in Orders, never falsely marked paid. This is the system behaving
+  safely under a real infrastructure constraint, not a security gap.
+- **Support email drafted, NOT sent** — `docs/apg-support-email-draft.md`
+  — describing the connection-level failure with real evidence (no
+  credentials). Per this task's own instruction, sending is left to the
+  owner's discretion.
+- **`APG_ENABLED` confirmed restored to `false`.** Ordinary customers
+  re-verified to see only JazzCash/EasyPaisa/Bank Transfer.
+- **APG Sandbox: ~90%, still NOT frozen.** The redirect/hosted-checkout/
+  payment-acceptance chain is now proven completely correct with two real
+  successful payments — the only remaining gap is authoritative
+  server-side status verification, blocked by a real, reproducible
+  network-level restriction between Apps Script and Bank Alfalah's status
+  API. This is very likely resolvable only with the bank's own
+  input (IP allowlisting or an alternative verification method) — the
+  system already handles this failure mode safely (never falsely PAID)
+  while it's unresolved.
+- **Files changed:** `apps-script/Code.gs`, `js/app.js`,
+  `docs/apg-support-email-draft.md`.
+
+---
+
 ## APG SANDBOX: HOSTED CHECKOUT REACHED FOR REAL — HANDSHAKE = PASS (HS-20260821-09)
 
 - **`APG_MERCHANT_HASH` fix confirmed resolved without ever exposing the
