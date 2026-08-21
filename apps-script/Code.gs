@@ -58,6 +58,42 @@ function configureAdminProperties(clientId, adminEmail) {
   return { ok: true, adminEmail: "gisupp@gmail.com" };
 }
 
+// Authenticated Apps Script Execution API only. This is intentionally not
+// reachable through doGet/doPost, and returns presence booleans only.
+function syncApgScriptProperties(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new OrderError("INVALID_APG_CONFIG", "APG configuration payload is invalid.");
+  }
+  const allowed = [
+    "APG_MERCHANT_ID",
+    "APG_STORE_ID",
+    "APG_MERCHANT_HASH",
+    "APG_MERCHANT_USERNAME",
+    "APG_MERCHANT_PASSWORD",
+    "APG_KEY1",
+    "APG_KEY2",
+    "APG_SANDBOX_BASE"
+  ];
+  Object.keys(payload).forEach(name => {
+    if (allowed.indexOf(name) === -1) {
+      throw new OrderError("INVALID_APG_CONFIG", "Unknown APG configuration key.");
+    }
+  });
+  const values = {};
+  allowed.forEach(name => {
+    const value = String(payload[name] == null ? "" : payload[name]);
+    if (!value) throw new OrderError("INVALID_APG_CONFIG", "An APG configuration value is missing.");
+    if (name === "APG_SANDBOX_BASE" && value !== "https://sandbox.bankalfalah.com") {
+      throw new OrderError("INVALID_APG_CONFIG", "The APG sandbox base is invalid.");
+    }
+    values[name] = value;
+  });
+  PropertiesService.getScriptProperties().setProperties(values);
+  const present = {};
+  allowed.forEach(name => { present[name] = Boolean(PropertiesService.getScriptProperties().getProperty(name)); });
+  return { ok: true, present: present, allConfigured: allowed.every(name => present[name]) };
+}
+
 function doPost(e) {
   // Bank Alfalah may POST its IPN callback (the registered Listener URL)
   // rather than GET it -- checked before any JSON body parsing, since

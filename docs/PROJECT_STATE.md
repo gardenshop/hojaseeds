@@ -6,6 +6,89 @@ into each request.
 
 ---
 
+## EXECUTION API 403 RECHECKED; GITHUB REFRESH CREDENTIAL INCOMPLETE (HS-20260821-04)
+
+- **OAuth identity verified without exposing credentials:** the refreshed
+  local token is for `gisupp@gmail.com`, its OAuth audience/client project
+  number is `1072944905499`, and it includes `script.projects`,
+  `script.deployments`, `script.webapp.deploy`, and related Google scopes.
+- **Execution deployment verified:** deployment metadata contains an
+  `EXECUTION_API` entry point with `access: MYSELF`, plus the web entry point.
+  The API-executable deployment ID is intentionally consumed from the
+  `APPS_SCRIPT_API_DEPLOYMENT_ID` GitHub secret, never printed or hard-coded
+  into the workflow.
+- **Harmless execution result:** `scripts.run` against the API-executable
+  deployment still returns HTTP 403 `PERMISSION_DENIED`. The Apps Script API
+  project read/deployment APIs work, but the Execution API authorization gate
+  does not. The Apps Script linked Cloud project number is not returned by the
+  available Apps Script REST metadata; it must be checked in Apps Script
+  Project Settings against OAuth client project `1072944905499`. Exact
+  same-project status is therefore not claimable from this environment.
+- **GitHub OAuth secret presence:** `GOOGLE_OAUTH_CLIENT_ID`,
+  `GOOGLE_OAUTH_REFRESH_TOKEN`, and `APPS_SCRIPT_API_DEPLOYMENT_ID` are
+  present by name. `GOOGLE_OAUTH_CLIENT_SECRET` is missing. The workflow now
+  refreshes an access token from those three OAuth secrets, runs a harmless
+  `apgConfigStatus` preflight, and only then sends APG secrets to
+  `syncApgScriptProperties`. It does not use a service account or public
+  bootstrap endpoint.
+- **Security repair:** workflow API failures are sanitized before being
+  thrown, so Google client error objects cannot print the APG payload into
+  Actions logs.
+- **No APG sync or real sandbox transaction occurred:** the status preflight
+  failed before APG values were passed. Runtime properties remain unverified;
+  the known endpoint remains
+  `https://sandbox.bankalfalah.com/HS/HS/HS`.
+
+---
+
+## SECURE APG SECRET SYNC ADDED; GOOGLE EXECUTION PERMISSION BLOCKED (HS-20260821-03)
+
+- **GitHub secret names verified by name only:** `APG_MERCHANT_ID`,
+  `APG_STORE_ID`, `APG_MERCHANT_HASH`, `APG_MERCHANT_USERNAME`,
+  `APG_MERCHANT_PASSWORD`, `APG_KEY1`, `APG_KEY2`, and `APG_SANDBOX_BASE`.
+  Legacy aliases `APG_USER_NAME` and `MERCHANT_PASSWORD` remain unused and
+  were not deleted.
+- **Secure architecture added:** GitHub Actions `workflow_dispatch` maps the
+  APG secrets into the encrypted runner environment, then calls the
+  authenticated Apps Script Execution API function
+  `syncApgScriptProperties(payload)`. The function is not dispatched by
+  `doGet` or `doPost`, accepts only the eight allowlisted names, rejects
+  unknown or missing keys, enforces the public sandbox origin, stores only in
+  Script Properties, and returns presence booleans only. It never logs or
+  returns a secret value.
+- **Workflow:** `.github/workflows/sync-apg-secrets.yml`; helper:
+  `scripts/run-apg-sync.mjs`. It is manual-trigger only and uses the
+  GitHub-side OAuth client ID, client secret, and refresh token to obtain a
+  short-lived access token for the authenticated Execution API call. The
+  client secret is currently missing, so the workflow was not triggered and
+  no APG secret value entered an external request.
+- **Existing local Google auth:** Clasp OAuth credentials exist locally for
+  `gisupp@gmail.com`; project read, content update, version creation, and
+  deployment creation work. Apps Script Execution API requires the API
+  executable deployment ID, not the script ID. A new version-36 executable
+  deployment was created, but execution returns `PERMISSION_DENIED`; the
+  prior executable deployment can run only its old version. The exact
+  remaining gate is Execution API permission for the authenticated
+  caller/deployment plus a GitHub-usable owner credential, not an APG or code
+  defect. No public unauthenticated bootstrap endpoint was created.
+- **Apps Script deployment:** secure setter deployed through the verified
+  Google API as version 36 to the existing web deployment. `APG_SANDBOX_BASE`
+  remains `https://sandbox.bankalfalah.com`; the transaction endpoint remains
+  `https://sandbox.bankalfalah.com/HS/HS/HS`.
+- **Runtime status:** sync was not run, so the eight properties were not
+  reverified as present and no real APG sandbox transaction was attempted.
+  The listener remains reachable without exposing configuration values.
+- **Regression:** `node --check js/app.js`, `node --check js/admin.js`,
+  `npm test`, and `npm run sheets:verify` pass. The test suite's simulated
+  error messages are expected test output. No products, prices, delivery,
+  payment math, analytics, idempotency, push, admin auth, R2, or Cloudflare
+  behavior was changed.
+- **Files changed:** `apps-script/Code.gs`,
+  `.github/workflows/sync-apg-secrets.yml`,
+  `scripts/run-apg-sync.mjs`, and this state document.
+
+---
+
 ## APG RUNTIME CONFIG VERIFIED CORRECT; GITHUB SECRETS ≠ APPS SCRIPT PROPERTIES (HS-20260821-02)
 
 - **`APG_SANDBOX_BASE` handling confirmed correct by inspection, matches
